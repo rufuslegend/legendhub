@@ -64,7 +64,29 @@ backup volumes. Do not use it against an environment containing data you need.
 
 ## Smoke checks
 
-There is no automated test suite yet. After a change, check at least:
+The website has a small Node test suite that does not require a running
+database:
+
+```sh
+cd www
+npm ci
+npm test
+```
+
+Run only the fast characterization checks or HTTP smoke test with:
+
+```sh
+npm run test:characterization
+npm run test:smoke
+```
+
+The smoke test starts the Express application on an ephemeral local port and
+checks the home page, a static asset, the GraphQL API and explorer, and the 404
+page. Database metadata is stubbed; database-backed routes still need manual
+integration testing. GitHub Actions runs the website and stylesheet tests on
+every push and pull request.
+
+With the Docker stack running, manually check:
 
 - `/`
 - `/items/`

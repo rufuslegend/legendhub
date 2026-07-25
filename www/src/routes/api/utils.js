@@ -110,7 +110,11 @@ class NotFoundError extends gql.GraphQLError {
     constructor(message) {
         if (!message)
             message = "Not found.";
-        super(message, null, null, null, null, null, {code:404});
+        super(message, {
+            extensions: {
+                code: 404
+            }
+        });
     }
 }
 
@@ -118,7 +122,11 @@ class TooManyRequestsError extends gql.GraphQLError {
     constructor(message) {
         if (!message)
             message = "Too many requests.";
-        super(message, null, null, null, null, null, {code:429});
+        super(message, {
+            extensions: {
+                code: 429
+            }
+        });
     }
 }
 
@@ -126,7 +134,11 @@ class UnauthorizedError extends gql.GraphQLError {
     constructor(message) {
         if (!message)
             message = "Unauthorized.";
-        super(message, null, null, null, null, null, {code:401});
+        super(message, {
+            extensions: {
+                code: 401
+            }
+        });
     }
 }
 
