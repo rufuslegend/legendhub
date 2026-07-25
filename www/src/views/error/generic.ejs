@@ -1,5 +1,5 @@
 <!doctype html>
-<% this.title = "Fatal Error"; %>
+<% this.title = `${status} Error`; %>
 <html lang="en">
     <head>
         <%-include("../shared/meta");-%>
@@ -12,10 +12,10 @@
                 <div class="col-12">
                     <div class="card">
                         <div class="card-header text-center">
-                            <h1>Fatal Error</h1>
+                            <h1><%=status >= 500 ? "Server Error" : "Request Error"%></h1>
                         </div>
                         <div class="card-body text-center">
-                            <p>A fatal error has occurred that has prevented a proper error response. Please contact the system administrator.</p>
+                            <p><%=message%></p>
                         </div>
                     </div>
                 </div>

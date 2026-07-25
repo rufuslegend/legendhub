@@ -104,6 +104,39 @@ test("application HTTP smoke test", async function(t) {
         assert.equal(body.errors[0].code, 500);
     });
 
+    await t.test("returns JSON and preserves status for malformed API requests", async function() {
+        const response = await fetch(`${baseUrl}/api`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: "{not valid json"
+        });
+
+        assert.equal(response.status, 400);
+        assert.match(response.headers.get("content-type"), /^application\/json/);
+        assert.deepEqual(await response.json(), {
+            errors: [{
+                message: "Invalid request body.",
+                code: 400
+            }]
+        });
+    });
+
+    await t.test("renders unsupported HTML error statuses without converting them to 500", async function() {
+        const response = await fetch(`${baseUrl}/login.html`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+            },
+            body: `value=${"x".repeat(110 * 1024)}`
+        });
+
+        assert.equal(response.status, 413);
+        assert.match(response.headers.get("content-type"), /^text\/html/);
+        assert.match(await response.text(), /Request body is too large/);
+    });
+
     await t.test("renders the current 404 page", async function() {
         const response = await fetch(`${baseUrl}/this-page-does-not-exist`);
         assert.equal(response.status, 404);

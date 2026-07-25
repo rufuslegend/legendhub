@@ -28,6 +28,14 @@ test("EJS renders the home page and its shared includes", async function() {
     assert.match(html, /Cookie Policy/);
 });
 
+test("fatal error page renders without request locals", async function() {
+    const ejs = require("ejs");
+    const html = await ejs.renderFile(path.join(__dirname, "../src/views/error/fatal.ejs"));
+
+    assert.match(html, /<title>Fatal Error \| LegendHUB<\/title>/);
+    assert.match(html, /A fatal error has occurred/);
+});
+
 test("API error types retain their public status codes", function() {
     const {
         NotFoundError,

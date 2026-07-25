@@ -17,6 +17,35 @@ const changelogRouter = require("./routes/changelog");
 const notificationsRouter = require("./routes/notifications");
 const accountRouter = require("./routes/account");
 
+function getErrorStatus(error) {
+    const candidates = error ? [error.status, error.statusCode] : [];
+    for (const candidate of candidates) {
+        const status = Number(candidate);
+        if (Number.isInteger(status) && status >= 400 && status <= 599)
+            return status;
+    }
+
+    return 500;
+}
+
+function getPublicErrorMessage(error, status) {
+    if (status >= 500)
+        return "An unexpected server error occurred.";
+    if (error && error.type === "entity.parse.failed")
+        return "Invalid request body.";
+    if (error && error.type === "entity.too.large")
+        return "Request body is too large.";
+    if (error && error.expose !== false && error.message)
+        return error.message;
+
+    return "The request could not be completed.";
+}
+
+function isApiRequest(req) {
+    const requestPath = req.path.toLowerCase();
+    return requestPath === "/api" || requestPath.startsWith("/api/");
+}
+
 module.exports = function createApp(options = {}) {
     const app = express();
 
@@ -63,19 +92,38 @@ module.exports = function createApp(options = {}) {
     });
 
     app.use(function(err, req, res, next) {
-        if (err && (!err.status || err.status != 404))
-            console.log(err);
         if (res.headersSent)
             return next(err);
 
-        res.status(err.status || 500);
-        res.render(`error/${err.status || 500}`, {error: err});
+        const status = getErrorStatus(err);
+        const message = getPublicErrorMessage(err, status);
+        if (status >= 500)
+            console.error(err);
+
+        if (isApiRequest(req)) {
+            return res.status(status).json({
+                errors: [{
+                    message,
+                    code: status
+                }]
+            });
+        }
+
+        const errorView = [401, 404, 500].includes(status)
+            ? `error/${status}`
+            : "error/generic";
+        return res.status(status).render(errorView, {
+            error: err,
+            message,
+            status
+        });
     });
 
     app.use(function(err, req, res, next) {
         if (res.headersSent)
             return next(err);
 
+        console.error(err);
         res.status(500);
         res.render("error/fatal");
     });
