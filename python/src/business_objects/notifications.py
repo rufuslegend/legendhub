@@ -192,19 +192,23 @@ def clean_notifications():
 
     sess = ENGINE.get_session()
     sess.execute(
-        "DELETE N "
-        "FROM Notifications N "
-        "JOIN NotificationChanges NC on NC.Id = N.NotificationChangeId "
-        "WHERE N.Read = 1 AND NC.CreatedOn < :delete_date",
+        sqla.text(
+            "DELETE N "
+            "FROM Notifications N "
+            "JOIN NotificationChanges NC on NC.Id = N.NotificationChangeId "
+            "WHERE N.Read = 1 AND NC.CreatedOn < :delete_date"
+        ),
         {"delete_date": delete_date}
     )
     sess.execute(
-        "DELETE FROM NotificationChanges "
-        "WHERE NotificationChanges.Id IN "
-        "(SELECT tblTmp.Id FROM "
-        "(SELECT NC.Id FROM NotificationChanges NC "
-        "LEFT JOIN Notifications N ON N.NotificationChangeId = NC.Id "
-        "GROUP BY NC.Id HAVING MAX(N.Id) IS NULL)tblTmp)"
+        sqla.text(
+            "DELETE FROM NotificationChanges "
+            "WHERE NotificationChanges.Id IN "
+            "(SELECT tblTmp.Id FROM "
+            "(SELECT NC.Id FROM NotificationChanges NC "
+            "LEFT JOIN Notifications N ON N.NotificationChangeId = NC.Id "
+            "GROUP BY NC.Id HAVING MAX(N.Id) IS NULL)tblTmp)"
+        )
     )
     sess.commit()
     sess.close()

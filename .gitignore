@@ -16,3 +16,5 @@ node_modules/
 # mysql
 mysql/backup.sql
 mysql/get_database
+mysql/init/dev-seed.sql
+mysql/init/zz-dev-baseline.sql

@@ -1,0 +1,53 @@
+#!/bin/bash
+set -euo pipefail
+
+export MYSQL_PWD="${MYSQL_PASSWORD}"
+
+mkdir -p /backups/private /backups/public
+
+private_backup="/backups/private/database_$(date +%m-%d-%Y).sql.gz"
+public_backup="/backups/public/database.sql"
+
+mysqldump \
+    -P "${MYSQL_PORT}" \
+    -h mysql \
+    -u "${MYSQL_USER}" \
+    --single-transaction \
+    --quick \
+    --lock-tables=false \
+    --no-tablespaces \
+    -B "${MYSQL_DATABASE}" \
+    | gzip > "${private_backup}"
+
+mysqldump \
+    -P "${MYSQL_PORT}" \
+    -h mysql \
+    -u "${MYSQL_USER}" \
+    --single-transaction \
+    --quick \
+    --lock-tables=false \
+    --no-tablespaces \
+    --no-data \
+    "${MYSQL_DATABASE}" \
+    | sed -e 's/DEFINER[ ]*=[ ]*[^*  ]*\*/\*/' > "${public_backup}"
+
+mysqldump \
+    -P "${MYSQL_PORT}" \
+    -h mysql \
+    -u "${MYSQL_USER}" \
+    --single-transaction \
+    --quick \
+    --lock-tables=false \
+    --no-tablespaces \
+    --no-create-info \
+    --skip-triggers \
+    --ignore-table="${MYSQL_DATABASE}.AuthTokens" \
+    --ignore-table="${MYSQL_DATABASE}.MemberRoleMap" \
+    --ignore-table="${MYSQL_DATABASE}.Members" \
+    --ignore-table="${MYSQL_DATABASE}.NotificationChanges" \
+    --ignore-table="${MYSQL_DATABASE}.NotificationQueue" \
+    --ignore-table="${MYSQL_DATABASE}.NotificationSettings" \
+    --ignore-table="${MYSQL_DATABASE}.Notifications" \
+    --ignore-table="${MYSQL_DATABASE}.Permissions" \
+    --ignore-table="${MYSQL_DATABASE}.PersistentLogins" \
+    "${MYSQL_DATABASE}" >> "${public_backup}"
