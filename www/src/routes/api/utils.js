@@ -1,5 +1,4 @@
 let gql = require("graphql");
-let request = require("request");
 
 module.exports.blockedIPs = {};
 module.exports.trackers = {};
@@ -61,34 +60,26 @@ module.exports.trackPageUpdate = function(ip) {
 }
 
 module.exports.postAsync = async function(query, ip) {
-    return new Promise(function(resolve, reject) {
-        let options = {
-            url: `http://localhost:${process.env.PORT}/api`,
-            form: {
-                query
-            }
-        };
+    let headers = {
+        "Content-Type": "application/json"
+    };
+    if (ip)
+        headers["x-forwarded-for"] = ip;
 
-        if (ip)
-            options.headers = {'x-forwarded-for': ip};
-
-        request.post(options, function(error, response, body) {
-            if (error) {
-                reject(error);
-            }
-            else {
-                let body = JSON.parse(response.body);
-                if (body.errors) {
-                    let error = new Error(body.errors[0].message);
-                    error.status = body.errors[0].code;
-                    reject(error);
-                }
-                else {
-                    resolve(body.data);
-                }
-            }
-        });
+    const response = await fetch(`http://localhost:${process.env.PORT}/api`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({query})
     });
+    const body = await response.json();
+
+    if (body.errors) {
+        let error = new Error(body.errors[0].message);
+        error.status = body.errors[0].code || body.errors[0].extensions?.code;
+        throw error;
+    }
+
+    return body.data;
 };
 
 module.exports.handleNotifications = async function(authToken, notifications, objectType, objectId) {

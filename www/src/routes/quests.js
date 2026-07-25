@@ -1,5 +1,4 @@
 var router = require("express").Router();
-let request = require("request");
 let itemApi = require("./api/items");
 let apiUtils = require("./api/utils");
 

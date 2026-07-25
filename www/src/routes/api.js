@@ -1,5 +1,6 @@
-let exgraphql = require("express-graphql");
 let graphql = require("graphql");
+let { createHandler } = require("graphql-http/lib/use/express");
+let { ruruHTML } = require("ruru/server");
 
 let importGraphs = [
     require("./api/auth.js"),
@@ -78,9 +79,21 @@ let errorFormatFn = function(error) {
     });
 };
 
-module.exports = exgraphql({
+let graphqlHandler = createHandler({
     schema: schema,
-    graphiql: true,
     validationRules: [limitMutationRule],
-    customFormatErrorFn: errorFormatFn
+    context: function(request) {
+        return request.raw;
+    },
+    formatError: errorFormatFn
 });
+
+module.exports = function(req, res) {
+    if (req.method === "GET" && !req.query.query && req.accepts("html")) {
+        return res.type("html").send(ruruHTML({
+            endpoint: "/api"
+        }));
+    }
+
+    return graphqlHandler(req, res);
+};

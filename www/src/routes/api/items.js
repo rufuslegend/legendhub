@@ -1,7 +1,7 @@
 let mysql = require("./mysql-connection");
 let syncRpc = require("sync-rpc");
 let graphql = require("graphql");
-let { GraphQLDateTime } = require("graphql-iso-date");
+let { GraphQLDateTime } = require("graphql-scalars");
 let auth = require("./auth");
 let apiUtils = require("./utils");
 
