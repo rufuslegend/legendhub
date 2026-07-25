@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const Module = require("node:module");
+const path = require("node:path");
 const test = require("node:test");
 
 function loadMigrationModule(mysqlPool) {
@@ -153,8 +154,8 @@ test("migration promise resolves only after database work finishes", async funct
     let released = false;
     const connection = {
         query: function(sql, _values, callback) {
-            if (sql.includes("information_schema.tables")) {
-                callback(null, [{table_name: "Migrations"}]);
+            if (sql.includes("GET_LOCK")) {
+                callback(null, [{Acquired: 1}]);
                 return;
             }
 
@@ -163,7 +164,12 @@ test("migration promise resolves only after database work finishes", async funct
                 return;
             }
 
-            throw new Error(`Unexpected query: ${sql}`);
+            if (sql.includes("RELEASE_LOCK")) {
+                callback(null, [{Released: 1}]);
+                return;
+            }
+
+            callback(null, []);
         },
         release: function() {
             released = true;
@@ -252,12 +258,25 @@ test("main reports startup failure, closes the database pool, and sets a failure
     }
 });
 
-test("migration errors retain context and release the connection", async function() {
+test("migration setup errors retain context and release the connection", async function() {
     const databaseError = new Error("query failed");
     let released = false;
     const connection = {
-        query: function(_sql, _values, callback) {
-            callback(databaseError);
+        query: function(sql, _values, callback) {
+            if (sql.includes("GET_LOCK")) {
+                callback(null, [{Acquired: 1}]);
+                return;
+            }
+            if (sql.includes("CREATE TABLE IF NOT EXISTS Migrations")) {
+                callback(databaseError);
+                return;
+            }
+            if (sql.includes("RELEASE_LOCK")) {
+                callback(null, [{Released: 1}]);
+                return;
+            }
+
+            callback(null, []);
         },
         release: function() {
             released = true;
@@ -270,7 +289,7 @@ test("migration errors retain context and release the connection", async functio
     });
 
     await assert.rejects(migrations.up(), function(error) {
-        assert.equal(error.message, "Unable to inspect the migration table");
+        assert.equal(error.message, "Unable to create the migration table");
         assert.equal(error.cause, databaseError);
         return true;
     });
@@ -304,16 +323,32 @@ test("rollback errors do not hide the original migration failure", async functio
     let released = false;
     const connection = {
         query: function(sql, _values, callback) {
-            if (sql.includes("information_schema.tables")) {
-                callback(null, [{table_name: "Migrations"}]);
+            if (sql.includes("GET_LOCK")) {
+                callback(null, [{Acquired: 1}]);
                 return;
             }
             if (sql.includes("SELECT * FROM Migrations")) {
                 callback(null, []);
                 return;
             }
+            if (sql.includes("SELECT * FROM MigrationRuns")) {
+                callback(null, []);
+                return;
+            }
+            if (sql.includes("SET @DISABLE_NOTIFICATIONS = 1")) {
+                callback(null, []);
+                return;
+            }
+            if (sql.includes("UPDATE MigrationTest")) {
+                callback(migrationDatabaseError);
+                return;
+            }
+            if (sql.includes("RELEASE_LOCK")) {
+                callback(null, [{Released: 1}]);
+                return;
+            }
 
-            callback(migrationDatabaseError);
+            callback(null, []);
         },
         beginTransaction: function(callback) {
             callback();
@@ -325,18 +360,30 @@ test("rollback errors do not hide the original migration failure", async functio
             released = true;
         }
     };
-    const migrations = loadMigrationModule({
+    const mysqlPool = {
         getConnection: function(callback) {
             callback(null, connection);
         }
+    };
+    const migrationModule = loadMigrationModule(mysqlPool);
+    const migrations = migrationModule.createMigrationRunner({
+        pool: mysqlPool,
+        migrationsDirectory: path.join(
+            __dirname,
+            "..",
+            "test-fixtures",
+            "migrations",
+            "transactional-failure"
+        )
     });
 
     await assert.rejects(migrations.up(), function(error) {
-        assert.equal(error instanceof AggregateError, true);
-        assert.match(error.message, /Migration 1 failed and could not be rolled back/);
-        assert.equal(error.errors.length, 2);
-        assert.equal(error.errors[0].cause.cause, migrationDatabaseError);
-        assert.equal(error.errors[1].cause, rollbackDatabaseError);
+        assert.match(error.message, /Migration 1 .* failed/);
+        assert.equal(error.cause instanceof AggregateError, true);
+        assert.match(error.cause.message, /failed and could not be rolled back/);
+        assert.equal(error.cause.errors.length, 2);
+        assert.equal(error.cause.errors[0].cause, migrationDatabaseError);
+        assert.equal(error.cause.errors[1].cause, rollbackDatabaseError);
         return true;
     });
     assert.equal(released, true);

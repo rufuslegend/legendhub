@@ -5,6 +5,7 @@
     "scripts": {
         "test": "node --test",
         "test:characterization": "node --test test/characterization.test.js",
+        "test:migrations:integration": "MYSQL_MIGRATION_INTEGRATION=1 node --test test/migrations.integration.test.js",
         "test:smoke": "node --test test/smoke.test.js",
         "start": "node src/app.js"
     },
