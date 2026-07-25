@@ -1,6 +1,7 @@
 const compression = require("compression");
 const cookieParser = require("cookie-parser");
 const express = require("express");
+const helmet = require("helmet");
 const logger = require("morgan");
 const path = require("path");
 
@@ -48,27 +49,33 @@ function isApiRequest(req) {
 
 module.exports = function createApp(options = {}) {
     const app = express();
+    const environment = options.environment || process.env.NODE_ENV;
 
     app.set("views", path.join(__dirname, "views"));
     app.set("view engine", "ejs");
     app.set("trust proxy", true);
+    app.disable("x-powered-by");
 
+    app.use(helmet({
+        // Existing views use inline and third-party scripts. Add CSP after those
+        // scripts have been inventoried and migrated to a nonce-based policy.
+        contentSecurityPolicy: false,
+        strictTransportSecurity: environment === "production"
+    }));
     app.use(compression());
     if (options.logging !== false)
         app.use(logger("dev"));
     app.use(express.json());
     app.use(express.urlencoded({ extended: false }));
-    app.use(express.static(path.join(__dirname, "public")));
 
     app.use(function(req, res, next) {
-        if (process.env.NODE_ENV === "production") {
-            const url = require("url").parse(req.url);
-            if (url.pathname.endsWith(".map"))
-                return res.sendStatus(404);
-        }
+        if (environment === "production" && req.path.toLowerCase().endsWith(".map"))
+            return res.sendStatus(404);
 
         return next();
     });
+
+    app.use(express.static(path.join(__dirname, "public")));
 
     app.use("/api", apiRouter);
 

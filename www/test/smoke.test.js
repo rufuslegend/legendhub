@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const Module = require("node:module");
 const test = require("node:test");
 
-function loadAppWithoutDatabaseMetadataQuery() {
+function loadAppWithoutDatabaseMetadataQuery(options = {}) {
     const originalLoad = Module._load;
     Module._load = function(request, parent, isMain) {
         if (request === "sync-rpc")
@@ -17,6 +17,7 @@ function loadAppWithoutDatabaseMetadataQuery() {
 
     try {
         return require("../src/create-app")({
+            ...options,
             logging: false
         });
     }
@@ -49,6 +50,10 @@ test("application HTTP smoke test", async function(t) {
         const response = await fetch(`${baseUrl}/`);
         assert.equal(response.status, 200);
         assert.match(response.headers.get("content-type"), /^text\/html/);
+        assert.equal(response.headers.get("x-powered-by"), null);
+        assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+        assert.equal(response.headers.get("x-frame-options"), "SAMEORIGIN");
+        assert.equal(response.headers.get("strict-transport-security"), null);
         assert.match(await response.text(), /Welcome to LegendHUB!/);
     });
 
@@ -56,6 +61,9 @@ test("application HTTP smoke test", async function(t) {
         const response = await fetch(`${baseUrl}/robots.txt`);
         assert.equal(response.status, 200);
         assert.match(await response.text(), /Sitemap: https:\/\/www\.legendhub\.org\/sitemap\.xml/);
+
+        const sourceMapResponse = await fetch(`${baseUrl}/css/bootstrap-light.min.css.map`);
+        assert.equal(sourceMapResponse.status, 200);
     });
 
     await t.test("serves the GraphQL endpoint", async function() {
@@ -141,5 +149,37 @@ test("application HTTP smoke test", async function(t) {
         const response = await fetch(`${baseUrl}/this-page-does-not-exist`);
         assert.equal(response.status, 404);
         assert.match(await response.text(), /The page you are looking for does not exist/);
+    });
+
+    await t.test("production blocks source maps and enables transport security", async function(t) {
+        const productionApp = loadAppWithoutDatabaseMetadataQuery({
+            environment: "production"
+        });
+        const productionServer = await new Promise(function(resolve) {
+            const listeningServer = productionApp.listen(0, "127.0.0.1", function() {
+                resolve(listeningServer);
+            });
+        });
+        t.after(function() {
+            return new Promise(function(resolve, reject) {
+                productionServer.close(function(error) {
+                    if (error)
+                        reject(error);
+                    else
+                        resolve();
+                });
+            });
+        });
+
+        const productionUrl = `http://127.0.0.1:${productionServer.address().port}`;
+        const mapResponse = await fetch(`${productionUrl}/css/bootstrap-light.min.css.map`);
+        assert.equal(mapResponse.status, 404);
+
+        const homeResponse = await fetch(`${productionUrl}/`);
+        assert.equal(homeResponse.status, 200);
+        assert.equal(
+            homeResponse.headers.get("strict-transport-security"),
+            "max-age=31536000; includeSubDomains"
+        );
     });
 });
