@@ -14,11 +14,30 @@ async function start(options = {}) {
     return app.listen(port, () => log(`Running app listening on port ${port}!`));
 }
 
-if (require.main === module) {
-    start().catch(function(error) {
-        console.error("Application startup failed:", error);
+async function main(options = {}) {
+    const closeDatabase = options.closeDatabase || migrations.close;
+    const logError = options.logError || console.error;
+
+    try {
+        return await start(options);
+    }
+    catch (error) {
+        logError("Application startup failed:", error);
+
+        try {
+            await closeDatabase();
+        }
+        catch (closeError) {
+            logError("Failed to close the database pool:", closeError);
+        }
+
         process.exitCode = 1;
-    });
+        return undefined;
+    }
 }
 
+if (require.main === module)
+    main();
+
+exports.main = main;
 exports.start = start;
