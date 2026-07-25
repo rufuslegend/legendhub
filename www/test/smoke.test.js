@@ -47,9 +47,14 @@ test("application HTTP smoke test", async function(t) {
     const baseUrl = `http://127.0.0.1:${server.address().port}`;
 
     await t.test("serves the home page", async function() {
-        const response = await fetch(`${baseUrl}/`);
+        const response = await fetch(`${baseUrl}/`, {
+            headers: {
+                "Accept-Encoding": "gzip"
+            }
+        });
         assert.equal(response.status, 200);
         assert.match(response.headers.get("content-type"), /^text\/html/);
+        assert.equal(response.headers.get("content-encoding"), "gzip");
         assert.equal(response.headers.get("x-powered-by"), null);
         assert.equal(response.headers.get("x-content-type-options"), "nosniff");
         assert.equal(response.headers.get("x-frame-options"), "SAMEORIGIN");
@@ -131,6 +136,27 @@ test("application HTTP smoke test", async function(t) {
         });
     });
 
+    await t.test("returns JSON for oversized API request bodies", async function() {
+        const response = await fetch(`${baseUrl}/api`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                value: "x".repeat(110 * 1024)
+            })
+        });
+
+        assert.equal(response.status, 413);
+        assert.match(response.headers.get("content-type"), /^application\/json/);
+        assert.deepEqual(await response.json(), {
+            errors: [{
+                message: "Request body is too large.",
+                code: 413
+            }]
+        });
+    });
+
     await t.test("renders unsupported HTML error statuses without converting them to 500", async function() {
         const response = await fetch(`${baseUrl}/login.html`, {
             method: "POST",
@@ -172,7 +198,7 @@ test("application HTTP smoke test", async function(t) {
         });
 
         const productionUrl = `http://127.0.0.1:${productionServer.address().port}`;
-        const mapResponse = await fetch(`${productionUrl}/css/bootstrap-light.min.css.map`);
+        const mapResponse = await fetch(`${productionUrl}/css/bootstrap-light.min.css.map?source=true`);
         assert.equal(mapResponse.status, 404);
 
         const homeResponse = await fetch(`${productionUrl}/`);
