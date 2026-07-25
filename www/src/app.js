@@ -2,9 +2,24 @@ require("dotenv").config();
 
 const migrations = require("./routes/api/migrations");
 
+function validatePort(value) {
+    const port = typeof value === "string" && /^\d+$/.test(value)
+        ? Number(value)
+        : value;
+
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        throw new Error(
+            `PORT must be an integer between 1 and 65535; received ${String(value)}`
+        );
+    }
+
+    return port;
+}
+
 async function start(options = {}) {
     const migrate = options.migrate || migrations.up;
-    const port = options.port === undefined ? process.env.PORT : options.port;
+    const configuredPort = options.port === undefined ? process.env.PORT : options.port;
+    const port = validatePort(configuredPort);
     const log = options.log || console.log;
 
     await migrate();

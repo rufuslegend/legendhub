@@ -63,6 +63,91 @@ test("application waits for migrations before listening", async function() {
     ]);
 });
 
+test("numeric port configuration is normalized before listening", async function() {
+    let listeningPort;
+    const startup = require("../src/app");
+    const expectedServer = {};
+    const server = await startup.start({
+        port: "8080",
+        migrate: async function() {},
+        createApplication: function() {
+            return {
+                listen: function(port, callback) {
+                    listeningPort = port;
+                    callback();
+                    return expectedServer;
+                }
+            };
+        },
+        log: function() {}
+    });
+
+    assert.equal(server, expectedServer);
+    assert.equal(listeningPort, 8080);
+});
+
+test("invalid ports fail before migrations or application creation", async function(t) {
+    const invalidPorts = [
+        null,
+        "",
+        "not-a-port",
+        "80.5",
+        0,
+        -1,
+        1.5,
+        65536
+    ];
+    const startup = require("../src/app");
+
+    for (const port of invalidPorts) {
+        await t.test(`rejects ${JSON.stringify(port)}`, async function() {
+            let migrationStarted = false;
+            let applicationCreated = false;
+
+            await assert.rejects(
+                startup.start({
+                    port,
+                    migrate: async function() {
+                        migrationStarted = true;
+                    },
+                    createApplication: function() {
+                        applicationCreated = true;
+                    }
+                }),
+                /PORT must be an integer between 1 and 65535/
+            );
+
+            assert.equal(migrationStarted, false);
+            assert.equal(applicationCreated, false);
+        });
+    }
+});
+
+test("missing PORT fails before migrations", async function() {
+    const startup = require("../src/app");
+    const originalPort = process.env.PORT;
+    let migrationStarted = false;
+
+    try {
+        delete process.env.PORT;
+        await assert.rejects(
+            startup.start({
+                migrate: async function() {
+                    migrationStarted = true;
+                }
+            }),
+            /PORT must be an integer between 1 and 65535; received undefined/
+        );
+        assert.equal(migrationStarted, false);
+    }
+    finally {
+        if (originalPort === undefined)
+            delete process.env.PORT;
+        else
+            process.env.PORT = originalPort;
+    }
+});
+
 test("migration promise resolves only after database work finishes", async function() {
     let finishReadingMigrations;
     let released = false;
@@ -114,6 +199,7 @@ test("startup failure never creates the application or opens its port", async fu
 
     await assert.rejects(
         startup.start({
+            port: 8080,
             migrate: async function() {
                 throw migrationError;
             },
@@ -138,6 +224,7 @@ test("main reports startup failure, closes the database pool, and sets a failure
     try {
         process.exitCode = 0;
         const server = await startup.main({
+            port: 8080,
             migrate: async function() {
                 throw startupError;
             },
