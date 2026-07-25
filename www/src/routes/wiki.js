@@ -1,5 +1,4 @@
 let router = require("express").Router();
-let request = require("request");
 let apiUtils = require("./api/utils");
 
 router.get(["/", "/index.html"], async function(req, res, next) {

@@ -2,7 +2,7 @@ let mysql = require("./mysql-connection");
 let gql = require("graphql");
 let apiUtils = require("./utils");
 let auth = require("./auth")
-let phpPass = require("node-php-password");
+let phpPass = require("./php-password");
 
 class NotificationSetting {
     constructor(sqlResult) {

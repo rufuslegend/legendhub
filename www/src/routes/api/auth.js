@@ -1,10 +1,9 @@
 let mysql = require("./mysql-connection");
 let gql = require("graphql");
-let { GraphQLDateTime } = require("graphql-iso-date");
-let phpPass = require("node-php-password");
+let { GraphQLDateTime } = require("graphql-scalars");
+let phpPass = require("./php-password");
 let crypto = require("crypto");
 let apiUtils = require("./utils");
-let request = require("request");
 
 let getIPFromRequest = function(request) {
     let ip = (request.headers['x-forwarded-for'] || "").split(",")[0];
@@ -314,23 +313,15 @@ let register = async function(username, password, recaptcha, ip) {
 };
 
 let verifyReCAPTCHA = async function(recaptcha) {
-    return new Promise(function(resolve, reject) {
-        let options = {
-            url: "https://www.google.com/recaptcha/api/siteverify",
-            json: true,
-            form: {
-                secret: process.env.RECAPTCHA_SECRET,
-                response: recaptcha
-            }
-        };
-        request.post(options, function(error, response, body) {
-            if (error) {
-                return reject(error);
-            }
-
-            resolve(body.success);
+    const response = await fetch("https://www.google.com/recaptcha/api/siteverify", {
+        method: "POST",
+        body: new URLSearchParams({
+            secret: process.env.RECAPTCHA_SECRET,
+            response: recaptcha
         })
-    })
+    });
+    const body = await response.json();
+    return body.success;
 };
 
 let tokenRenewalType = new gql.GraphQLObjectType({
