@@ -38,26 +38,30 @@ function createPool(queryHandler) {
     return {pool, events};
 }
 
-function successfulQueryHandler(sql, _values, callback) {
-    if (sql.includes("GET_LOCK")) {
-        callback(null, [{Acquired: 1}]);
-        return;
-    }
-    if (sql.includes("RELEASE_LOCK")) {
-        callback(null, [{Released: 1}]);
-        return;
-    }
-    if (sql.includes("SELECT * FROM Migrations ORDER BY")) {
-        callback(null, []);
-        return;
-    }
-    if (sql.includes("SELECT * FROM MigrationRuns WHERE")) {
-        callback(null, []);
-        return;
-    }
+function createSuccessfulQueryHandler(history = []) {
+    return function(sql, _values, callback) {
+        if (sql.includes("GET_LOCK")) {
+            callback(null, [{Acquired: 1}]);
+            return;
+        }
+        if (sql.includes("RELEASE_LOCK")) {
+            callback(null, [{Released: 1}]);
+            return;
+        }
+        if (sql.includes("SELECT * FROM Migrations ORDER BY")) {
+            callback(null, history);
+            return;
+        }
+        if (sql.includes("SELECT * FROM MigrationRuns WHERE")) {
+            callback(null, []);
+            return;
+        }
 
-    callback(null, []);
+        callback(null, []);
+    };
 }
+
+const successfulQueryHandler = createSuccessfulQueryHandler();
 
 function fixtureDirectory(name) {
     return path.join(__dirname, "..", "test-fixtures", "migrations", name);
@@ -177,4 +181,63 @@ test("transactional migrations reject MySQL DDL before executing it", async func
         ),
         true
     );
+});
+
+test("migration history gaps block startup before run-state backfilling", async function() {
+    const {pool, events} = createPool(createSuccessfulQueryHandler([
+        {Id: 1},
+        {Id: 3},
+        {Id: 5}
+    ]));
+    const migrations = createMigrationRunner({
+        pool,
+        migrationsDirectory: fixtureDirectory("transactional-success"),
+        log: {info: function() {}}
+    });
+
+    await assert.rejects(
+        migrations.up(),
+        /Migration history is invalid; missing migration IDs: 2, 4/
+    );
+
+    assert.equal(
+        events.some(
+            (event) => event.type === "query" &&
+                event.sql.includes("INSERT INTO MigrationRuns")
+        ),
+        false
+    );
+    assert.equal(
+        events.some(
+            (event) => event.type === "query" && event.sql.includes("UPDATE MigrationTest")
+        ),
+        false
+    );
+});
+
+test("migration history rejects malformed and duplicate IDs", async function(t) {
+    const invalidHistories = [
+        {name: "zero", history: [{Id: 0}], message: /invalid Id '0'/},
+        {name: "negative", history: [{Id: -1}], message: /invalid Id '-1'/},
+        {name: "non-integer", history: [{Id: 1.5}], message: /invalid Id '1.5'/},
+        {name: "null", history: [{Id: null}], message: /invalid Id 'null'/},
+        {
+            name: "duplicate",
+            history: [{Id: 1}, {Id: 1}],
+            message: /duplicate or unordered Id 1/
+        }
+    ];
+
+    for (const scenario of invalidHistories) {
+        await t.test(scenario.name, async function() {
+            const {pool} = createPool(createSuccessfulQueryHandler(scenario.history));
+            const migrations = createMigrationRunner({
+                pool,
+                migrationsDirectory: fixtureDirectory("transactional-success"),
+                log: {info: function() {}}
+            });
+
+            await assert.rejects(migrations.up(), scenario.message);
+        });
+    }
 });

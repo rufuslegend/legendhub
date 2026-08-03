@@ -13,7 +13,35 @@ const defaultRunner = createMigrationRunner();
 
 exports.up = defaultRunner.up;
 exports.close = defaultRunner.close;
+exports.run = runDefaultMigrations;
 exports.createMigrationRunner = createMigrationRunner;
+
+async function runDefaultMigrations() {
+    let migrationError;
+
+    try {
+        await defaultRunner.up();
+    }
+    catch (error) {
+        migrationError = error;
+    }
+
+    try {
+        await defaultRunner.close();
+    }
+    catch (closeError) {
+        if (migrationError) {
+            throw new AggregateError(
+                [migrationError, closeError],
+                "Migrations failed and the migration database pool could not be closed"
+            );
+        }
+        throw closeError;
+    }
+
+    if (migrationError)
+        throw migrationError;
+}
 
 function createMigrationRunner(options = {}) {
     const pool = options.pool || mysqlPool;
@@ -34,15 +62,15 @@ function createMigrationRunner(options = {}) {
                 await acquireLock(connection, lockTimeoutSeconds);
                 lockHeld = true;
                 await ensureMigrationTables(connection);
-                await backfillMigrationRuns(connection);
 
                 const migrations = await query(
                     connection,
                     "read migration history",
-                    "SELECT * FROM Migrations ORDER BY Id DESC"
+                    "SELECT * FROM Migrations ORDER BY Id ASC"
                 );
-                const latestMigrationId = migrations.length > 0 ? migrations[0].Id : 0;
-                await runMigrations(connection, migrationsDirectory, latestMigrationId + 1, log);
+                const nextMigrationId = validateMigrationHistory(migrations);
+                await backfillMigrationRuns(connection);
+                await runMigrations(connection, migrationsDirectory, nextMigrationId, log);
             }
             catch (error) {
                 migrationError = error;
@@ -64,6 +92,36 @@ function createMigrationRunner(options = {}) {
             return closePool(pool);
         }
     };
+}
+
+function validateMigrationHistory(migrations) {
+    const missingRanges = [];
+    let expectedId = 1;
+
+    for (const migration of migrations) {
+        const migrationId = migration.Id;
+        if (!Number.isInteger(migrationId) || migrationId < 1)
+            throw new Error(`Migration history contains invalid Id '${String(migrationId)}'`);
+        if (migrationId < expectedId)
+            throw new Error(`Migration history contains duplicate or unordered Id ${migrationId}`);
+        if (migrationId > expectedId) {
+            missingRanges.push(
+                migrationId === expectedId + 1
+                    ? String(expectedId)
+                    : `${expectedId}-${migrationId - 1}`
+            );
+        }
+
+        expectedId = migrationId + 1;
+    }
+
+    if (missingRanges.length > 0) {
+        throw new Error(
+            `Migration history is invalid; missing migration IDs: ${missingRanges.join(", ")}`
+        );
+    }
+
+    return expectedId;
 }
 
 function closePool(pool) {

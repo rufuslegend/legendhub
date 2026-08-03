@@ -149,9 +149,10 @@ test("missing PORT fails before migrations", async function() {
     }
 });
 
-test("migration promise resolves only after database work finishes", async function() {
+test("default migration operation closes its pool after database work finishes", async function() {
     let finishReadingMigrations;
     let released = false;
+    let poolClosed = false;
     const connection = {
         query: function(sql, _values, callback) {
             if (sql.includes("GET_LOCK")) {
@@ -178,24 +179,38 @@ test("migration promise resolves only after database work finishes", async funct
     const migrations = loadMigrationModule({
         getConnection: function(callback) {
             callback(null, connection);
+        },
+        end: function(callback) {
+            poolClosed = true;
+            callback();
         }
     });
 
     let resolved = false;
-    const migrationPromise = migrations.up().then(function() {
+    const migrationPromise = migrations.run().then(function() {
         resolved = true;
     });
     await new Promise((resolve) => setImmediate(resolve));
 
     assert.equal(resolved, false);
     assert.equal(released, false);
+    assert.equal(poolClosed, false);
     assert.equal(typeof finishReadingMigrations, "function");
 
-    finishReadingMigrations(null, [{Id: 7}]);
+    finishReadingMigrations(null, [
+        {Id: 1},
+        {Id: 2},
+        {Id: 3},
+        {Id: 4},
+        {Id: 5},
+        {Id: 6},
+        {Id: 7}
+    ]);
     await migrationPromise;
 
     assert.equal(resolved, true);
     assert.equal(released, true);
+    assert.equal(poolClosed, true);
 });
 
 test("startup failure never creates the application or opens its port", async function() {

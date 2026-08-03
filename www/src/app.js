@@ -17,7 +17,7 @@ function validatePort(value) {
 }
 
 async function start(options = {}) {
-    const migrate = options.migrate || migrations.up;
+    const migrate = options.migrate || migrations.run;
     const configuredPort = options.port === undefined ? process.env.PORT : options.port;
     const port = validatePort(configuredPort);
     const log = options.log || console.log;
