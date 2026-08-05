@@ -2,6 +2,7 @@
 .vscode
 .vs
 .DS_Store
+.worktrees/
 
 # dotenv
 .env
