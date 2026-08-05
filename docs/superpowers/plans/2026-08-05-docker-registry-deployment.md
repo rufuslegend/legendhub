@@ -597,7 +597,7 @@ sha_digests=()
 for index in "${!repositories[@]}"; do
   repository="${repositories[$index]}"
   context="${contexts[$index]}"
-  ref="$repository:$sha"
+  ref="${repository}:${sha}"
 
   if verify_image "$ref" >/dev/null 2>&1; then
     printf 'Reusing verified %s\n' "$ref"
@@ -614,8 +614,8 @@ done
 
 for index in "${!repositories[@]}"; do
   repository="${repositories[$index]}"
-  sha_ref="$repository:$sha"
-  test_ref="$repository:test"
+  sha_ref="${repository}:${sha}"
+  test_ref="${repository}:test"
 
   docker buildx imagetools create \
     --prefer-index=false \
@@ -828,17 +828,64 @@ git commit -m "Add registry deployment Compose override"
 
 ---
 
-### Task 5: Document publishing, deployment, and rollback
+### Task 5: Add checked deployment and document release operations
 
 **Files:**
+- Create: `scripts/deploy-test.sh`
+- Create: `scripts/test/deploy-test.test.js`
 - Modify: `DEVELOPMENT.md:36-53`
 - Modify: `DEVELOPMENT.md:65-120`
 
 **Interfaces:**
-- Consumes: `scripts/publish-images.sh`, `docker-compose.registry.yaml`, and a chosen 12-character SHA
-- Produces: one operator runbook covering publishing, first-time private-registry login, test deployment, verification, and rollback
+- Consumes: one positional 12-character lowercase SHA, the `dunwichmass`
+  checkout at `/home/rufus/legendhub`, `scripts/publish-images.sh`, and
+  `docker-compose.registry.yaml`
+- Produces: a checked deploy/rollback entry point plus one operator runbook
+  covering publishing, first-time private-registry login, test deployment,
+  verification, and rollback
 
-- [ ] **Step 1: Add the registry test suite to the documented verification commands**
+- [ ] **Step 1: Write deployment boundary and remote workflow tests**
+
+Create `scripts/test/deploy-test.test.js` with command fakes. Test that `test`,
+`latest`, uppercase, empty, short, and non-hex tags all exit nonzero before the
+fake SSH command is invoked. A successful remote-workflow test must use fake Git
+and Docker commands to prove this order: fetch, expand the SHA as a commit,
+detach-checkout the full commit, confirm `HEAD`'s 12-character SHA, validate
+Compose, pull `www python mysql-backup`, and run `up -d --no-build`. Also prove
+missing `docker-compose.registry.yaml` stops before Compose and `.env` contents
+are never printed.
+
+- [ ] **Step 2: Run the deployment tests and confirm they fail**
+
+```bash
+node --test scripts/test/deploy-test.test.js
+```
+
+Expected: FAIL because `scripts/deploy-test.sh` does not exist.
+
+- [ ] **Step 3: Implement the checked deployment entry point**
+
+Create executable `scripts/deploy-test.sh`. Validate that normal invocation has
+one positional argument matching exactly `^[a-f0-9]{12}$` before invoking SSH.
+Send a safely quoted Bash payload to `dunwichmass` for
+`/home/rufus/legendhub`. The remote payload must check `.env` and
+`docker-compose.test.yaml`, run `git fetch origin`, verify the abbreviation
+resolves through `<sha>^{commit}`, detach-checkout that full commit, and verify
+`git rev-parse --short=12 HEAD` equals the requested SHA. Check the ignored
+files again, require `docker-compose.registry.yaml`, export only the validated
+tag, run `docker compose ... config --quiet`, pull the three private services,
+then run `up -d --no-build`. Do not print or render `.env` values.
+
+- [ ] **Step 4: Run the deployment tests and shell syntax checks**
+
+```bash
+node --test scripts/test/deploy-test.test.js
+bash -n scripts/deploy-test.sh
+```
+
+Expected: all deployment tests and the syntax check pass without network use.
+
+- [ ] **Step 5: Add the registry test suite to the documented verification commands**
 
 Add this repository-root command after the existing application test section:
 
@@ -850,7 +897,7 @@ node --test scripts/test/*.test.js
 ```
 ````
 
-- [ ] **Step 2: Document manual publishing**
+- [ ] **Step 6: Document manual publishing**
 
 Add a `## Publish x86_64 images` section containing:
 
@@ -858,6 +905,11 @@ Add a `## Publish x86_64 images` section containing:
 The publisher requires clean committed inputs under `www`, `python`, and `mysql`,
 an authenticated `tmckimmey` Docker Hub session, and a Buildx builder with
 `linux/amd64` support.
+
+Before publishing, explicitly confirm that each of these exact Docker Hub
+repositories exists and has visibility `Private`: `tmckimmey/legendhub-www`,
+`tmckimmey/legendhub-python`, and `tmckimmey/legendhub-mysql-backup`. Stop if
+that visibility cannot be confirmed; do not rely on account defaults.
 
 ```sh
 ./scripts/publish-images.sh
@@ -869,7 +921,7 @@ digests. Deployments use the printed SHA, not `test`. The script never publishes
 `latest`.
 ````
 
-- [ ] **Step 3: Document test deployment and rollback**
+- [ ] **Step 7: Document test deployment and rollback**
 
 Add a `## Deploy registry images to test` section with the one-time private
 registry login and exact deployment commands:
@@ -882,31 +934,28 @@ ssh -A dunwichmass
 docker login --username tmckimmey
 ```
 
-From `/home/rufus/legendhub`, select the immutable release SHA:
+From a local LegendHUB repository checkout, run the checked deployment entry
+point with the immutable release SHA:
 
 ```sh
-export LEGENDHUB_IMAGE_TAG=<12-character-sha>
-
-docker compose \
-  -f docker-compose.yaml \
-  -f docker-compose.test.yaml \
-  -f docker-compose.registry.yaml \
-  pull www python mysql-backup
-
-docker compose \
-  -f docker-compose.yaml \
-  -f docker-compose.test.yaml \
-  -f docker-compose.registry.yaml \
-  up -d --no-build
+./scripts/deploy-test.sh <12-character-release-sha>
 ```
 
+The script rejects non-SHA tags before SSH. It checks and preserves the server's
+ignored `.env` and `docker-compose.test.yaml`, fetches and checks out the full
+commit matching the requested SHA, requires `docker-compose.registry.yaml`,
+validates the Compose configuration, pulls all three private services, and runs
+`up -d --no-build`.
+
 Check `docker compose ... ps`, recent logs, `http://127.0.0.1:7001`, and
-`https://legendhub.dunwichmass.com/`. Roll back by exporting the previous SHA and
-repeating `pull` and `up -d --no-build`. Never use `down --volumes` during a
-deployment or rollback.
+`https://legendhub.dunwichmass.com/`. Roll back with
+`./scripts/deploy-test.sh <previous-12-character-release-sha>` so the matching
+commit is checked out before rendering, pulling, or starting. Never use a
+movable `test` or `latest` deployment tag, and never use `down --volumes` during
+a deployment or rollback.
 ````
 
-- [ ] **Step 4: Run all local verification**
+- [ ] **Step 8: Run all local verification**
 
 Run:
 
@@ -920,7 +969,7 @@ npm test
 Expected: the registry tests pass; all non-database web tests pass; the existing
 database-gated test is skipped when its opt-in environment variable is absent.
 
-- [ ] **Step 5: Check the documentation and working tree**
+- [ ] **Step 9: Check the documentation and working tree**
 
 Run:
 
@@ -934,11 +983,11 @@ Expected: no whitespace errors; only the intended implementation files and the
 pre-existing untracked `docker-compose-prod.yaml` appear. Do not stage that
 untracked file.
 
-- [ ] **Step 6: Commit the runbook**
+- [ ] **Step 10: Commit the checked deployer and runbook**
 
 ```bash
-git add DEVELOPMENT.md
-git commit -m "Document registry release operations"
+git add DEVELOPMENT.md scripts/deploy-test.sh scripts/test/deploy-test.test.js
+git commit -m "Add checked registry deployment"
 ```
 
 ---
@@ -976,15 +1025,17 @@ tmckimmey/legendhub-python
 tmckimmey/legendhub-mysql-backup
 ```
 
-Create any missing repository as private before publishing. Do not rely on the
-account's default repository visibility.
+Create any missing repository as private, then explicitly confirm all three
+visibility settings before publishing. Stop if private visibility cannot be
+confirmed. Do not rely on the account's default repository visibility.
 
 - [ ] **Step 3: Publish and capture the verified digests**
 
 Run:
 
 ```bash
-./scripts/publish-images.sh | tee /tmp/legendhub-published-images.txt
+bash -o pipefail -c \
+  './scripts/publish-images.sh | tee /tmp/legendhub-published-images.txt'
 ```
 
 Expected: three output lines naming the repositories, the same 12-character SHA,
@@ -1002,9 +1053,9 @@ for repository in \
   tmckimmey/legendhub-mysql-backup
 do
   sha_digest="$(docker buildx imagetools inspect --format '{{json .}}' \
-    "$repository:$LEGENDHUB_IMAGE_TAG" | node scripts/verify-image-platform.js)"
+    "${repository}:${LEGENDHUB_IMAGE_TAG}" | node scripts/verify-image-platform.js)"
   test_digest="$(docker buildx imagetools inspect --format '{{json .}}' \
-    "$repository:test" | node scripts/verify-image-platform.js)"
+    "${repository}:test" | node scripts/verify-image-platform.js)"
   test "$sha_digest" = "$test_digest"
   printf '%s %s\n' "$repository" "$sha_digest"
 done
@@ -1024,44 +1075,34 @@ docker login --username tmckimmey
 
 Expected: `Login Succeeded`. Exit the interactive shell after login.
 
-- [ ] **Step 6: Update the server checkout without disturbing local deployment files**
+- [ ] **Step 6: Deploy the matching server checkout and immutable images**
 
 Run:
 
 ```bash
-ssh -A dunwichmass '
-  set -e
-  cd /home/rufus/legendhub
-  git fetch origin
-  git checkout --detach '"$(git rev-parse HEAD)"'
-  test -f .env
-  test -f docker-compose.test.yaml
-  test -f docker-compose.registry.yaml
-'
+./scripts/deploy-test.sh "$LEGENDHUB_IMAGE_TAG"
 ```
 
-Expected: the checkout reaches the exact release commit and retains the ignored
-`.env` and `docker-compose.test.yaml` files.
+Expected: the script accepts only a 12-character lowercase SHA before SSH. On
+`dunwichmass` it checks the ignored `.env` and `docker-compose.test.yaml`,
+fetches Git, expands the SHA to a full commit, checks out that full commit
+detached, confirms the checkout matches the requested tag, requires
+`docker-compose.registry.yaml`, validates the merged Compose configuration,
+pulls `www`, `python`, and `mysql-backup`, and runs `up -d --no-build` without
+removing any named volume.
 
-- [ ] **Step 7: Render, pull, and deploy the immutable release**
+- [ ] **Step 7: Keep rollback on the same checked path**
 
-Run:
+If verification finds a release-blocking problem, run the same entry point with
+the previous immutable release SHA:
 
 ```bash
-ssh -A dunwichmass '
-  set -e
-  cd /home/rufus/legendhub
-  export LEGENDHUB_IMAGE_TAG='"$LEGENDHUB_IMAGE_TAG"'
-  compose="docker compose -f docker-compose.yaml -f docker-compose.test.yaml -f docker-compose.registry.yaml"
-  $compose config --quiet
-  $compose pull www python mysql-backup
-  $compose up -d --no-build
-  $compose ps
-'
+./scripts/deploy-test.sh "$PREVIOUS_LEGENDHUB_IMAGE_TAG"
 ```
 
-Expected: all four services are running and MySQL becomes healthy. The command
-does not run `down` and does not remove any named volume.
+Expected: rollback checks out the full commit matching the previous image tag
+before Compose validation, pull, and `up -d --no-build`. Never substitute
+`test` or `latest` for either release variable.
 
 - [ ] **Step 8: Verify image selection, routes, and logs**
 
@@ -1078,8 +1119,13 @@ ssh -A dunwichmass '
   $compose images
   for service in www python mysql-backup; do
     container_id="$($compose ps -q "$service")"
-    docker inspect --format "{{.Config.Image}}" "$container_id" \
-      | grep -F ":$LEGENDHUB_IMAGE_TAG$"
+    case "$service" in
+      www) expected_image="tmckimmey/legendhub-www:${LEGENDHUB_IMAGE_TAG}" ;;
+      python) expected_image="tmckimmey/legendhub-python:${LEGENDHUB_IMAGE_TAG}" ;;
+      mysql-backup) expected_image="tmckimmey/legendhub-mysql-backup:${LEGENDHUB_IMAGE_TAG}" ;;
+    esac
+    actual_image="$(docker inspect --format "{{.Config.Image}}" "$container_id")"
+    test "$actual_image" = "$expected_image"
   done
 
   for route in / /items/ /mobs/ /quests/ /wiki/ /builder/ /login.html /api; do

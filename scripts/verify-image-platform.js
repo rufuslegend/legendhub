@@ -24,9 +24,10 @@ if (!/^sha256:[a-f0-9]{64}$/.test(digest || "")) {
 let runnablePlatforms;
 if (Array.isArray(manifest.manifests)) {
     runnablePlatforms = manifest.manifests
-        .map((descriptor) => descriptor.platform || {})
-        .filter((platform) =>
-            platform.os !== "unknown" || platform.architecture !== "unknown");
+        .filter((descriptor) =>
+            descriptor.annotations?.["vnd.docker.reference.type"] !==
+                "attestation-manifest")
+        .map((descriptor) => descriptor.platform || {});
 } else {
     runnablePlatforms = [inspection.image || {}];
 }

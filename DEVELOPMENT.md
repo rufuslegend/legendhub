@@ -131,6 +131,16 @@ The publisher requires clean committed inputs under `www`, `python`, and `mysql`
 an authenticated `tmckimmey` Docker Hub session, and a Buildx builder with
 `linux/amd64` support.
 
+Before publishing, explicitly confirm that each exact Docker Hub repository
+exists and its visibility is `Private`:
+
+- `tmckimmey/legendhub-www`
+- `tmckimmey/legendhub-python`
+- `tmckimmey/legendhub-mysql-backup`
+
+Stop if any repository is missing or its private visibility cannot be
+confirmed. Do not rely on the Docker Hub account's default visibility.
+
 ```sh
 ./scripts/publish-images.sh
 ```
@@ -149,25 +159,31 @@ ssh -A dunwichmass
 docker login --username tmckimmey
 ```
 
-From `/home/rufus/legendhub`, select the immutable release SHA:
+From a local LegendHUB repository checkout, deploy the immutable release SHA
+with the checked entry point:
 
 ```sh
-export LEGENDHUB_IMAGE_TAG=<12-character-sha>
-
-docker compose \
-  -f docker-compose.yaml \
-  -f docker-compose.test.yaml \
-  -f docker-compose.registry.yaml \
-  pull www python mysql-backup
-
-docker compose \
-  -f docker-compose.yaml \
-  -f docker-compose.test.yaml \
-  -f docker-compose.registry.yaml \
-  up -d --no-build
+./scripts/deploy-test.sh <12-character-release-sha>
 ```
 
+The script rejects anything except exactly 12 lowercase hexadecimal characters
+before invoking SSH. On `dunwichmass` it operates only in
+`/home/rufus/legendhub`: it checks that the server's ignored `.env` and
+`docker-compose.test.yaml` files exist, fetches Git, expands the requested SHA
+to a full commit, checks out that exact commit detached, and confirms the
+checkout's 12-character SHA still matches the requested image tag. It checks
+the ignored files again, requires the checked-out
+`docker-compose.registry.yaml`, validates the merged Compose configuration,
+pulls `www`, `python`, and `mysql-backup`, and runs `up -d --no-build`. The
+checks never print `.env` values.
+
 Check `docker compose ... ps`, recent logs, `http://127.0.0.1:7001`, and
-`https://legendhub.dunwichmass.com/`. Roll back by exporting the previous SHA and
-repeating `pull` and `up -d --no-build`. Never use `down --volumes` during a
-deployment or rollback.
+`https://legendhub.dunwichmass.com/`. Roll back through the same checked path:
+
+```sh
+./scripts/deploy-test.sh <previous-12-character-release-sha>
+```
+
+Release and rollback both check out the commit matching the image tag before
+Compose validation, pull, or startup. Never deploy a movable `test` or `latest`
+tag, and never use `down --volumes` during a deployment or rollback.

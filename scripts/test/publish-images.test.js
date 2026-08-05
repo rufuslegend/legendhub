@@ -52,8 +52,16 @@ if [[ "$1 $2 $3" == "buildx imagetools inspect" ]]; then
     printf 'ERROR: %s: not found\n' "${dollar}missing_ref" >&2
     exit 1
   }
+  digest="${dollar}FAKE_DIGEST"
+  architecture="amd64"
+  if [[ "${dollar}ref" == "${dollar}{FAKE_INVALID_PLATFORM_REF:-}" ]]; then
+    architecture="arm64"
+  fi
+  if [[ "${dollar}ref" == "${dollar}{FAKE_MISMATCH_TEST_REF:-}" ]]; then
+    digest="${dollar}{FAKE_MISMATCH_DIGEST}"
+  fi
   cat <<JSON
-{"manifest":{"digest":"sha256:${dollar}{FAKE_DIGEST}","manifests":[{"platform":{"os":"linux","architecture":"amd64"}},{"platform":{"os":"unknown","architecture":"unknown"},"annotations":{"vnd.docker.reference.type":"attestation-manifest"}}]}}
+{"name":"docker.io/${dollar}{ref}","manifest":{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","digest":"sha256:${dollar}{digest}","size":1801,"manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:${dollar}{FAKE_RUNNABLE_DESCRIPTOR_DIGEST}","size":1234,"platform":{"os":"linux","architecture":"${dollar}{architecture}"}},{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:${dollar}{FAKE_ATTESTATION_DESCRIPTOR_DIGEST}","size":567,"platform":{"os":"unknown","architecture":"unknown"},"annotations":{"vnd.docker.reference.digest":"sha256:${dollar}{FAKE_RUNNABLE_DESCRIPTOR_DIGEST}","vnd.docker.reference.type":"attestation-manifest"}}]}}
 JSON
   exit 0
 fi
@@ -110,10 +118,13 @@ function runPublisher(gitStatus, environment = {}) {
         env: {
             ...process.env,
             PATH: `${fakeBin}:${process.env.PATH}`,
+            FAKE_ATTESTATION_DESCRIPTOR_DIGEST: "e".repeat(64),
             FAKE_DIGEST: "b".repeat(64),
             FAKE_DOCKER_LOG: dockerLog,
             FAKE_DOCKER_STATE: dockerState,
             FAKE_GIT_STATUS: gitStatus,
+            FAKE_MISMATCH_DIGEST: "c".repeat(64),
+            FAKE_RUNNABLE_DESCRIPTOR_DIGEST: "d".repeat(64),
             ...environment,
         },
         encoding: "utf8",
@@ -196,4 +207,46 @@ test("fails closed on a missing response for an unrelated image", () => {
     assert.notEqual(result.status, 0);
     assert.doesNotMatch(readDockerLog(), /buildx build/);
     assert.match(result.stderr, /unrelated/);
+});
+
+test("rejects an invalid platform on an existing SHA before promotion", () => {
+    seedShaImageState("abcdef123456");
+    const result = runPublisher("", {
+        FAKE_INVALID_PLATFORM_REF: "tmckimmey/legendhub-www:abcdef123456",
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /linux\/arm64/);
+    assert.doesNotMatch(readDockerLog(), /buildx build/);
+    assert.doesNotMatch(readDockerLog(), /imagetools create/);
+});
+
+test("stops after post-build platform verification fails", () => {
+    const result = runPublisher("", {
+        FAKE_INVALID_PLATFORM_REF: "tmckimmey/legendhub-www:abcdef123456",
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /linux\/arm64/);
+    const log = readDockerLog();
+    assert.equal((log.match(/buildx build/g) || []).length, 1);
+    assert.match(log, /--tag tmckimmey\/legendhub-www:abcdef123456/);
+    assert.doesNotMatch(log, /--tag tmckimmey\/legendhub-python:abcdef123456/);
+    assert.doesNotMatch(log, /imagetools create/);
+});
+
+test("stops further promotion when a promoted digest mismatches", () => {
+    seedShaImageState("abcdef123456");
+    const result = runPublisher("", {
+        FAKE_MISMATCH_TEST_REF: "tmckimmey/legendhub-www:test",
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Digest mismatch/);
+    const log = readDockerLog();
+    assert.doesNotMatch(log, /buildx build/);
+    assert.equal((log.match(/imagetools create/g) || []).length, 1);
+    assert.match(log, /--tag tmckimmey\/legendhub-www:test tmckimmey\/legendhub-www:abcdef123456/);
+    assert.doesNotMatch(log, /--tag tmckimmey\/legendhub-python:test/);
+    assert.doesNotMatch(log, /--tag tmckimmey\/legendhub-mysql-backup:test/);
 });
