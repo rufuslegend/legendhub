@@ -73,6 +73,12 @@ npm ci
 npm test
 ```
 
+Validate the registry publishing and Compose tooling from the repository root:
+
+```sh
+node --test scripts/test/*.test.js
+```
+
 Run only the fast characterization checks or HTTP smoke test with:
 
 ```sh
@@ -118,3 +124,50 @@ Generate a database backup immediately with:
 ```sh
 docker compose exec mysql-backup /usr/local/bin/backup-mysql
 ```
+
+## Publish x86_64 images
+
+The publisher requires clean committed inputs under `www`, `python`, and `mysql`,
+an authenticated `tmckimmey` Docker Hub session, and a Buildx builder with
+`linux/amd64` support.
+
+```sh
+./scripts/publish-images.sh
+```
+
+The script publishes all three service images with the 12-character `HEAD` SHA,
+verifies their remote manifests, and then moves their `test` tags to those same
+digests. Deployments use the printed SHA, not `test`. The script never publishes
+`latest`.
+
+## Deploy registry images to test
+
+Authenticate the server once for private pulls:
+
+```sh
+ssh -A dunwichmass
+docker login --username tmckimmey
+```
+
+From `/home/rufus/legendhub`, select the immutable release SHA:
+
+```sh
+export LEGENDHUB_IMAGE_TAG=<12-character-sha>
+
+docker compose \
+  -f docker-compose.yaml \
+  -f docker-compose.test.yaml \
+  -f docker-compose.registry.yaml \
+  pull www python mysql-backup
+
+docker compose \
+  -f docker-compose.yaml \
+  -f docker-compose.test.yaml \
+  -f docker-compose.registry.yaml \
+  up -d --no-build
+```
+
+Check `docker compose ... ps`, recent logs, `http://127.0.0.1:7001`, and
+`https://legendhub.dunwichmass.com/`. Roll back by exporting the previous SHA and
+repeating `pull` and `up -d --no-build`. Never use `down --volumes` during a
+deployment or rollback.
