@@ -27,10 +27,28 @@ dirty="$(git status --porcelain=v1 --untracked-files=all -- www python mysql)"
 docker buildx version >/dev/null
 docker buildx inspect --bootstrap >/dev/null
 
-verify_image() {
+inspect_image() {
   local ref="$1"
-  docker buildx imagetools inspect --format '{{json .}}' "$ref" \
-    | node "$script_dir/verify-image-platform.js"
+  local output
+
+  if output="$(docker buildx imagetools inspect --format '{{json .}}' "$ref" 2>&1)"; then
+    printf '%s\n' "$output"
+    return 0
+  fi
+
+  case "$output" in
+    *"not found"*)
+      return 2
+      ;;
+    *)
+      printf 'Unable to inspect image %s:\n%s\n' "$ref" "$output" >&2
+      return 1
+      ;;
+  esac
+}
+
+verify_image() {
+  node "$script_dir/verify-image-platform.js"
 }
 
 sha_digests=()
@@ -39,17 +57,23 @@ for index in "${!repositories[@]}"; do
   context="${contexts[$index]}"
   ref="$repository:$sha"
 
-  if verify_image "$ref" >/dev/null 2>&1; then
-    printf 'Reusing verified %s\n' "$ref"
+  if inspection="$(inspect_image "$ref")"; then
+    printf 'Reusing inspected %s\n' "$ref"
   else
-    docker buildx build \
-      --platform linux/amd64 \
-      --push \
-      --tag "$ref" \
-      "$context"
+    inspect_status=$?
+    if [[ "$inspect_status" -eq 2 ]]; then
+      docker buildx build \
+        --platform linux/amd64 \
+        --push \
+        --tag "$ref" \
+        "$context"
+      inspection="$(inspect_image "$ref")"
+    else
+      exit "$inspect_status"
+    fi
   fi
 
-  sha_digests[$index]="$(verify_image "$ref")"
+  sha_digests[$index]="$(printf '%s\n' "$inspection" | verify_image)"
 done
 
 for index in "${!repositories[@]}"; do
@@ -62,7 +86,8 @@ for index in "${!repositories[@]}"; do
     --tag "$test_ref" \
     "$sha_ref"
 
-  test_digest="$(verify_image "$test_ref")"
+  test_inspection="$(inspect_image "$test_ref")"
+  test_digest="$(printf '%s\n' "$test_inspection" | verify_image)"
   [[ "$test_digest" == "${sha_digests[$index]}" ]] || {
     printf 'Digest mismatch: %s != %s\n' "$test_ref" "$sha_ref" >&2
     exit 1

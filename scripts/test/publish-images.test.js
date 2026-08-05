@@ -40,7 +40,14 @@ fi
 
 if [[ "$1 $2 $3" == "buildx imagetools inspect" ]]; then
   ref="${dollar}{!#}"
-  test -f "${dollar}FAKE_DOCKER_STATE/${dollar}(encode_ref "${dollar}ref")" || exit 1
+  if [[ "${dollar}{FAKE_DOCKER_INSPECT_FAILURE:-}" == "1" ]]; then
+    printf 'temporary registry timeout\n' >&2
+    exit 75
+  fi
+  test -f "${dollar}FAKE_DOCKER_STATE/${dollar}(encode_ref "${dollar}ref")" || {
+    printf 'image not found\n' >&2
+    exit 1
+  }
   cat <<JSON
 {"manifest":{"digest":"sha256:${dollar}{FAKE_DIGEST}","manifests":[{"platform":{"os":"linux","architecture":"amd64"}},{"platform":{"os":"unknown","architecture":"unknown"},"annotations":{"vnd.docker.reference.type":"attestation-manifest"}}]}}
 JSON
@@ -93,7 +100,7 @@ beforeEach(() => {
 
 afterEach(() => fs.rmSync(workspace, {recursive: true, force: true}));
 
-function runPublisher(gitStatus) {
+function runPublisher(gitStatus, environment = {}) {
     return spawnSync("bash", [publisher], {
         cwd: path.resolve(__dirname, "../.."),
         env: {
@@ -103,6 +110,7 @@ function runPublisher(gitStatus) {
             FAKE_DOCKER_LOG: dockerLog,
             FAKE_DOCKER_STATE: dockerState,
             FAKE_GIT_STATUS: gitStatus,
+            ...environment,
         },
         encoding: "utf8",
     });
@@ -150,4 +158,12 @@ test("reuses verified SHA images instead of overwriting them", () => {
     assert.equal(result.status, 0, result.stderr);
     assert.doesNotMatch(readDockerLog(), /buildx build/);
     assert.equal((readDockerLog().match(/imagetools create/g) || []).length, 3);
+});
+
+test("fails closed when inspection of a seeded SHA image fails", () => {
+    seedShaImageState("abcdef123456");
+    const result = runPublisher("", {FAKE_DOCKER_INSPECT_FAILURE: "1"});
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /inspection|timeout/i);
+    assert.doesNotMatch(readDockerLog(), /buildx build/);
 });
