@@ -1,0 +1,11 @@
+services:
+    mysql-backup:
+        image: tmckimmey/legendhub-mysql-backup:${LEGENDHUB_IMAGE_TAG:?set LEGENDHUB_IMAGE_TAG}
+        build: !reset null
+    www:
+        image: tmckimmey/legendhub-www:${LEGENDHUB_IMAGE_TAG:?set LEGENDHUB_IMAGE_TAG}
+        build: !reset null
+        volumes: !reset []
+    python:
+        image: tmckimmey/legendhub-python:${LEGENDHUB_IMAGE_TAG:?set LEGENDHUB_IMAGE_TAG}
+        build: !reset null
