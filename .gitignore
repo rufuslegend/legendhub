@@ -6,6 +6,8 @@
 # dotenv
 .env
 
+data/
+
 # notification listener
 python/src/__pycache__/
 python/**/*.py[cod]
