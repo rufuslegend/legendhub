@@ -7,15 +7,20 @@ router.get(["/", "/index.html"], function(req, res, next) {
     res.render("index", {title: "Home"});
 });
 
-router.all(["/login.html"], async function(req, res, next) {
-    let vm = {body: req.body};
+router.get(["/login.html"], function(req, res) {
+    return res.render("login", {title: "Login", vm: {body: {}}});
+});
 
-    if (req.body.login_username) {
+router.post(["/login.html"], async function(req, res) {
+    const body = req.body || {};
+    let vm = {body};
+
+    if (body.login_username) {
         let query = `
         mutation {
-            authLogin(username:"${req.body.login_username}",
-                password:"${req.body.login_password}",
-                stayLoggedIn:${!!req.body.login_stayLoggedIn}) {
+            authLogin(username:"${body.login_username}",
+                password:"${body.login_password}",
+                stayLoggedIn:${!!body.login_stayLoggedIn}) {
                 token
                 expires
             }
@@ -50,16 +55,16 @@ router.all(["/login.html"], async function(req, res, next) {
             data.authLogin.token,
             cookieOptions
         );
-        return res.redirect(req.body.returnUrl || "/");
+        return res.redirect(body.returnUrl || "/");
     }
-    else if (req.body.register_username) {
-        let recaptcha = req.body["g-recaptcha-response"];
+    else if (body.register_username) {
+        let recaptcha = body["g-recaptcha-response"];
         if (!recaptcha) {
             vm.register_error = "Error: Please fill out reCAPTCHA.";
             return res.render("login", {title: "Login", vm});
         }
 
-        if (req.body.register_password !== req.body.register_confirmPassword) {
+        if (body.register_password !== body.register_confirmPassword) {
             vm.register_error = "Error: Passwords must match.";
             return res.render("login", {title: "Login", vm});
         }
@@ -68,8 +73,8 @@ router.all(["/login.html"], async function(req, res, next) {
         try {
             let query = `
             mutation {
-                register(username:"${req.body.register_username}",
-                    password:"${req.body.register_password}",
+                register(username:"${body.register_username}",
+                    password:"${body.register_password}",
                     recaptcha:"${recaptcha}")
             }
             `;
@@ -104,71 +109,74 @@ router.get(["/cookies.html"], function(req, res, next) {
     res.render("cookies", {title: "Cookie Policy"});
 });
 
-router.all(["/feedback.html"], async function(req, res, next) {
-    const feedbackTitle = req.body.feedbackTitle;
-    const feedbackBody = req.body.feedbackBody;
-    const recaptcha = req.body["g-recaptcha-response"];
+router.get(["/feedback.html"], function(req, res) {
+    const vm = {
+        type: "normal",
+        values: {title: "", body: ""}
+    };
+    return res.render("feedback", {title: "Send Feedback", vm});
+});
+
+router.post(["/feedback.html"], async function(req, res, next) {
+    const body = req.body || {};
+    const feedbackTitle = body.feedbackTitle;
+    const feedbackBody = body.feedbackBody;
+    const recaptcha = body["g-recaptcha-response"];
 
     let vm = {};
-    if (req.method === "POST") {
-        if (!recaptcha) {
+    if (!recaptcha) {
+        vm.type = "error";
+        vm.message = "The reCAPTCHA must be filled out.";
+        vm.values = {title: feedbackTitle, body: feedbackBody};
+        return res.render("feedback", {title: "Feedback Error", vm});
+    }
+
+    try {
+        const recaptchaResponse = await fetch("https://www.google.com/recaptcha/api/siteverify", {
+            method: "POST",
+            body: new URLSearchParams({
+                secret: process.env.RECAPTCHA_SECRET,
+                response: recaptcha
+            })
+        });
+        const recaptchaResult = await recaptchaResponse.json();
+
+        if (!recaptchaResult.success) {
             vm.type = "error";
-            vm.message = "The reCAPTCHA must be filled out.";
+            vm.message = "Invalid reCAPTCHA.";
             vm.values = {title: feedbackTitle, body: feedbackBody};
             return res.render("feedback", {title: "Feedback Error", vm});
         }
 
-        try {
-            const recaptchaResponse = await fetch("https://www.google.com/recaptcha/api/siteverify", {
-                method: "POST",
-                body: new URLSearchParams({
-                    secret: process.env.RECAPTCHA_SECRET,
-                    response: recaptcha
-                })
-            });
-            const recaptchaResult = await recaptchaResponse.json();
-
-            if (!recaptchaResult.success) {
-                vm.type = "error";
-                vm.message = "Invalid reCAPTCHA.";
-                vm.values = {title: feedbackTitle, body: feedbackBody};
-                return res.render("feedback", {title: "Feedback Error", vm});
-            }
-
-            if (!feedbackTitle) {
-                vm.type = "error";
-                vm.message = "All required fields must be filled out.";
-                vm.values = {title: feedbackTitle, body: feedbackBody};
-                return res.render("feedback", {title: "Feedback Error", vm});
-            }
-
-            let query = `mutation {createIssue(input:{assigneeIds:["MDQ6VXNlcjMzNzQwMzI="],labelIds:["LA_kwDOCDoKdM8AAAABOL_TfA"],repositoryId:"""${process.env.GITHUB_REPOSITORY}""",title:"""${feedbackTitle}"""${feedbackBody?`,body:"""Feedback from site\n\n\"${feedbackBody}\"."""`:""}}) {issue {url}}}`;
-            const githubResponse = await fetch("https://api.github.com/graphql", {
-                method: "POST",
-                headers: {
-                    "Authorization": `bearer ${process.env.GITHUB_TOKEN}`,
-                    "Content-Type": "application/json",
-                    "User-Agent": "LegendHUB"
-                },
-                body: JSON.stringify({query})
-            });
-            const githubResult = await githubResponse.json();
-
-            if (githubResult.errors)
-                return next(new Error(githubResult.errors[0].message));
-
-            vm.type = "success";
-            vm.url = githubResult.data.createIssue.issue.url;
-            return res.render("feedback", {title:"Feedback Sent", vm});
+        if (!feedbackTitle) {
+            vm.type = "error";
+            vm.message = "All required fields must be filled out.";
+            vm.values = {title: feedbackTitle, body: feedbackBody};
+            return res.render("feedback", {title: "Feedback Error", vm});
         }
-        catch (error) {
-            return next(error);
-        }
+
+        let query = `mutation {createIssue(input:{assigneeIds:["MDQ6VXNlcjMzNzQwMzI="],labelIds:["LA_kwDOCDoKdM8AAAABOL_TfA"],repositoryId:"""${process.env.GITHUB_REPOSITORY}""",title:"""${feedbackTitle}"""${feedbackBody?`,body:"""Feedback from site\n\n\"${feedbackBody}\"."""`:""}}) {issue {url}}}`;
+        const githubResponse = await fetch("https://api.github.com/graphql", {
+            method: "POST",
+            headers: {
+                "Authorization": `bearer ${process.env.GITHUB_TOKEN}`,
+                "Content-Type": "application/json",
+                "User-Agent": "LegendHUB"
+            },
+            body: JSON.stringify({query})
+        });
+        const githubResult = await githubResponse.json();
+
+        if (githubResult.errors)
+            return next(new Error(githubResult.errors[0].message));
+
+        vm.type = "success";
+        vm.url = githubResult.data.createIssue.issue.url;
+        return res.render("feedback", {title:"Feedback Sent", vm});
     }
-
-    vm.type = "normal";
-    vm.values = {title: "", body: ""};
-    return res.render("feedback", {title: "Send Feedback", vm});
+    catch (error) {
+        return next(error);
+    }
 });
 
 //router.all(["/play.html"], function(req, res, next) {

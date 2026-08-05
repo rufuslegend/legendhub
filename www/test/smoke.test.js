@@ -62,6 +62,18 @@ test("application HTTP smoke test", async function(t) {
         assert.match(await response.text(), /Welcome to LegendHUB!/);
     });
 
+    await t.test("serves forms that do not have a request body on GET", async function() {
+        const loginResponse = await fetch(`${baseUrl}/login.html`);
+        assert.equal(loginResponse.status, 200);
+        assert.match(loginResponse.headers.get("content-type"), /^text\/html/);
+        assert.match(await loginResponse.text(), /<form[^>]+action="\/login\.html"/);
+
+        const feedbackResponse = await fetch(`${baseUrl}/feedback.html`);
+        assert.equal(feedbackResponse.status, 200);
+        assert.match(feedbackResponse.headers.get("content-type"), /^text\/html/);
+        assert.match(await feedbackResponse.text(), /Send Feedback/);
+    });
+
     await t.test("serves a static asset", async function() {
         const response = await fetch(`${baseUrl}/robots.txt`);
         assert.equal(response.status, 200);
