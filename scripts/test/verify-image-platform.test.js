@@ -1,0 +1,66 @@
+"use strict";
+
+const assert = require("node:assert/strict");
+const path = require("node:path");
+const {spawnSync} = require("node:child_process");
+const test = require("node:test");
+
+const verifier = path.resolve(__dirname, "../verify-image-platform.js");
+const digest = `sha256:${"a".repeat(64)}`;
+
+function verify(document) {
+    return spawnSync(process.execPath, [verifier], {
+        input: JSON.stringify(document),
+        encoding: "utf8",
+    });
+}
+
+test("accepts one linux/amd64 image plus a BuildKit attestation", () => {
+    const result = verify({
+        manifest: {
+            digest,
+            manifests: [
+                {platform: {os: "linux", architecture: "amd64"}},
+                {
+                    annotations: {"vnd.docker.reference.type": "attestation-manifest"},
+                    platform: {os: "unknown", architecture: "unknown"},
+                },
+            ],
+        },
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), digest);
+});
+
+test("rejects an additional runnable platform", () => {
+    const result = verify({
+        manifest: {
+            digest,
+            manifests: [
+                {platform: {os: "linux", architecture: "amd64"}},
+                {platform: {os: "linux", architecture: "arm64"}},
+            ],
+        },
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /linux\/arm64/);
+});
+
+test("accepts a single linux/amd64 image manifest", () => {
+    const result = verify({
+        manifest: {digest},
+        image: {os: "linux", architecture: "amd64"},
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), digest);
+});
+
+test("rejects malformed inspection output", () => {
+    const result = verify({manifest: {}});
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /digest|platform/i);
+});
