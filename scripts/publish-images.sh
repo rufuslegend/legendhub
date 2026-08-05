@@ -36,15 +36,12 @@ inspect_image() {
     return 0
   fi
 
-  case "$output" in
-    *"not found"*)
-      return 2
-      ;;
-    *)
-      printf 'Unable to inspect image %s:\n%s\n' "$ref" "$output" >&2
-      return 1
-      ;;
-  esac
+  if [[ "$output" == "ERROR: $ref: not found" ]]; then
+    return 2
+  fi
+
+  printf 'Unable to inspect image %s:\n%s\n' "$ref" "$output" >&2
+  return 1
 }
 
 verify_image() {

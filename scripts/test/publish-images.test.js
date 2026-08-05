@@ -40,12 +40,12 @@ fi
 
 if [[ "$1 $2 $3" == "buildx imagetools inspect" ]]; then
   ref="${dollar}{!#}"
-  if [[ "${dollar}{FAKE_DOCKER_INSPECT_FAILURE:-}" == "1" ]]; then
-    printf 'temporary registry timeout\n' >&2
+  if [[ -n "${dollar}{FAKE_DOCKER_INSPECT_FAILURE:-}" ]]; then
+    printf '%s\n' "${dollar}FAKE_DOCKER_INSPECT_FAILURE" >&2
     exit 75
   fi
   test -f "${dollar}FAKE_DOCKER_STATE/${dollar}(encode_ref "${dollar}ref")" || {
-    printf 'image not found\n' >&2
+    printf 'ERROR: %s: not found\n' "${dollar}ref" >&2
     exit 1
   }
   cat <<JSON
@@ -131,7 +131,7 @@ function seedShaImageState(sha) {
     }
 }
 
-test("publishes three amd64 SHA images before promoting test tags", () => {
+test("builds after explicit registry missing responses before promoting test tags", () => {
     const result = runPublisher("");
     assert.equal(result.status, 0, result.stderr);
 
@@ -162,8 +162,18 @@ test("reuses verified SHA images instead of overwriting them", () => {
 
 test("fails closed when inspection of a seeded SHA image fails", () => {
     seedShaImageState("abcdef123456");
-    const result = runPublisher("", {FAKE_DOCKER_INSPECT_FAILURE: "1"});
+    const result = runPublisher("", {FAKE_DOCKER_INSPECT_FAILURE: "temporary registry timeout"});
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /inspection|timeout/i);
     assert.doesNotMatch(readDockerLog(), /buildx build/);
+});
+
+test("fails closed on an ambiguous tool error containing not found", () => {
+    seedShaImageState("abcdef123456");
+    const result = runPublisher("", {
+        FAKE_DOCKER_INSPECT_FAILURE: "docker: command not found while resolving image",
+    });
+    assert.notEqual(result.status, 0);
+    assert.doesNotMatch(readDockerLog(), /buildx build/);
+    assert.match(result.stderr, /inspection|command not found/i);
 });
