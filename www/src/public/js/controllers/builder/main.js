@@ -1,5 +1,5 @@
 (function() {
-    function builderController($scope, $cookies, $http, $q, $timeout, itemConstants, encoder, exceptionService) {
+    function builderController($scope, $cookies, $http, $q, $timeout, itemConstants, encoder, exceptionService, gameStats) {
         //#region ~~~~~~~~~ INITIALIZATION ~~~~~~~~~
 
         /** Initializes the controller. */
@@ -1891,141 +1891,18 @@
          * @return {number} the total bonuses gained from other stats.
          */
         var getTotalFromStatBonuses = function(statName) {
-            var fromBonus = 0;
-
-            switch (statName)
-            {
-                case "hp":
-                    var con = $scope.getStatTotal("constitution");
-                    fromBonus += 381 + ((con - 30) * 5);
-                    if (con > 89)
-                        fromBonus += Math.max(con - 88, 0) * 5;
-                    break;
-                case "ma":
-                    fromBonus += 446 + (($scope.getStatTotal("mind") - 30) * 5);
-                    break;
-                case "mv":
-                    fromBonus += 496 + ((Math.max($scope.getStatTotal("constitution"), $scope.getStatTotal("dexterity")) - 30) * 5);
-                    break;
-                case "spelldam":
-                    fromBonus += parseInt(($scope.getStatTotal("mind") - 52) / 2);
-                    break;
-                case "spellcrit":
-                    fromBonus += parseInt(($scope.getStatTotal("mind") - 60) / 4);
-                    fromBonus += parseInt(Math.max($scope.getStatTotal("perception") - 60, 0) / 8);
-                    fromBonus += parseInt(Math.max($scope.getStatTotal("spirit") - 60, 0) / 8);
-                    fromBonus += 5;
-                    break;
-                case "hit":
-                    var str = $scope.getStatTotal("strength");
-                    var dex = $scope.getStatTotal("dexterity");
-                    var con = $scope.getStatTotal("constitution");
-
-                    var wearingStrWeap = false;
-                    var wearingConWeap = false;
-                    for (var i = 0; i < $scope.selectedList.items.length; ++i) {
-                        if ($scope.selectedList.items[i].slot == 14 || $scope.selectedList.items[i].slot == 15) {
-                            if ($scope.selectedList.items[i].weaponStat == 1) {
-                                wearingStrWeap = true;
-                            }
-                            else if ($scope.selectedList.items[i].weaponStat == 3) {
-                                wearingConWeap = true;
-                            }
-                        }
-                    }
-
-                    var dexHitroll = Math.floor(Math.max(dex - 4, 0) / 3) + 1;
-                    var strHitroll = Math.floor(Math.min(Math.max(str / 4, 0), 25));
-                    var conHitroll = Math.floor(Math.min(Math.max(con / 4, 0), 25));
-
-                    var bestStat = dexHitroll;
-
-                    if (wearingStrWeap && strHitroll > dexHitroll) { // replace false with wearingStrWeap
-                        bestStat = strHitroll;
-                    }
-                    if (wearingConWeap && conHitroll > dexHitroll) { // replace false with wearingConWeap
-                        bestStat = conHitroll;
-                    }
-                    
-                    fromBonus += bestStat;
-                    break;
-                case "dam":
-                    var str = $scope.getStatTotal("strength");
-                    var dex = $scope.getStatTotal("dexterity");
-                    var con = $scope.getStatTotal("constitution");
-
-                    var wearingDexWeap = false;
-                    var wearingConWeap = false;
-                    for (var i = 0; i < $scope.selectedList.items.length; ++i) {
-                        if ($scope.selectedList.items[i].slot == 14 || $scope.selectedList.items[i].slot == 15) {
-                            if ($scope.selectedList.items[i].weaponStat == 2) {
-                                wearingDexWeap = true;
-                            }
-                            else if ($scope.selectedList.items[i].weaponStat == 3) {
-                                wearingConWeap = true;
-                            }
-                        }
-                    }
-
-                    var dexDamroll = Math.floor(Math.min(Math.max(dex / 4, 0), 25));
-                    var strDamroll = Math.floor(Math.max(str - 4, 0) / 3) + 1;
-                    var conDamroll = Math.floor(Math.min(Math.max(con / 4, 0), 25));
-
-                    var bestStat = strDamroll;
-
-                    if (wearingDexWeap && dexDamroll > strDamroll) { // replace false with wearingDexWeap
-                        bestStat = dexDamroll;
-                    }
-                    if (wearingConWeap && conDamroll > strDamroll) { // replace false with wearingConWeap
-                        bestStat = conDamroll;
-                    }
-                    
-                    fromBonus += bestStat;
-                    break;
-                case "mitigation":
-                    var con = $scope.getStatTotal("constitution");
-                    var hasBattleTraining = false;
-                    for (var i = 25; i < $scope.selectedList.items.length; ++i) { // loop through Other slots
-                        if ($scope.selectedList.items[i].id == 1144 || $scope.selectedList.items[i].id == 1137) {
-                            hasBattleTraining = true;
-                            break;
-                        }
-                    }
-
-                    if (hasBattleTraining) {
-                        fromBonus += parseInt(Math.max(con - 75, 0) / 5);
-                    }
-                    break;
-                case "ac":
-                    var str = $scope.getStatTotal("strength");
-                    var dex = $scope.getStatTotal("dexterity");
-                    var con = $scope.getStatTotal("constitution");
-                    var per = $scope.getStatTotal("perception");
-
-                    var totalAC = 83;
-                    totalAC += parseInt(Math.max(dex - 40, 0) * -0.5);
-                    totalAC += parseInt(Math.max(per - 30, 0) / -6);
-                    if (str >= 20 && dex >= 20 && con >= 20) {
-                        totalAC -= 5;
-                        if (dex >= 40 && con >= 40) {
-                            totalAC -= 5;
-                        }
-                    }
-
-                    fromBonus += totalAC;
-                    break;
-                case "hpr":
-                    var con = $scope.getStatTotal("constitution");
-
-                    fromBonus += parseInt(Math.max(con - 75, 0) * 0.2);
-                    if (con > 79)
-                        fromBonus += parseInt(Math.max(con - 70, 0) * 0.2);
-                    fromBonus += Math.max(con - 100, 0);
-                default:
-                    break;
+            const stats = {};
+            const dependencies = gameStats.getNaturalStatDependencies(statName);
+            for (let i = 0; i < dependencies.length; ++i) {
+                const dependency = dependencies[i];
+                stats[dependency] = $scope.getStatTotal(dependency);
             }
 
-            return fromBonus;
+            return gameStats.calculateNaturalStatBonus(
+                statName,
+                stats,
+                $scope.selectedList.items
+            );
         };
 
         /**
@@ -2707,5 +2584,5 @@
 
     angular
         .module("legendwiki-app")
-        .controller('builder', ["$scope", "$cookies", "$http", "$q", "$timeout", "itemConstants", "encoder", "exceptionService", builderController]);
+        .controller('builder', ["$scope", "$cookies", "$http", "$q", "$timeout", "itemConstants", "encoder", "exceptionService", "gameStats", builderController]);
 })();
