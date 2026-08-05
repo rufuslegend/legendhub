@@ -36,7 +36,8 @@ inspect_image() {
     return 0
   fi
 
-  if [[ "$output" == "ERROR: $ref: not found" ]]; then
+  if [[ "$output" == "ERROR: $ref: not found" \
+    || "$output" == "ERROR: docker.io/$ref: not found" ]]; then
     return 2
   fi
 

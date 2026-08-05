@@ -45,7 +45,11 @@ if [[ "$1 $2 $3" == "buildx imagetools inspect" ]]; then
     exit 75
   fi
   test -f "${dollar}FAKE_DOCKER_STATE/${dollar}(encode_ref "${dollar}ref")" || {
-    printf 'ERROR: %s: not found\n' "${dollar}ref" >&2
+    missing_ref="${dollar}ref"
+    if [[ "${dollar}{FAKE_DOCKER_CANONICAL_MISSING:-}" == "1" ]]; then
+      missing_ref="docker.io/${dollar}ref"
+    fi
+    printf 'ERROR: %s: not found\n' "${dollar}missing_ref" >&2
     exit 1
   }
   cat <<JSON
@@ -145,6 +149,12 @@ test("builds after explicit registry missing responses before promoting test tag
     assert.doesNotMatch(log, /:latest/);
 });
 
+test("builds after exact docker.io canonical missing responses", () => {
+    const result = runPublisher("", {FAKE_DOCKER_CANONICAL_MISSING: "1"});
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal((readDockerLog().match(/buildx build/g) || []).length, 3);
+});
+
 test("refuses dirty service build inputs before invoking Docker", () => {
     const result = runPublisher("?? www/local-only.js\n");
     assert.notEqual(result.status, 0);
@@ -176,4 +186,14 @@ test("fails closed on an ambiguous tool error containing not found", () => {
     assert.notEqual(result.status, 0);
     assert.doesNotMatch(readDockerLog(), /buildx build/);
     assert.match(result.stderr, /inspection|command not found/i);
+});
+
+test("fails closed on a missing response for an unrelated image", () => {
+    seedShaImageState("abcdef123456");
+    const result = runPublisher("", {
+        FAKE_DOCKER_INSPECT_FAILURE: "ERROR: docker.io/tmckimmey/unrelated:abcdef123456: not found",
+    });
+    assert.notEqual(result.status, 0);
+    assert.doesNotMatch(readDockerLog(), /buildx build/);
+    assert.match(result.stderr, /unrelated/);
 });
