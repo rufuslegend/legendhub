@@ -1,6 +1,7 @@
 # IDE
 .vscode
 .vs
+.DS_Store
 
 # dotenv
 .env

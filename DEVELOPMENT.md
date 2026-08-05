@@ -83,8 +83,16 @@ npm run test:smoke
 The smoke test starts the Express application on an ephemeral local port and
 checks the home page, a static asset, the GraphQL API and explorer, and the 404
 page. Database metadata is stubbed; database-backed routes still need manual
-integration testing. GitHub Actions runs the website and stylesheet tests on
-every push and pull request.
+integration testing.
+
+GitHub is used only for source control; there is no CI workflow. Before
+pushing, run the website tests above and the stylesheet checks locally:
+
+```sh
+cd ../css
+npm ci
+npm test
+```
 
 With the Docker stack running, manually check:
 

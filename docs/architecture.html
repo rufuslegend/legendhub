@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Interactive architecture diagram for the LegendHUB application.">
+  <title>LegendHUB · Application Architecture</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #edf3ee;
+      --muted: #9eaca4;
+      --quiet: #718078;
+      --page: #07100d;
+      --panel: #0c1814;
+      --panel-2: #10211b;
+      --line: #274238;
+      --green: #67e0a3;
+      --green-2: #2bae72;
+      --amber: #f5c66b;
+      --blue: #70b7f7;
+      --violet: #bd9cff;
+      --red: #f18d82;
+      --shadow: 0 22px 60px rgba(0, 0, 0, .28);
+      --radius: 20px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background:
+        radial-gradient(circle at 15% 0%, rgba(43, 174, 114, .12), transparent 29rem),
+        radial-gradient(circle at 95% 18%, rgba(112, 183, 247, .08), transparent 25rem),
+        var(--page);
+      color: var(--ink);
+      font: 15px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button { font: inherit; }
+
+    .shell {
+      width: min(1500px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 42px 0 56px;
+    }
+
+    .masthead {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 32px;
+      align-items: end;
+      margin-bottom: 24px;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--green);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .19em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(38px, 6vw, 76px);
+      font-weight: 500;
+      letter-spacing: -.045em;
+      line-height: .98;
+    }
+
+    .lede {
+      max-width: 760px;
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: clamp(15px, 1.4vw, 18px);
+    }
+
+    .stamp {
+      display: grid;
+      gap: 5px;
+      justify-items: end;
+      color: var(--quiet);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .stamp strong { color: var(--muted); font-weight: 700; }
+
+    .facts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 24px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .facts li {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(12, 24, 20, .72);
+      padding: 7px 12px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .toolbar {
+      position: sticky;
+      top: 10px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 12px;
+      border: 1px solid rgba(39, 66, 56, .82);
+      border-radius: 14px;
+      background: rgba(7, 16, 13, .9);
+      padding: 10px 12px;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, .25);
+      backdrop-filter: blur(15px);
+    }
+
+    .toolbar-label {
+      color: var(--quiet);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    .modes { display: flex; flex-wrap: wrap; gap: 6px; }
+
+    .mode {
+      border: 1px solid transparent;
+      border-radius: 9px;
+      background: transparent;
+      padding: 7px 10px;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+      transition: .18s ease;
+    }
+
+    .mode:hover { color: var(--ink); background: var(--panel-2); }
+    .mode[aria-pressed="true"] {
+      border-color: rgba(103, 224, 163, .28);
+      background: rgba(103, 224, 163, .13);
+      color: var(--green);
+    }
+
+    .diagram {
+      position: relative;
+      isolation: isolate;
+      min-height: 1050px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background:
+        linear-gradient(rgba(39, 66, 56, .11) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(39, 66, 56, .11) 1px, transparent 1px),
+        rgba(8, 18, 14, .82);
+      background-size: 32px 32px;
+      box-shadow: var(--shadow);
+      padding: 20px;
+    }
+
+    .wires {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+      pointer-events: none;
+    }
+
+    .edge {
+      fill: none;
+      stroke: #547064;
+      stroke-width: 1.35;
+      opacity: .45;
+      marker-end: url(#arrow);
+      transition: opacity .2s ease, stroke .2s ease, stroke-width .2s ease;
+    }
+
+    .edge.active { stroke: var(--green); stroke-width: 2.2; opacity: .95; }
+    .edge.dim { opacity: .05; }
+    .edge.startup.active { stroke: var(--amber); }
+    .edge.notifications.active { stroke: var(--violet); }
+    .edge.backup.active { stroke: var(--blue); }
+    .edge.build.active { stroke: var(--red); }
+
+    .edge-label {
+      fill: #aebbb4;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .02em;
+      paint-order: stroke;
+      stroke: var(--page);
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 5px;
+      opacity: .58;
+      text-anchor: middle;
+      transition: opacity .2s ease, fill .2s ease;
+    }
+
+    .edge-label.active { fill: var(--ink); opacity: 1; }
+    .edge-label.dim { opacity: 0; }
+
+    .architecture {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(165px, .78fr) minmax(570px, 2.7fr) minmax(175px, .9fr);
+      gap: 20px;
+      align-items: stretch;
+    }
+
+    .zone {
+      border: 1px solid rgba(39, 66, 56, .9);
+      border-radius: 16px;
+      background: rgba(12, 24, 20, .91);
+      padding: 14px;
+      transition: opacity .2s ease;
+    }
+
+    .zone-title {
+      position: relative;
+      z-index: 3;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 12px;
+      color: var(--quiet);
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    .zone-title span:last-child {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 3px 6px;
+      font-size: 8px;
+      letter-spacing: .09em;
+    }
+
+    .external, .operations {
+      display: flex;
+      min-height: 700px;
+      flex-direction: column;
+    }
+
+    .external .node:nth-of-type(3) { margin-top: auto; }
+    .operations .node:nth-of-type(3) { margin-top: auto; }
+
+    .docker {
+      border-color: rgba(103, 224, 163, .28);
+      background: rgba(9, 25, 18, .92);
+      padding: 15px;
+    }
+
+    .services {
+      display: grid;
+      grid-template-columns: minmax(0, 1.7fr) minmax(210px, .8fr);
+      gap: 14px;
+    }
+
+    .service {
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: rgba(7, 16, 13, .92);
+      padding: 12px;
+    }
+
+    .service-www { grid-row: span 2; }
+    .service-python, .service-backup { align-self: start; }
+    .service-mysql { grid-column: 1 / -1; }
+
+    .service-head {
+      position: relative;
+      z-index: 3;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .service-name {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font: 600 18px/1 Georgia, "Times New Roman", serif;
+    }
+
+    .service-name::before {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 4px rgba(103, 224, 163, .09);
+      content: "";
+    }
+
+    .service-tech { color: var(--quiet); font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+    .stack { display: grid; gap: 8px; }
+    .stack.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .stack.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+    .node {
+      position: relative;
+      z-index: 3;
+      width: 100%;
+      min-height: 64px;
+      margin: 0 0 8px;
+      border: 1px solid #2b483d;
+      border-radius: 10px;
+      background: #10211b;
+      padding: 10px 11px;
+      color: var(--ink);
+      cursor: pointer;
+      text-align: left;
+      transition: opacity .2s ease, border-color .2s ease, background .2s ease, transform .2s ease;
+    }
+
+    .node:last-child { margin-bottom: 0; }
+    .node:hover { border-color: #4b7765; transform: translateY(-1px); }
+    .node:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+    .node.selected { border-color: var(--green); background: #153328; box-shadow: inset 0 0 0 1px rgba(103, 224, 163, .17); }
+    .node.dim { opacity: .22; }
+
+    .node strong { display: block; margin-bottom: 3px; font-size: 12px; line-height: 1.25; }
+    .node small { display: block; color: var(--quiet); font-size: 10px; line-height: 1.35; }
+    .node[data-tone="amber"] { border-color: rgba(245, 198, 107, .28); }
+    .node[data-tone="blue"] { border-color: rgba(112, 183, 247, .28); }
+    .node[data-tone="violet"] { border-color: rgba(189, 156, 255, .28); }
+    .node[data-tone="red"] { border-color: rgba(241, 141, 130, .28); }
+
+    .db-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .db-grid .node { min-height: 72px; }
+
+    .detail {
+      position: relative;
+      z-index: 4;
+      display: grid;
+      grid-template-columns: minmax(240px, .75fr) minmax(0, 2fr);
+      gap: 18px;
+      margin-top: 20px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(12, 24, 20, .95);
+      padding: 18px;
+    }
+
+    .detail-kicker {
+      margin: 0 0 4px;
+      color: var(--green);
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+    }
+
+    .detail h2 { margin: 0; font: 500 25px/1.2 Georgia, "Times New Roman", serif; }
+    .detail p { max-width: 850px; margin: 1px 0 0; color: var(--muted); }
+    .detail-tech { margin-top: 8px; color: var(--quiet); font: 700 10px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 18px;
+      margin: 16px 4px 0;
+      color: var(--quiet);
+      font-size: 10px;
+    }
+
+    .legend span { display: flex; align-items: center; gap: 6px; }
+    .swatch { width: 18px; height: 2px; background: var(--green); }
+    .swatch.startup { background: var(--amber); }
+    .swatch.notifications { background: var(--violet); }
+    .swatch.backup { background: var(--blue); }
+    .swatch.build { background: var(--red); }
+
+    .footnote {
+      margin: 20px 0 0;
+      color: var(--quiet);
+      font-size: 11px;
+      text-align: center;
+    }
+
+    @media (max-width: 1120px) {
+      .architecture { grid-template-columns: 150px minmax(520px, 1fr); }
+      .operations { grid-column: 1 / -1; min-height: auto; flex-direction: row; gap: 8px; }
+      .operations .zone-title { position: absolute; }
+      .operations .node { margin: 28px 0 0; }
+      .operations .node:nth-of-type(3) { margin-top: 28px; }
+    }
+
+    @media (max-width: 820px) {
+      .shell { width: min(100% - 20px, 720px); padding-top: 24px; }
+      .masthead { grid-template-columns: 1fr; gap: 14px; }
+      .stamp { justify-items: start; }
+      .toolbar { position: static; align-items: flex-start; flex-direction: column; }
+      .diagram { min-height: 0; padding: 10px; }
+      .architecture { display: block; }
+      .zone { margin-bottom: 10px; }
+      .external, .operations { min-height: 0; flex-direction: initial; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+      .external .zone-title, .operations .zone-title { grid-column: 1 / -1; position: static; }
+      .external .node, .operations .node, .external .node:nth-of-type(3), .operations .node:nth-of-type(3) { margin: 0; }
+      .services { grid-template-columns: 1fr; }
+      .service-www, .service-mysql { grid-column: auto; grid-row: auto; }
+      .stack.four, .db-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .detail { grid-template-columns: 1fr; gap: 8px; }
+      .wires { display: none; }
+    }
+
+    @media (max-width: 500px) {
+      .facts li { font-size: 10px; }
+      .external, .operations, .stack.two, .stack.four, .db-grid { grid-template-columns: 1fr; }
+      .mode { padding: 7px 8px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="masthead">
+      <div>
+        <p class="eyebrow">System map · current repository</p>
+        <h1>LegendHUB architecture</h1>
+        <p class="lede">A server-rendered community knowledge application with a GraphQL core, a shared MySQL datastore, and cron-driven background operations.</p>
+      </div>
+      <div class="stamp"><strong>Runtime view</strong><span>Docker Compose · August 2026</span></div>
+    </header>
+
+    <ul class="facts" aria-label="Architecture summary">
+      <li>4 Docker services</li>
+      <li>Node · Express · GraphQL</li>
+      <li>MySQL 5.7</li>
+      <li>Python cron workers</li>
+      <li>EJS + AngularJS client</li>
+    </ul>
+
+    <nav class="toolbar" aria-label="Diagram flow controls">
+      <span class="toolbar-label">Trace a flow</span>
+      <div class="modes">
+        <button class="mode" data-mode="all" aria-pressed="true">All systems</button>
+        <button class="mode" data-mode="web" aria-pressed="false">Web request</button>
+        <button class="mode" data-mode="startup" aria-pressed="false">Startup</button>
+        <button class="mode" data-mode="notifications" aria-pressed="false">Notifications</button>
+        <button class="mode" data-mode="backup" aria-pressed="false">Backup</button>
+        <button class="mode" data-mode="build" aria-pressed="false">Asset build</button>
+      </div>
+    </nav>
+
+    <section class="diagram" id="diagram" aria-label="Interactive LegendHUB architecture diagram">
+      <svg class="wires" id="wires" aria-hidden="true">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"></path>
+          </marker>
+        </defs>
+        <g id="paths"></g>
+        <g id="labels"></g>
+      </svg>
+
+      <div class="architecture">
+        <section class="zone external">
+          <div class="zone-title"><span>Clients + edge</span><span>outside compose</span></div>
+          <button class="node" id="browser" data-title="Web browser" data-summary="Receives server-rendered EJS pages and static assets. AngularJS adds richer client-side behavior where needed, especially in the builder." data-tech="HTML · CSS · JavaScript · AngularJS 1.x">
+            <strong>Web browser</strong><small>EJS pages + client behavior</small>
+          </button>
+          <button class="node" id="edge" data-title="Deployment edge" data-summary="The production reverse-proxy and Cloudflare layer terminates public traffic before forwarding it to the application. It is part of deployment, not this Compose file." data-tech="Cloudflare · reverse proxy · outside repository runtime">
+            <strong>Cloudflare / proxy</strong><small>Production deployment edge</small>
+          </button>
+          <button class="node" id="recaptcha" data-tone="amber" data-title="Google reCAPTCHA" data-summary="Registration and feedback submissions are verified with Google's reCAPTCHA service before the application accepts them." data-tech="External HTTPS API">
+            <strong>Google reCAPTCHA</strong><small>Registration + feedback checks</small>
+          </button>
+          <button class="node" id="github" data-tone="blue" data-title="GitHub GraphQL" data-summary="The feedback route creates GitHub issues through the GitHub GraphQL API. GitHub otherwise serves as source control, outside the application runtime." data-tech="External GraphQL API · source control">
+            <strong>GitHub</strong><small>Feedback issues + source control</small>
+          </button>
+        </section>
+
+        <section class="zone docker">
+          <div class="zone-title"><span>Docker Compose network · legendhub</span><span>runtime boundary</span></div>
+          <div class="services">
+            <article class="service service-www">
+              <div class="service-head"><div class="service-name">www</div><div class="service-tech">NODE / EXPRESS</div></div>
+              <div class="stack two">
+                <button class="node" id="startup" data-tone="amber" data-title="Application startup" data-summary="The Node process validates configuration and completes the database migration sequence before the HTTP listener starts." data-tech="www/src/app.js · dotenv · migration gate">
+                  <strong>Startup gate</strong><small>Config → migrations → listen</small>
+                </button>
+                <button class="node" id="migrations" data-tone="amber" data-title="Migration runner" data-summary="Uses a dedicated connection, a MySQL advisory lock, validated migration history, and tracked transaction or non-transaction execution modes." data-tech="Dedicated lazy pool · advisory lock · MigrationRuns">
+                  <strong>Migration runner</strong><small>Locked, verified schema changes</small>
+                </button>
+              </div>
+              <button class="node" id="express" data-title="Express application" data-summary="Central request pipeline: security and compression middleware, logging, body parsing, static content, GraphQL, cookie-based auth context, page routers, and error handling." data-tech="Express · Helmet · compression · Morgan · cookie-parser">
+                <strong>Express request pipeline</strong><small>Middleware, routing, errors</small>
+              </button>
+              <div class="stack two">
+                <button class="node" id="pages" data-title="Server-rendered page routes" data-summary="Routes for items, mobs, quests, wiki, builder, changelog, notifications, and account render EJS views. Some route handlers call the local GraphQL endpoint." data-tech="Express routers · EJS · internal fetch to /api">
+                  <strong>Page routers</strong><small>EJS views for product areas</small>
+                </button>
+                <button class="node" id="static" data-title="Static web client" data-summary="The www service serves compiled CSS, browser JavaScript, images, and AngularJS-powered interactive features." data-tech="Express static · compiled Sass · AngularJS 1.x">
+                  <strong>Static + AngularJS</strong><small>Assets and client interactions</small>
+                </button>
+                <button class="node" id="auth" data-title="Authentication context" data-summary="Cookie middleware validates the login token, loads permissions and notifications, then exposes the user context to downstream page routes and templates." data-tech="loginToken cookie · AuthTokens · permissions">
+                  <strong>Cookie auth context</strong><small>Token, permissions, locals</small>
+                </button>
+                <button class="node" id="graphql" data-title="GraphQL API" data-summary="The /api endpoint exposes the application schema and an HTML explorer. It composes auth, content, taxonomy, changelog, notification, and account modules." data-tech="graphql-http · /api · Ruru explorer · single-mutation rule">
+                  <strong>GraphQL /api</strong><small>Shared application contract</small>
+                </button>
+              </div>
+              <div class="stack two">
+                <button class="node" id="resolvers" data-title="Domain resolvers" data-summary="Resolver modules implement auth and account operations, content queries and mutations, taxonomy, changelogs, and notifications." data-tech="auth · items · mobs · quests · wiki · areas · categories · changelogs · notifications">
+                  <strong>Domain resolvers</strong><small>Application rules by feature</small>
+                </button>
+                <button class="node" id="app-pool" data-title="Application database pool" data-summary="Normal web traffic shares a MySQL connection pool with a connection limit of ten. Migration traffic deliberately uses a separate pool." data-tech="mysql2 pool · connectionLimit 10">
+                  <strong>MySQL app pool</strong><small>Shared SQL connections</small>
+                </button>
+              </div>
+            </article>
+
+            <article class="service service-python">
+              <div class="service-head"><div class="service-name">python</div><div class="service-tech">CRON / SQLALCHEMY</div></div>
+              <button class="node" id="cron" data-tone="violet" data-title="Python cron schedule" data-summary="Cron starts the notification listener every two minutes and routine maintenance once per day." data-tech="cron-python · 2-minute listener · daily maintenance">
+                <strong>Cron scheduler</strong><small>Recurring background jobs</small>
+              </button>
+              <button class="node" id="notification-worker" data-tone="violet" data-title="Notification listener" data-summary="Consumes notification queue entries, applies user settings, records change history, creates user notifications, and cleans processed or old records." data-tech="notification_listener.py · SQLAlchemy · PyMySQL">
+                <strong>Notification worker</strong><small>Queue → user notifications</small>
+              </button>
+              <button class="node" id="maintenance" data-tone="violet" data-title="Routine maintenance" data-summary="Daily database maintenance removes expired authentication tokens." data-tech="routine_maintenance.py · SQLAlchemy · PyMySQL">
+                <strong>Maintenance worker</strong><small>Expire stale auth tokens</small>
+              </button>
+            </article>
+
+            <article class="service service-backup">
+              <div class="service-head"><div class="service-name">mysql-backup</div><div class="service-tech">CRON / MYSQLDUMP</div></div>
+              <button class="node" id="backup-worker" data-tone="blue" data-title="Database backup worker" data-summary="A daily cron job runs private and sanitized public mysqldump exports. The public export excludes sensitive tables." data-tech="backup-mysql · mysqldump · daily cron">
+                <strong>Backup worker</strong><small>Private + sanitized exports</small>
+              </button>
+              <button class="node" id="backup-volume" data-tone="blue" data-title="Backup volume" data-summary="Generated database exports are persisted in the named database-backups Docker volume." data-tech="Docker named volume · database-backups">
+                <strong>Backup volume</strong><small>Persistent SQL exports</small>
+              </button>
+            </article>
+
+            <article class="service service-mysql">
+              <div class="service-head"><div class="service-name">mysql</div><div class="service-tech">MYSQL 5.7 / PERSISTENT VOLUME</div></div>
+              <div class="db-grid">
+                <button class="node" id="db-core" data-title="Content data" data-summary="The main domain model stores items, mobs, quests, wiki pages, taxonomy, areas, categories, and changelog records." data-tech="Relational domain tables · MySQL 5.7">
+                  <strong>Core content</strong><small>Game knowledge data</small>
+                </button>
+                <button class="node" id="db-auth" data-title="Authentication and access" data-summary="Accounts, authentication tokens, permissions, and related access-control records support application identity." data-tech="Users · AuthTokens · permission data">
+                  <strong>Auth + access</strong><small>Users, tokens, permissions</small>
+                </button>
+                <button class="node" id="db-audit" data-tone="violet" data-title="Audit trail and triggers" data-summary="Database triggers and audit tables capture changes and feed the notification queue used by the Python listener." data-tech="MySQL triggers · audit tables · NotificationQueue">
+                  <strong>Audit + triggers</strong><small>Changes enqueue events</small>
+                </button>
+                <button class="node" id="db-notifications" data-tone="violet" data-title="Notification data" data-summary="Queue, settings, change history, and delivered notification tables connect web actions to asynchronous user alerts." data-tech="NotificationQueue · NotificationSettings · NotificationChanges · Notifications">
+                  <strong>Notifications</strong><small>Queue, settings, delivery</small>
+                </button>
+                <button class="node" id="db-migrations" data-tone="amber" data-title="Migration metadata" data-summary="Applied migration history and individual run records make startup schema changes verifiable and recoverable." data-tech="Migrations · MigrationRuns · advisory lock">
+                  <strong>Migration history</strong><small>Applied state + run ledger</small>
+                </button>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="zone operations">
+          <div class="zone-title"><span>Build + storage</span><span>supporting</span></div>
+          <button class="node" id="source-sass" data-tone="red" data-title="CSS build pipeline" data-summary="A separate npm and Gulp pipeline compiles Sass sources into browser-ready CSS during development or image preparation." data-tech="css/package.json · Gulp · Sass">
+            <strong>Sass / Gulp</strong><small>Build-time asset pipeline</small>
+          </button>
+          <button class="node" id="db-volume" data-title="MySQL persistence" data-summary="The MySQL service stores database files and logs in persistent Docker volumes and reads repository-provided initialization and configuration files." data-tech="Docker volumes · init bind · configuration bind">
+            <strong>Database volumes</strong><small>Data, logs, initialization</small>
+          </button>
+          <button class="node" id="tests" data-title="Automated test suite" data-summary="The www package contains unit, characterization, smoke, and opt-in MySQL migration integration tests to check current behavior and migration safety." data-tech="npm test · smoke · MySQL integration">
+            <strong>Test suite</strong><small>Unit, characterization, smoke</small>
+          </button>
+        </section>
+      </div>
+
+      <aside class="detail" aria-live="polite">
+        <div>
+          <p class="detail-kicker" id="detail-kicker">Diagram guide</p>
+          <h2 id="detail-title">Select any component</h2>
+        </div>
+        <div>
+          <p id="detail-summary">Use the flow controls to isolate a request lifecycle, startup migrations, notifications, backups, or the asset build. Select a component to inspect its role and immediate connections.</p>
+          <div class="detail-tech" id="detail-tech">Solid arrows show the primary direction of data or control.</div>
+        </div>
+      </aside>
+    </section>
+
+    <div class="legend" aria-label="Flow color legend">
+      <span><i class="swatch"></i>Web request</span>
+      <span><i class="swatch startup"></i>Startup</span>
+      <span><i class="swatch notifications"></i>Notifications</span>
+      <span><i class="swatch backup"></i>Backup</span>
+      <span><i class="swatch build"></i>Asset build</span>
+    </div>
+    <p class="footnote">Repository-derived architecture · select a node or flow to explore</p>
+  </main>
+
+  <script>
+    (() => {
+      const connections = [
+        { from: 'browser', to: 'edge', label: 'HTTPS', flow: 'web' },
+        { from: 'edge', to: 'express', label: 'HTTP', flow: 'web' },
+        { from: 'express', to: 'pages', label: 'page routes', flow: 'web' },
+        { from: 'express', to: 'static', label: 'assets', flow: 'web' },
+        { from: 'static', to: 'browser', label: 'HTML / CSS / JS', flow: 'web' },
+        { from: 'express', to: 'auth', label: 'cookies', flow: 'web' },
+        { from: 'express', to: 'graphql', label: '/api', flow: 'web' },
+        { from: 'pages', to: 'graphql', label: 'internal fetch', flow: 'web' },
+        { from: 'graphql', to: 'resolvers', label: 'schema', flow: 'web' },
+        { from: 'auth', to: 'app-pool', label: 'token + permissions', flow: 'web' },
+        { from: 'resolvers', to: 'app-pool', label: 'SQL', flow: 'web' },
+        { from: 'app-pool', to: 'db-core', label: 'content', flow: 'web' },
+        { from: 'app-pool', to: 'db-auth', label: 'identity', flow: 'web' },
+        { from: 'app-pool', to: 'db-audit', label: 'writes', flow: 'web' },
+        { from: 'app-pool', to: 'db-notifications', label: 'alerts', flow: 'web' },
+        { from: 'auth', to: 'recaptcha', label: 'verify', flow: 'web' },
+        { from: 'pages', to: 'github', label: 'feedback issue', flow: 'web' },
+        { from: 'startup', to: 'migrations', label: 'before listen', flow: 'startup' },
+        { from: 'migrations', to: 'db-migrations', label: 'lock + ledger', flow: 'startup' },
+        { from: 'migrations', to: 'db-core', label: 'schema DDL', flow: 'startup' },
+        { from: 'startup', to: 'express', label: 'start listener', flow: 'startup' },
+        { from: 'db-audit', to: 'db-notifications', label: 'enqueue', flow: 'notifications' },
+        { from: 'cron', to: 'notification-worker', label: 'every 2 min', flow: 'notifications' },
+        { from: 'cron', to: 'maintenance', label: 'daily', flow: 'notifications' },
+        { from: 'notification-worker', to: 'db-notifications', label: 'consume + create', flow: 'notifications' },
+        { from: 'maintenance', to: 'db-auth', label: 'expire tokens', flow: 'notifications' },
+        { from: 'backup-worker', to: 'db-core', label: 'mysqldump', flow: 'backup' },
+        { from: 'backup-worker', to: 'db-auth', label: 'private export', flow: 'backup' },
+        { from: 'backup-worker', to: 'backup-volume', label: 'write exports', flow: 'backup' },
+        { from: 'source-sass', to: 'static', label: 'compiled CSS', flow: 'build' },
+        { from: 'db-core', to: 'db-volume', label: 'persist', flow: 'web' },
+        { from: 'db-auth', to: 'db-volume', label: 'persist', flow: 'web' }
+      ];
+
+      const diagram = document.getElementById('diagram');
+      const paths = document.getElementById('paths');
+      const labels = document.getElementById('labels');
+      const nodes = [...document.querySelectorAll('.node')];
+      const modeButtons = [...document.querySelectorAll('.mode')];
+      const detailKicker = document.getElementById('detail-kicker');
+      const detailTitle = document.getElementById('detail-title');
+      const detailSummary = document.getElementById('detail-summary');
+      const detailTech = document.getElementById('detail-tech');
+      let activeMode = 'all';
+      let selectedNode = null;
+
+      function anchorPoints(from, to, root) {
+        const a = from.getBoundingClientRect();
+        const b = to.getBoundingClientRect();
+        const r = root.getBoundingClientRect();
+        const ac = { x: a.left + a.width / 2 - r.left, y: a.top + a.height / 2 - r.top };
+        const bc = { x: b.left + b.width / 2 - r.left, y: b.top + b.height / 2 - r.top };
+        const dx = bc.x - ac.x;
+        const dy = bc.y - ac.y;
+        if (Math.abs(dx) > Math.abs(dy)) {
+          return {
+            x1: dx > 0 ? a.right - r.left : a.left - r.left,
+            y1: ac.y,
+            x2: dx > 0 ? b.left - r.left : b.right - r.left,
+            y2: bc.y,
+            horizontal: true
+          };
+        }
+        return {
+          x1: ac.x,
+          y1: dy > 0 ? a.bottom - r.top : a.top - r.top,
+          x2: bc.x,
+          y2: dy > 0 ? b.top - r.top : b.bottom - r.top,
+          horizontal: false
+        };
+      }
+
+      function draw() {
+        paths.replaceChildren();
+        labels.replaceChildren();
+        const ns = 'http://www.w3.org/2000/svg';
+        connections.forEach((connection, index) => {
+          const from = document.getElementById(connection.from);
+          const to = document.getElementById(connection.to);
+          if (!from || !to) return;
+          const p = anchorPoints(from, to, diagram);
+          const bend = p.horizontal ? Math.max(38, Math.abs(p.x2 - p.x1) * .42) : Math.max(32, Math.abs(p.y2 - p.y1) * .42);
+          const d = p.horizontal
+            ? `M ${p.x1} ${p.y1} C ${p.x1 + Math.sign(p.x2 - p.x1) * bend} ${p.y1}, ${p.x2 - Math.sign(p.x2 - p.x1) * bend} ${p.y2}, ${p.x2} ${p.y2}`
+            : `M ${p.x1} ${p.y1} C ${p.x1} ${p.y1 + Math.sign(p.y2 - p.y1) * bend}, ${p.x2} ${p.y2 - Math.sign(p.y2 - p.y1) * bend}, ${p.x2} ${p.y2}`;
+          const path = document.createElementNS(ns, 'path');
+          path.setAttribute('d', d);
+          path.setAttribute('class', `edge ${connection.flow}`);
+          path.dataset.index = index;
+          paths.appendChild(path);
+
+          const label = document.createElementNS(ns, 'text');
+          label.setAttribute('x', (p.x1 + p.x2) / 2);
+          label.setAttribute('y', (p.y1 + p.y2) / 2 - 5);
+          label.setAttribute('class', 'edge-label');
+          label.dataset.index = index;
+          label.textContent = connection.label;
+          labels.appendChild(label);
+        });
+        applyHighlight();
+      }
+
+      function applyHighlight() {
+        const relevant = new Set();
+        connections.forEach((connection) => {
+          const flowMatch = activeMode === 'all' || connection.flow === activeMode;
+          const nodeMatch = !selectedNode || connection.from === selectedNode || connection.to === selectedNode;
+          if (flowMatch && nodeMatch) {
+            relevant.add(connection.from);
+            relevant.add(connection.to);
+          }
+        });
+
+        document.querySelectorAll('.edge, .edge-label').forEach((element) => {
+          const connection = connections[Number(element.dataset.index)];
+          const flowMatch = activeMode === 'all' || connection.flow === activeMode;
+          const nodeMatch = !selectedNode || connection.from === selectedNode || connection.to === selectedNode;
+          element.classList.toggle('active', flowMatch && nodeMatch);
+          element.classList.toggle('dim', !(flowMatch && nodeMatch) && (activeMode !== 'all' || selectedNode));
+        });
+
+        nodes.forEach((node) => {
+          const shouldDim = (activeMode !== 'all' || selectedNode) && !relevant.has(node.id) && node.id !== selectedNode;
+          node.classList.toggle('dim', shouldDim);
+          node.classList.toggle('selected', node.id === selectedNode);
+        });
+      }
+
+      function setMode(mode) {
+        activeMode = mode;
+        selectedNode = null;
+        modeButtons.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.mode === mode)));
+        detailKicker.textContent = mode === 'all' ? 'Diagram guide' : 'Active flow';
+        const button = modeButtons.find((candidate) => candidate.dataset.mode === mode);
+        detailTitle.textContent = mode === 'all' ? 'Select any component' : button.textContent;
+        detailSummary.textContent = mode === 'all'
+          ? 'Use the flow controls to isolate a request lifecycle, startup migrations, notifications, backups, or the asset build. Select a component to inspect its role and immediate connections.'
+          : `Highlighted arrows trace the ${button.textContent.toLowerCase()} path through the system. Select a highlighted component for implementation detail.`;
+        detailTech.textContent = 'Solid arrows show the primary direction of data or control.';
+        applyHighlight();
+      }
+
+      modeButtons.forEach((button) => button.addEventListener('click', () => setMode(button.dataset.mode)));
+
+      nodes.forEach((node) => node.addEventListener('click', () => {
+        selectedNode = selectedNode === node.id ? null : node.id;
+        if (selectedNode) {
+          detailKicker.textContent = 'Selected component';
+          detailTitle.textContent = node.dataset.title;
+          detailSummary.textContent = node.dataset.summary;
+          detailTech.textContent = node.dataset.tech;
+        } else {
+          setMode(activeMode);
+          return;
+        }
+        applyHighlight();
+      }));
+
+      let resizeFrame;
+      const redraw = () => {
+        cancelAnimationFrame(resizeFrame);
+        resizeFrame = requestAnimationFrame(draw);
+      };
+      new ResizeObserver(redraw).observe(diagram);
+      window.addEventListener('load', draw);
+      window.addEventListener('resize', redraw);
+      draw();
+    })();
+  </script>
+</body>
+</html>
