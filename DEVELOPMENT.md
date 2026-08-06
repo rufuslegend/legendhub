@@ -164,16 +164,25 @@ promote that version to `2.6.0` until the maintainer explicitly says to release.
 After the release commit has been reviewed and every verification gate is green,
 run the following beta procedure from the repository root. The tag command
 requires a clean worktree and must not run before that review and verification.
+Tagging and publishing do not authorize a test deployment.
 
 ```sh
 node scripts/verify-release-version.js
 cd www && npm test && cd ..
 node --test scripts/test/*.test.js
 git status --short --branch
-./scripts/tag-release.sh
 git push origin feat/public-changelog
+git fetch --tags origin
+./scripts/tag-release.sh
 git push origin v2.6.0-beta
 ./scripts/publish-images.sh
+```
+
+Test deployment is a separate, opt-in operation. Run it only after the
+maintainer explicitly authorizes that specific deployment; authorization must
+be requested again every time.
+
+```sh
 ./scripts/deploy-test.sh "$(git rev-parse --short=12 HEAD)"
 ```
 
@@ -188,10 +197,16 @@ node scripts/verify-release-version.js
 cd www && npm test && cd ..
 node --test scripts/test/*.test.js
 git status --short --branch
-./scripts/tag-release.sh
 git push origin feat/public-changelog
+git fetch --tags origin
+./scripts/tag-release.sh
 git push origin v2.6.0
 ./scripts/publish-images.sh
+```
+
+If the maintainer separately authorizes deployment of this final release, run:
+
+```sh
 ./scripts/deploy-test.sh "$(git rev-parse --short=12 HEAD)"
 ```
 

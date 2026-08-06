@@ -55,6 +55,10 @@ module.exports = function createApp(options = {}) {
     app.use("/api", apiRouter);
 
     app.use(cookieParser());
+    app.use(authRouter.initializeLocals);
+    app.use("/changelog", createChangelogRouter({
+        changelogPath: options.changelogPath
+    }));
     app.use(authRouter);
 
     app.use("/", indexRouter);
@@ -63,9 +67,6 @@ module.exports = function createApp(options = {}) {
     app.use("/quests", questsRouter);
     app.use("/wiki", wikiRouter);
     app.use("/builder", builderRouter);
-    app.use("/changelog", createChangelogRouter({
-        changelogPath: options.changelogPath
-    }));
     app.use("/notifications", notificationsRouter);
     app.use("/account", accountRouter);
 

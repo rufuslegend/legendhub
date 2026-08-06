@@ -22,6 +22,29 @@ function loadApplication(changelogPath) {
     Module._load = function(request, parent, isMain) {
         if (request === "sync-rpc")
             return () => () => [];
+        const fromAuthentication = parent?.filename.endsWith("/routes/auth.js");
+        if (fromAuthentication && request === "./api/auth") {
+            return {
+                utils: {
+                    authToken() {
+                        throw new Error("Public changelog attempted authentication");
+                    },
+                    getIPFromRequest() {
+                        throw new Error("Public changelog attempted authentication");
+                    },
+                    getPermissions() {
+                        throw new Error("Public changelog attempted authentication");
+                    }
+                }
+            };
+        }
+        if (fromAuthentication && request === "./api/utils") {
+            return {
+                postAsync() {
+                    throw new Error("Public changelog attempted an API request");
+                }
+            };
+        }
         const fromLegacyChangelog = parent?.filename.endsWith("/routes/changelog.js") &&
             (request === "./api/utils" || request === "./api/auth");
         if (fromLegacyChangelog)
@@ -81,6 +104,17 @@ test("serves the tracked changelog without legacy database routes", async (t) =>
         assert.match(body, /2\.6\.0-beta/);
         assert.match(body, /Safer releases/);
         assert.doesNotMatch(body, /changelog\/add\.html|changelog\/edit\.html/);
+    });
+
+    await t.test("ignores login cookies without attempting authentication", async () => {
+        const response = await fetch(`${baseUrl}/changelog/`, {
+            headers: {cookie: "loginToken=stale-session; theme=dark"}
+        });
+        const body = await response.text();
+        assert.equal(response.status, 200);
+        assert.match(body, /2\.6\.0-beta/);
+        assert.match(body, /bootstrap-dark\.min\.css/);
+        assert.match(body, /login\.html\?returnUrl=\/changelog\//);
     });
 
     await t.test("redirects legacy details and retires editor routes", async () => {

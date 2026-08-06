@@ -3,7 +3,7 @@ let authApi = require("./api/auth");
 let apiUtils = require("./api/utils");
 let url = require("url");
 
-var authFunc = async function(req, res, next) {
+var initializeLocals = function(req, res, next) {
     res.locals.url = url.parse(req.url, true);
     res.locals.version = process.env.npm_package_version;
     res.locals.cookies = req.cookies;
@@ -34,6 +34,10 @@ var authFunc = async function(req, res, next) {
         }
     };
 
+    next();
+};
+
+var authFunc = async function(req, res, next) {
     if (req.cookies.loginToken) {
         try {
             res.locals.user = await authApi.utils.authToken(req.cookies.loginToken, authApi.utils.getIPFromRequest(req), false, true);
@@ -86,3 +90,4 @@ var authFunc = async function(req, res, next) {
 };
 
 module.exports = authFunc;
+module.exports.initializeLocals = initializeLocals;

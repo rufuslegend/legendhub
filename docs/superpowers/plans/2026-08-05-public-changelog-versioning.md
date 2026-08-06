@@ -288,6 +288,7 @@ git commit -m "Establish 2.6.0 beta release metadata"
 - Create: `www/test/changelog.test.js`
 - Modify: `www/src/routes/changelog.js`
 - Modify: `www/src/create-app.js:15-70`
+- Modify: `www/src/routes/auth.js`
 - Modify: `www/src/views/changelog/index.ejs`
 - Delete: `www/src/views/changelog/display.ejs`
 - Delete: `www/src/views/changelog/modify.ejs`
@@ -297,6 +298,7 @@ git commit -m "Establish 2.6.0 beta release metadata"
 **Interfaces:**
 - Produces: `loadChangelog(filePath?: string): {source: string, html: string}` in `www/src/changelog-document.js`.
 - Produces: `createChangelogRouter(options?: {changelogPath?: string}): express.Router` in `www/src/routes/changelog.js`.
+- Produces: `authRouter.initializeLocals`, which supplies cookie, URL, version, and date-rendering locals without authentication or database/API work.
 - Consumes: `createApp({changelogPath?: string})` to inject a fixture path in tests.
 - Depends on: root `CHANGELOG.md` and version `2.6.0-beta` from Task 1.
 
@@ -470,6 +472,13 @@ test("serves the tracked changelog without legacy database routes", async (t) =>
 });
 ```
 
+Make the module shim replace the authentication API dependencies with stubs
+that throw if called. Add a request to `/changelog/` carrying both
+`loginToken` and theme cookies; require a successful rendered response and the
+cookie-selected theme. This regression must fail while the changelog remains
+behind global authentication and pass only when the public route performs no
+authentication/database/API work.
+
 - [ ] **Step 6: Run HTTP tests to verify RED**
 
 Run:
@@ -510,12 +519,18 @@ module.exports = function createChangelogRouter(options = {}) {
 };
 ```
 
-Change `www/src/create-app.js` to import `createChangelogRouter` and mount:
+Split the safe template-local initialization at the start of
+`www/src/routes/auth.js` into `authRouter.initializeLocals`. Change
+`www/src/create-app.js` to import `createChangelogRouter` and mount it after
+cookie parsing and safe local initialization, but before login authentication:
 
 ```js
+app.use(cookieParser());
+app.use(authRouter.initializeLocals);
 app.use("/changelog", createChangelogRouter({
     changelogPath: options.changelogPath
 }));
+app.use(authRouter);
 ```
 
 Replace `www/src/views/changelog/index.ejs` with the shared page shell and a single trusted renderer result:
@@ -560,7 +575,8 @@ Expected: changelog tests PASS; the full suite has 0 failures and retains only t
 
 ```bash
 git add www/package.json www/package-lock.json www/src/changelog-document.js \
-  www/src/create-app.js www/src/routes/changelog.js www/src/views/changelog \
+  www/src/create-app.js www/src/routes/auth.js www/src/routes/changelog.js \
+  www/src/views/changelog \
   www/test/changelog.test.js
 git commit -m "Render the tracked public changelog"
 ```
@@ -915,7 +931,7 @@ git commit -m "Add fail-closed release tagging"
 
 **Interfaces:**
 - Consumes: `node scripts/verify-release-version.js`, `scripts/tag-release.sh`, `scripts/publish-images.sh`, and `scripts/deploy-test.sh` from prior tasks.
-- Produces: one durable single-maintainer runbook for beta notes, final promotion, immutable tags, container publication, deployment, and rollback.
+- Produces: one durable single-maintainer runbook for beta notes, final promotion, immutable tags, container publication, separately authorized deployment, and rollback.
 
 - [ ] **Step 1: Replace the obsolete cache-busting-only version guidance**
 
@@ -946,18 +962,42 @@ node scripts/verify-release-version.js
 cd www && npm test && cd ..
 node --test scripts/test/*.test.js
 git status --short --branch
-./scripts/tag-release.sh
 git push origin feat/public-changelog
+git fetch --tags origin
+./scripts/tag-release.sh
 git push origin v2.6.0-beta
 ./scripts/publish-images.sh
+```
+
+Document the separately authorized beta deployment outside that procedure:
+
+```bash
 ./scripts/deploy-test.sh "$(git rev-parse --short=12 HEAD)"
 ```
 
+Document the final publication procedure with the same remote-tag guard:
+
+```bash
+node scripts/verify-release-version.js
+cd www && npm test && cd ..
+node --test scripts/test/*.test.js
+git status --short --branch
+git push origin feat/public-changelog
+git fetch --tags origin
+./scripts/tag-release.sh
+git push origin v2.6.0
+./scripts/publish-images.sh
+```
+
 State that the tag command must run only after the release commit is reviewed
-and all verification is green. For final promotion, document the exact metadata
+and all verification is green, and fetch remote tags immediately before each
+beta or final tag operation. For final promotion, document the exact metadata
 transition from `2.6.0-beta` to `2.6.0`, rerun the same gates, create
-`v2.6.0`, and never move or delete the beta tag. Keep the existing private
-repository visibility gate and immutable-SHA deployment/rollback rules.
+`v2.6.0`, and never move or delete the beta tag. Document test deployment as a
+separately labeled opt-in command that requires explicit maintainer
+authorization every time; tagging or publishing never implies deployment. Keep
+the existing private repository visibility gate and immutable-SHA
+deployment/rollback rules.
 
 - [ ] **Step 3: Verify documentation commands against current scripts**
 
@@ -980,14 +1020,18 @@ git commit -m "Document changelog release maintenance"
 
 ---
 
-### Task 6: Review, tag, publish, and deploy the `2.6.0-beta` release
+### Task 6: Review, tag, publish, and explicitly authorized deployment of the `2.6.0-beta` release
 
 **Files:**
 - No planned tracked file changes; operational evidence belongs only in the ignored SDD workspace.
 
 **Interfaces:**
 - Consumes: all prior tasks, Docker Hub repositories under `tmckimmey`, and test host `dunwichmass` at `/home/rufus/legendhub`.
-- Produces: pushed branch `feat/public-changelog`, immutable annotated tag `v2.6.0-beta`, three verified private `linux/amd64` images tagged with the 12-character Git SHA plus `test`, and a test deployment pinned to that SHA.
+- Produces: pushed branch `feat/public-changelog`, immutable annotated tag `v2.6.0-beta`, three verified private `linux/amd64` images tagged with the 12-character Git SHA plus `test`, and—for this plan only, under the maintainer's explicit one-time authorization—a test deployment pinned to that SHA.
+
+Tagging and publishing never imply deployment. The maintainer explicitly
+authorized the deployment in this task only; every future test deployment must
+receive fresh explicit authorization.
 
 - [ ] **Step 1: Run the complete local verification gate**
 
@@ -1029,8 +1073,8 @@ Expected: final reviewer verdict `Ready to merge: Yes`, with every Critical and 
 Run:
 
 ```bash
-git fetch --tags origin
 git push -u origin feat/public-changelog
+git fetch --tags origin
 ./scripts/tag-release.sh
 test "$(git rev-parse v2.6.0-beta^{})" = "$(git rev-parse HEAD)"
 git push origin refs/tags/v2.6.0-beta
@@ -1057,7 +1101,10 @@ bash -o pipefail -c './scripts/publish-images.sh | tee /tmp/legendhub-2.6.0-beta
 
 Expected: three repository/SHA/digest lines, every SHA equals `$release_sha`, each image verifies as exactly one runnable `linux/amd64` artifact, and no `latest` tag is created.
 
-- [ ] **Step 5: Deploy the immutable beta SHA to dunwichmass**
+- [ ] **Step 5: Perform this plan's separately authorized test deployment**
+
+This command is authorized for the current beta operation only. Do not carry
+that authorization into any future deployment.
 
 Run:
 
