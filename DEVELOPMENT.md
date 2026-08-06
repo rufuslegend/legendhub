@@ -195,7 +195,8 @@ git push origin v2.6.0
 ./scripts/deploy-test.sh "$(git rev-parse --short=12 HEAD)"
 ```
 
-Never move or delete the existing `v2.6.0-beta` tag.
+`v2.6.0-beta` and `v2.6.0` are one-time annotated release tags. Never move,
+reuse, or delete either tag.
 
 ## Deploy registry images to test
 
