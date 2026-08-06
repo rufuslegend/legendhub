@@ -119,9 +119,19 @@ If any code needs to be updated, certain steps should be taken to ensure the cod
 In the case of any HTML or client-side JavaScript updates, the changes will be put into effect immediately.
 In these cases, it may be a good idea to make these changes in a development environment first, to prevent any issues from happening on the production site.
 
-While client-side JavaScript changes *can* go into effect immediately, they don't always do because of browser caching. In order to force a JavaScript change to be put into effect, change the version number in the `www/package.json` file and restart the NodeJS application or Docker container.
+While client-side JavaScript changes *can* go into effect immediately, they don't always do because of browser caching. The application version remains available to the existing asset version local, but release metadata must move together as described below.
 
 Any changes to the NodeJS server-side JavaScript will *not* be put into effect until the NodeJS application or Docker container are restarted.
+
+### Versioning and public changelog
+
+The current application version is stored in `www/package.json`. Root
+`CHANGELOG.md` is the public release record and is rendered at `/changelog`.
+The package lock and README badge must carry the same version. Run
+`node scripts/verify-release-version.js` before committing release metadata.
+
+During the 2.6 beta, add public-facing changes under `2.6.0-beta`. Do not change
+that version to `2.6.0` until the maintainer explicitly declares the release.
 
 ### Updating CSS
 LegendHUB uses [https://getbootstrap.com/docs/4.5/getting-started/introduction/ Bootstrap 4.x] to provide an easy-to-use UI framework.

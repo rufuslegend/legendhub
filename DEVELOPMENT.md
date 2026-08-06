@@ -150,6 +150,53 @@ verifies their remote manifests, and then moves their `test` tags to those same
 digests. Deployments use the printed SHA, not `test`. The script never publishes
 `latest`.
 
+## Changelog and release maintenance
+
+Root `CHANGELOG.md` is the public release record rendered at `/changelog`. The
+application version in `www/package.json`, the root package version in
+`www/package-lock.json`, and the README version badge must match the current
+release heading. Check them together with
+`node scripts/verify-release-version.js` before committing release metadata.
+
+During the 2.6 beta, add public-facing changes under `2.6.0-beta`. Do not
+promote that version to `2.6.0` until the maintainer explicitly says to release.
+
+After the release commit has been reviewed and every verification gate is green,
+run the following beta procedure from the repository root. The tag command
+requires a clean worktree and must not run before that review and verification.
+
+```sh
+node scripts/verify-release-version.js
+cd www && npm test && cd ..
+node --test scripts/test/*.test.js
+git status --short --branch
+./scripts/tag-release.sh
+git push origin feat/public-changelog
+git push origin v2.6.0-beta
+./scripts/publish-images.sh
+./scripts/deploy-test.sh "$(git rev-parse --short=12 HEAD)"
+```
+
+For final promotion, change every release metadata value from `2.6.0-beta` to
+`2.6.0`: the current release heading in `CHANGELOG.md`, the versions in
+`www/package.json` and `www/package-lock.json`, and the README badge text and
+URL. Commit and review that metadata transition, then rerun the release gates
+and publish the final tag and immutable images:
+
+```sh
+node scripts/verify-release-version.js
+cd www && npm test && cd ..
+node --test scripts/test/*.test.js
+git status --short --branch
+./scripts/tag-release.sh
+git push origin feat/public-changelog
+git push origin v2.6.0
+./scripts/publish-images.sh
+./scripts/deploy-test.sh "$(git rev-parse --short=12 HEAD)"
+```
+
+Never move or delete the existing `v2.6.0-beta` tag.
+
 ## Deploy registry images to test
 
 Authenticate the server once for private pulls:
