@@ -47,8 +47,11 @@ function createReleaseRepository(t) {
     return repo;
 }
 
-function runTagger(repo) {
-    return run(repo, "bash", [tagger], {LEGENDHUB_REPO_ROOT: repo});
+function runTagger(repo, args = [], environment = {}) {
+    return run(repo, "bash", [tagger, ...args], {
+        LEGENDHUB_REPO_ROOT: repo,
+        ...environment
+    });
 }
 
 test("creates one annotated beta tag on HEAD", (t) => {
@@ -66,6 +69,47 @@ test("rejects dirty release inputs before creating a tag", (t) => {
     const result = runTagger(repo);
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /dirty/i);
+    assert.equal(git(repo, "tag", "--list"), "");
+});
+
+test("rejects untracked release inputs before creating a tag", (t) => {
+    const repo = createReleaseRepository(t);
+    fs.writeFileSync(path.join(repo, "untracked.txt"), "changed\n");
+    const result = runTagger(repo);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /dirty/i);
+    assert.equal(git(repo, "tag", "--list"), "");
+});
+
+test("rejects a nested release root without tagging its Git ancestor", (t) => {
+    const repo = createReleaseRepository(t);
+    const nested = path.join(repo, "nested");
+    fs.mkdirSync(path.join(nested, "www"), {recursive: true});
+    fs.writeFileSync(path.join(nested, "CHANGELOG.md"),
+        "# Changelog\n\n## [2.6.0-beta] - 2026-08-05\n\n- Safer releases\n");
+    fs.writeFileSync(path.join(nested, "README.md"),
+        "[![Version v=2.6.0-beta](https://img.shields.io/badge/version-v=2.6.0--beta-brightgreen.svg)]\n");
+    fs.writeFileSync(path.join(nested, "www/package.json"), JSON.stringify({
+        name: "legendhub", version: "2.6.0-beta"
+    }));
+    fs.writeFileSync(path.join(nested, "www/package-lock.json"), JSON.stringify({
+        name: "legendhub",
+        version: "2.6.0-beta",
+        packages: {"": {name: "legendhub", version: "2.6.0-beta"}}
+    }));
+    git(repo, "add", "nested");
+    git(repo, "commit", "-m", "nested metadata");
+    const result = runTagger(repo, [], {LEGENDHUB_REPO_ROOT: nested});
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /repository root/i);
+    assert.equal(git(repo, "tag", "--list"), "");
+});
+
+test("rejects positional arguments before creating a tag", (t) => {
+    const repo = createReleaseRepository(t);
+    const result = runTagger(repo, ["2.7.0"]);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /usage/i);
     assert.equal(git(repo, "tag", "--list"), "");
 });
 
