@@ -15,9 +15,11 @@
                 </div>
             </div>
             <div class="row">
+                <%if (showDiscordWidget) {%>
                 <div class="col-12 col-md-auto mb-3 mb-md-0 d-none d-md-block">
                     <iframe style="width:100%;min-height:500px;height:100%" src="https://discordapp.com/widget?id=323745721461374977&theme=dark" allowtransparency="true" frameborder="0"></iframe>
                 </div>
+                <%}%>
                 <div class="col">
                     <div class="row mb-3">
                         <div class="col-12">
@@ -49,9 +51,11 @@
                         </div>
                     </div>
                 </div>
+                <%if (showDiscordWidget) {%>
                 <div class="col-12 col-md-auto mb-3 mb-md-0 d-block d-md-none">
                     <iframe style="width:100%;min-height:500px;height:100%" src="https://discordapp.com/widget?id=323745721461374977&theme=dark" allowtransparency="true" frameborder="0"></iframe>
                 </div>
+                <%}%>
             </div>
             <br><br>
         </div>

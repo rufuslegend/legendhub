@@ -59,7 +59,10 @@ test("application HTTP smoke test", async function(t) {
         assert.equal(response.headers.get("x-content-type-options"), "nosniff");
         assert.equal(response.headers.get("x-frame-options"), "SAMEORIGIN");
         assert.equal(response.headers.get("strict-transport-security"), null);
-        assert.match(await response.text(), /Welcome to LegendHUB!/);
+        const body = await response.text();
+        assert.match(body, /Welcome to LegendHUB!/);
+        assert.match(body, /https:\/\/github\.com\/rufuslegend\/legendhub/);
+        assert.doesNotMatch(body, /topmudsites|>Vote!?<|discordapp\.com\/widget/i);
     });
 
     await t.test("serves forms that do not have a request body on GET", async function() {

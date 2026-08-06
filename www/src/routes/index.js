@@ -3,8 +3,11 @@ let auth = require("./api/auth");
 let apiUtils = require("./api/utils");
 let mysql = require("./api/mysql-connection");
 
-router.get(["/", "/index.html"], function(req, res, next) {
-    res.render("index", {title: "Home"});
+router.get(["/", "/index.html"], function(req, res) {
+    return res.render("index", {
+        title: "Home",
+        showDiscordWidget: false
+    });
 });
 
 router.get(["/login.html"], function(req, res) {

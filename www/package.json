@@ -14,7 +14,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/steventhorne/legendhub.git"
+        "url": "git+https://github.com/rufuslegend/legendhub.git"
     },
     "keywords": [
         "legendhub",
@@ -28,9 +28,9 @@
     },
     "license": "MIT",
     "bugs": {
-        "url": "https://github.com/steventhorne/legendhub/issues"
+        "url": "https://github.com/rufuslegend/legendhub/issues"
     },
-    "homepage": "https://github.com/steventhorne/legendhub#readme",
+    "homepage": "https://github.com/rufuslegend/legendhub#readme",
     "dependencies": {
         "bcryptjs": "^3.0.3",
         "compression": "^1.8.1",

@@ -15,6 +15,7 @@ test("EJS renders the home page and its shared includes", async function() {
     const ejs = require("ejs");
     const html = await ejs.renderFile(path.join(__dirname, "../src/views/index.ejs"), {
         cookies: {},
+        showDiscordWidget: false,
         title: "Home",
         url: {
             path: "/"

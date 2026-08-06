@@ -43,7 +43,7 @@
 ## Installation
 > This repo contains a simple to use install process which assumes you have an HTTP server setup on that system.
 
-* Navigate to the directory where you've downloaded the [repository](https://github.com/steventhorne/legendhub/)
+* Navigate to the directory where you've downloaded the [repository](https://github.com/rufuslegend/legendhub)
 * Copy the `.env_example` and rename it to `.env`
 * Replace the dummy data in `.env` with your desired environment variables
 * If you have a backup sql script, simply place this file in the mysql directory before building the images for the first time

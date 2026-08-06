@@ -32,9 +32,6 @@ function templates($templateCache) {
 	'<div class="collapse navbar-collapse" id="navbarSupportedContent">' +
 		'<ul class="navbar-nav mr-auto">' +
 			'<li class="nav-item">' +
-				'<a class="nav-link text-primary" target="_blank" href="http://www.topmudsites.com/vote-legend.html">Vote!</a>' +
-			'</li>' +
-			'<li class="nav-item">' +
 				'<a class="nav-link" href="/builder/">Builder</a>' +
 			'</li>' +
 			'<li class="nav-item">' +
@@ -70,7 +67,7 @@ function templates($templateCache) {
 				'<div class="dropdown-menu dropdown-menu-right" aria-labelledby="navbarDropdown">' +
                     '<a class="dropdown-item" href="/account/">Account</a>' +
                     '<a class="dropdown-item" href="/changelog/">Changelog</a>' +
-					'<a class="dropdown-item" href="https://github.com/SvarturH/legendhub/issues" target="_blank">Report an Issue</a>' +
+					'<a class="dropdown-item" href="https://github.com/rufuslegend/legendhub/issues" target="_blank">Report an Issue</a>' +
 					'<div class="dropdown-divider"></div>' +
 					'<a class="dropdown-item" href="" ng-click="logout()">Logout</a>' +
 				'</div>' +
