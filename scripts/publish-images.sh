@@ -10,7 +10,8 @@ repositories=(
   "tmckimmey/legendhub-python"
   "tmckimmey/legendhub-mysql-backup"
 )
-contexts=("www" "python" "mysql")
+contexts=("." "python" "mysql")
+dockerfiles=("www/Dockerfile" "" "")
 
 sha="$(git rev-parse --short=12 HEAD)"
 [[ "$sha" =~ ^[a-f0-9]{12}$ ]] || {
@@ -18,7 +19,7 @@ sha="$(git rev-parse --short=12 HEAD)"
   exit 1
 }
 
-dirty="$(git status --porcelain=v1 --untracked-files=all -- www python mysql)"
+dirty="$(git status --porcelain=v1 --untracked-files=all -- .dockerignore CHANGELOG.md www python mysql)"
 [[ -z "$dirty" ]] || {
   printf 'Refusing to publish dirty image inputs:\n%s\n' "$dirty" >&2
   exit 1
@@ -60,10 +61,15 @@ for index in "${!repositories[@]}"; do
   else
     inspect_status=$?
     if [[ "$inspect_status" -eq 2 ]]; then
+      dockerfile_args=()
+      if [[ -n "${dockerfiles[$index]}" ]]; then
+        dockerfile_args=(--file "${dockerfiles[$index]}")
+      fi
       docker buildx build \
         --platform linux/amd64 \
         --push \
         --tag "$ref" \
+        ${dockerfile_args[@]+"${dockerfile_args[@]}"} \
         "$context"
       inspection="$(inspect_image "$ref")"
     else

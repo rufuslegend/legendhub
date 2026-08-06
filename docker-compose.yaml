@@ -49,7 +49,8 @@ services:
             - database-backups:/backups
     www:
         build:
-            context: ./www
+            context: .
+            dockerfile: www/Dockerfile
         depends_on:
             mysql:
                 condition: service_healthy

@@ -1,0 +1,8 @@
+**
+!CHANGELOG.md
+!www/
+!www/Dockerfile
+!www/package.json
+!www/package-lock.json
+!www/src/
+!www/src/**

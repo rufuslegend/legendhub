@@ -152,7 +152,8 @@ test("builds after explicit registry missing responses before promoting test tag
 
     const log = readDockerLog();
     assert.equal((log.match(/buildx build/g) || []).length, 3);
-    assert.match(log, /--platform linux\/amd64 --push --tag tmckimmey\/legendhub-www:abcdef123456/);
+    assert.match(log,
+        /buildx build --platform linux\/amd64 --push --tag tmckimmey\/legendhub-www:abcdef123456 --file www\/Dockerfile \./);
     assert.match(log, /--tag tmckimmey\/legendhub-python:abcdef123456/);
     assert.match(log, /--tag tmckimmey\/legendhub-mysql-backup:abcdef123456/);
     assert.equal((log.match(/imagetools create/g) || []).length, 3);
@@ -171,6 +172,17 @@ test("refuses dirty service build inputs before invoking Docker", () => {
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /dirty/i);
     assert.equal(readDockerLog(), "");
+});
+
+test("refuses dirty root web-image inputs before invoking Docker", async (t) => {
+    for (const dirtyPath of ["CHANGELOG.md", ".dockerignore"]) {
+        await t.test(dirtyPath, () => {
+            const result = runPublisher(` M ${dirtyPath}\n`);
+            assert.notEqual(result.status, 0);
+            assert.match(result.stderr, new RegExp(dirtyPath.replace(".", "\\.")));
+            assert.equal(readDockerLog(), "");
+        });
+    }
 });
 
 test("reuses verified SHA images instead of overwriting them", () => {

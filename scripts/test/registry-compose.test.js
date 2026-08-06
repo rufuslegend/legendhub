@@ -22,6 +22,19 @@ const baseEnvironment = {
     RECAPTCHA_SITEKEY: "",
 };
 
+function renderBase() {
+    return spawnSync("docker", [
+        "compose",
+        "-f", "docker-compose.yaml",
+        "config",
+        "--format", "json",
+    ], {
+        cwd: root,
+        env: baseEnvironment,
+        encoding: "utf8",
+    });
+}
+
 function render(extraEnvironment = {}) {
     return spawnSync("docker", [
         "compose",
@@ -35,6 +48,14 @@ function render(extraEnvironment = {}) {
         encoding: "utf8",
     });
 }
+
+test("builds the web image from the repository root with its explicit Dockerfile", () => {
+    const result = renderBase();
+    assert.equal(result.status, 0, result.stderr);
+    const build = JSON.parse(result.stdout).services.www.build;
+    assert.equal(path.resolve(build.context), root);
+    assert.equal(path.resolve(root, build.dockerfile), path.join(root, "www/Dockerfile"));
+});
 
 test("requires an explicit registry image tag", () => {
     const result = render({LEGENDHUB_IMAGE_TAG: ""});

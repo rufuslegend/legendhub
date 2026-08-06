@@ -1,7 +1,9 @@
 FROM node:latest
 WORKDIR /app
-COPY package* ./
+COPY www/package* ./
 RUN npm ci --omit=dev
-COPY src ./src
+COPY www/src ./src
+COPY CHANGELOG.md ./CHANGELOG.md
+ENV CHANGELOG_PATH=/app/CHANGELOG.md
 EXPOSE $PORT
 ENTRYPOINT ["npm", "start"]
