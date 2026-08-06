@@ -76,7 +76,17 @@
                 return bonus;
             }
             case "ma":
-                return 446 + ((stats.mind - 30) * 5);
+                /*
+                 * The builder models level-50 characters. The fixed 296 base already
+                 * includes the five SAV_*_MANA_BOOST flags (1 + 2 + 3 + 4 + 5 = 15).
+                 * Assume VALLEY_COMPLETE for another 25 mana.
+                 *
+                 * ma_for_mind() is (level * current mind) / MANA_FOR_MIND_DIV. At
+                 * level 50 with MANA_FOR_MIND_DIV set to 10, that is 5 mana per mind.
+                 * Mental Enhancement remains represented by compensating Other-slot
+                 * objects and must not also be included in this natural calculation.
+                 */
+                return 471 + ((stats.mind - 30) * 5);
             case "mv":
                 return 496 + ((Math.max(stats.constitution, stats.dexterity) - 30) * 5);
             case "spelldam":

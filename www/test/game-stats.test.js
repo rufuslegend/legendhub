@@ -13,8 +13,13 @@ function calculate(statName, stats, items = []) {
 test("natural resource formulas retain their current behavior", function() {
     assert.equal(calculate("hp", {constitution: 30}), 381);
     assert.equal(calculate("hp", {constitution: 90}), 691);
-    assert.equal(calculate("ma", {mind: 30}), 446);
     assert.equal(calculate("mv", {constitution: 40, dexterity: 50}), 596);
+});
+
+test("natural mana includes assumed Valley completion at level 50", function() {
+    assert.equal(calculate("ma", {mind: 0}), 321);
+    assert.equal(calculate("ma", {mind: 30}), 471);
+    assert.equal(calculate("ma", {mind: 100}), 821);
 });
 
 test("natural spell formulas retain their current behavior", function() {
@@ -95,6 +100,9 @@ test("natural stat dependency lookup is isolated from callers", function() {
     assert.deepEqual(gameStats.getNaturalStatDependencies("dam"), [
         "strength"
     ]);
+    assert.deepEqual(gameStats.getNaturalStatDependencies("ma"), [
+        "mind"
+    ]);
     assert.deepEqual(gameStats.getNaturalStatDependencies("unknown"), []);
 });
 
@@ -128,6 +136,6 @@ test("browser loading registers the game-stat module with AngularJS", function()
     assert.equal(registeredGameStats.calculateDamrollEquipmentCap(100), 40);
     assert.equal(
         registeredGameStats.calculateNaturalStatBonus("ma", {mind: 30}, []),
-        446
+        471
     );
 });
