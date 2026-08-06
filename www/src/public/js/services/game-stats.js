@@ -22,7 +22,7 @@
         spelldam: ["mind"],
         spellcrit: ["mind", "perception", "spirit"],
         hit: ["dexterity"],
-        dam: ["strength", "dexterity", "constitution"],
+        dam: ["strength"],
         mitigation: ["constitution"],
         ac: ["strength", "dexterity", "constitution", "perception"],
         hpr: ["constitution"]
@@ -57,6 +57,10 @@
 
     function calculateHitrollEquipmentCap(dexterity) {
         return 30 + Math.max(dexterity - 90, 0);
+    }
+
+    function calculateDamrollEquipmentCap(strength) {
+        return 30 + Math.max(strength - 90, 0);
     }
 
     function calculateNaturalStatBonus(statName, stats, items) {
@@ -107,9 +111,20 @@
                 return bestStat;
             }
             case "dam": {
-                const dexDamroll = Math.floor(Math.min(Math.max(stats.dexterity / 4, 0), 25));
-                const strDamroll = Math.floor(Math.max(stats.strength - 4, 0) / 3) + 1;
-                const conDamroll = Math.floor(Math.min(Math.max(stats.constitution / 4, 0), 25));
+                const strDamroll = Math.trunc((stats.strength - 1) / 3);
+
+                /*
+                 * The live game can select constitution- or dexterity-derived
+                 * damroll from the wielded weapon's base damage type, but
+                 * STR_ONLY_DAMROLL is enabled. Keep the inactive C-side formulas
+                 * documented here so these zero values and the weapon-selection
+                 * branches below remain intentional:
+                 *
+                 * constitution: Math.trunc(Math.min(stats.constitution, 100) / 4)
+                 * dexterity: Math.trunc(Math.min(stats.dexterity, 100) / 5)
+                 */
+                const conDamroll = 0;
+                const dexDamroll = 0;
                 let bestStat = strDamroll;
 
                 if (hasEquippedWeaponUsing(items, 2) && dexDamroll > strDamroll) {
@@ -151,6 +166,7 @@
     }
 
     return {
+        calculateDamrollEquipmentCap,
         calculateHitrollEquipmentCap,
         calculateNaturalStatBonus,
         getNaturalStatDependencies

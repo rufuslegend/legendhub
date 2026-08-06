@@ -49,12 +49,26 @@ test("hitroll equipment cap increases above 90 dexterity", function() {
     assert.equal(gameStats.calculateHitrollEquipmentCap(110), 50);
 });
 
-test("damroll defaults to strength and follows an equipped weapon stat", function() {
-    const stats = {strength: 40, dexterity: 100, constitution: 80};
+test("damroll equipment cap increases above 90 strength", function() {
+    assert.equal(gameStats.calculateDamrollEquipmentCap(89), 30);
+    assert.equal(gameStats.calculateDamrollEquipmentCap(90), 30);
+    assert.equal(gameStats.calculateDamrollEquipmentCap(91), 31);
+    assert.equal(gameStats.calculateDamrollEquipmentCap(100), 40);
+    assert.equal(gameStats.calculateDamrollEquipmentCap(110), 50);
+});
 
-    assert.equal(calculate("dam", stats), 13);
-    assert.equal(calculate("dam", stats, [{slot: 14, weaponStat: 2}]), 25);
-    assert.equal(calculate("dam", stats, [{slot: 15, weaponStat: 3}]), 20);
+test("natural damroll uses exact C-style strength division", function() {
+    assert.equal(calculate("dam", {strength: 1}), 0);
+    assert.equal(calculate("dam", {strength: 3}), 0);
+    assert.equal(calculate("dam", {strength: 4}), 1);
+    assert.equal(calculate("dam", {strength: 40}), 13);
+});
+
+test("natural damroll ignores disabled weapon-stat alternatives", function() {
+    const stats = {strength: 40, dexterity: 100, constitution: 100};
+
+    assert.equal(calculate("dam", stats, [{slot: 14, weaponStat: 2}]), 13);
+    assert.equal(calculate("dam", stats, [{slot: 15, weaponStat: 3}]), 13);
 });
 
 test("defensive and regeneration formulas retain their current behavior", function() {
@@ -77,6 +91,9 @@ test("natural stat dependency lookup is isolated from callers", function() {
 
     assert.deepEqual(gameStats.getNaturalStatDependencies("hit"), [
         "dexterity"
+    ]);
+    assert.deepEqual(gameStats.getNaturalStatDependencies("dam"), [
+        "strength"
     ]);
     assert.deepEqual(gameStats.getNaturalStatDependencies("unknown"), []);
 });
@@ -107,6 +124,8 @@ test("browser loading registers the game-stat module with AngularJS", function()
     assert.equal(typeof registeredGameStats.calculateNaturalStatBonus, "function");
     assert.equal(typeof registeredGameStats.calculateHitrollEquipmentCap, "function");
     assert.equal(registeredGameStats.calculateHitrollEquipmentCap(100), 40);
+    assert.equal(typeof registeredGameStats.calculateDamrollEquipmentCap, "function");
+    assert.equal(registeredGameStats.calculateDamrollEquipmentCap(100), 40);
     assert.equal(
         registeredGameStats.calculateNaturalStatBonus("ma", {mind: 30}, []),
         446
