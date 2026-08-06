@@ -19,7 +19,21 @@ case "$1" in
     printf '%s\n' 'abcdef123456'
     ;;
   status)
-    printf '%s' "${dollar}{FAKE_GIT_STATUS:-}"
+    shift
+    while (($#)) && [[ "$1" != "--" ]]; do
+      shift
+    done
+    (($#)) && shift
+    dirty="${dollar}{FAKE_GIT_STATUS:-}"
+    dirty_line="${dollar}{dirty%%${dollar}'\n'*}"
+    dirty_path="${dollar}{dirty_line:3}"
+    for pathspec in "$@"; do
+      if [[ "${dollar}dirty_path" == "${dollar}pathspec" \
+        || "${dollar}dirty_path" == "${dollar}pathspec/"* ]]; then
+        printf '%s' "${dollar}dirty"
+        break
+      fi
+    done
     ;;
   *)
     printf 'unexpected git command: %s\n' "$*" >&2
@@ -154,8 +168,10 @@ test("builds after explicit registry missing responses before promoting test tag
     assert.equal((log.match(/buildx build/g) || []).length, 3);
     assert.match(log,
         /buildx build --platform linux\/amd64 --push --tag tmckimmey\/legendhub-www:abcdef123456 --file www\/Dockerfile \./);
-    assert.match(log, /--tag tmckimmey\/legendhub-python:abcdef123456/);
-    assert.match(log, /--tag tmckimmey\/legendhub-mysql-backup:abcdef123456/);
+    assert.match(log,
+        /buildx build --platform linux\/amd64 --push --tag tmckimmey\/legendhub-python:abcdef123456 python(?:\n|$)/);
+    assert.match(log,
+        /buildx build --platform linux\/amd64 --push --tag tmckimmey\/legendhub-mysql-backup:abcdef123456 mysql(?:\n|$)/);
     assert.equal((log.match(/imagetools create/g) || []).length, 3);
     assert.ok(log.lastIndexOf("buildx build") < log.indexOf("imagetools create"));
     assert.doesNotMatch(log, /:latest/);
