@@ -27,7 +27,6 @@
 ### Task 1: Correct public links and hard-disable the Discord widget
 
 **Files:**
-- Create: `www/test/community-links.test.js`
 - Modify: `www/test/smoke.test.js`
 - Modify: `www/src/routes/index.js:5-8`
 - Modify: `www/src/views/index.ejs:15-56`
@@ -41,70 +40,9 @@
 - Consumes: the existing `GET /` route and EJS `index` view.
 - Produces: `showDiscordWidget: false` in the home render model; no Vote or obsolete repository URL in tracked UI/package sources; retained but non-rendered Discord iframe source.
 
-- [ ] **Step 1: Write failing static-source and HTTP tests**
+- [ ] **Step 1: Write a failing homepage behavior test**
 
-Create `www/test/community-links.test.js` with source-level assertions that cover all maintained URL locations and the explicit code-retention requirement:
-
-```js
-"use strict";
-
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-const test = require("node:test");
-
-const root = path.resolve(__dirname, "../..");
-
-function read(relativePath) {
-    return fs.readFileSync(path.join(root, relativePath), "utf8");
-}
-
-test("all LegendHUB repository metadata points to rufuslegend", () => {
-    const files = [
-        "README.md",
-        "www/package.json",
-        "css/package.json",
-        "www/src/views/shared/footer.ejs",
-        "www/src/public/js/apps/legendwiki-app.js"
-    ];
-
-    for (const file of files) {
-        const source = read(file);
-        assert.doesNotMatch(source,
-            /github\.com\/(?:www\.)?(?:steventhorne|SvarturH)\/legendhub/i,
-            file);
-    }
-
-    const webPackage = JSON.parse(read("www/package.json"));
-    const cssPackage = JSON.parse(read("css/package.json"));
-    for (const metadata of [webPackage, cssPackage]) {
-        assert.equal(metadata.repository.url,
-            "git+https://github.com/rufuslegend/legendhub.git");
-        assert.equal(metadata.bugs.url,
-            "https://github.com/rufuslegend/legendhub/issues");
-        assert.equal(metadata.homepage,
-            "https://github.com/rufuslegend/legendhub#readme");
-    }
-    assert.match(read("README.md"),
-        /https:\/\/github\.com\/rufuslegend\/legendhub\//);
-    assert.match(read("www/src/public/js/apps/legendwiki-app.js"),
-        /https:\/\/github\.com\/rufuslegend\/legendhub\/issues/);
-});
-
-test("Vote links are absent while Discord source remains behind a false flag", () => {
-    const uiSource = [
-        read("www/src/views/shared/footer.ejs"),
-        read("www/src/public/js/apps/legendwiki-app.js")
-    ].join("\n");
-    assert.doesNotMatch(uiSource, /topmudsites|>Vote!?<|Vote!<\/a>/i);
-
-    const home = read("www/src/views/index.ejs");
-    assert.match(home, /showDiscordWidget/);
-    assert.equal((home.match(/discordapp\.com\/widget/g) || []).length, 2);
-});
-```
-
-Extend the existing home-page smoke subtest in `www/test/smoke.test.js` after reading the response once:
+Extend the existing home-page smoke subtest in `www/test/smoke.test.js` after reading the response once. This test covers only visitor-observable HTML; source cleanup and retained disabled code are one-time verification/review concerns in Task 4.
 
 ```js
 const body = await response.text();
@@ -119,10 +57,10 @@ Run:
 
 ```bash
 cd www
-node --test test/community-links.test.js test/smoke.test.js
+node --test test/smoke.test.js
 ```
 
-Expected: FAIL because stale repository/Vote URLs remain, the home view lacks `showDiscordWidget`, and the rendered response still contains Discord iframes.
+Expected: FAIL because the rendered homepage contains the old repository, Vote, and Discord URLs.
 
 - [ ] **Step 3: Implement the link cleanup and source-level Discord flag**
 
@@ -178,7 +116,7 @@ Run:
 
 ```bash
 cd www
-node --test test/community-links.test.js test/smoke.test.js
+node --test test/smoke.test.js
 ```
 
 Expected: all community-link and smoke tests pass; the rendered homepage contains the new repository link and no Vote or Discord URL.
@@ -190,7 +128,7 @@ git add README.md css/package.json www/package.json \
   www/src/routes/index.js www/src/views/index.ejs \
   www/src/views/shared/footer.ejs \
   www/src/public/js/apps/legendwiki-app.js \
-  www/test/community-links.test.js www/test/smoke.test.js
+  www/test/smoke.test.js
 git commit -m "Correct public community links"
 ```
 
@@ -693,7 +631,7 @@ Run:
 
 ```bash
 cd www
-node --test test/community-links.test.js test/github-issues-client.test.js test/feedback.test.js test/smoke.test.js
+node --test test/github-issues-client.test.js test/feedback.test.js test/smoke.test.js
 cd ..
 ```
 
