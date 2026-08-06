@@ -113,7 +113,7 @@ test("builder raises only the equipment hitroll cap with final dexterity", funct
     assert.equal(scope.statRestrictions.hit[0].limit, 50);
 });
 
-test("builder leaves the damroll equipment cap at 27", function() {
+test("builder uses the corrected base damroll equipment cap", function() {
     const scope = createBuilderScope();
     equipStats(scope, {
         dexterity: 90,
@@ -121,9 +121,24 @@ test("builder leaves the damroll equipment cap at 27", function() {
         other: {dam: 5}
     });
 
-    assert.equal(scope.getStatTotal("dam"), "61 (27)");
+    assert.equal(scope.getStatTotal("dam"), "64 (30)");
     assert.equal(scope.statRestrictions.dam.length, 1);
     assert.equal(scope.statRestrictions.dam[0].restriction, "fromItems");
     assert.equal(scope.statRestrictions.dam[0].amount, 35);
-    assert.equal(scope.statRestrictions.dam[0].limit, 27);
+    assert.equal(scope.statRestrictions.dam[0].limit, 30);
+});
+
+test("builder raises only the equipment damroll cap with final strength", function() {
+    const scope = createBuilderScope();
+    equipStats(scope, {
+        dexterity: 90,
+        equipment: {strength: 10, strengthCap: 10, dam: 55},
+        other: {dam: 5}
+    });
+
+    assert.equal(scope.getStatTotal("dam"), "78 (40)");
+    assert.equal(scope.statRestrictions.dam.length, 1);
+    assert.equal(scope.statRestrictions.dam[0].restriction, "fromItems");
+    assert.equal(scope.statRestrictions.dam[0].amount, 55);
+    assert.equal(scope.statRestrictions.dam[0].limit, 40);
 });

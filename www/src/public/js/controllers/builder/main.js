@@ -1946,7 +1946,9 @@
                     );
                     break;
                 case "dam":
-                    max = 27;
+                    max = gameStats.calculateDamrollEquipmentCap(
+                        $scope.getStatTotal("strength")
+                    );
                     break;
                 case "spelldam":
                 case "spellcrit":
