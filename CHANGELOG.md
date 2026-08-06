@@ -15,9 +15,12 @@ with version 2.6.0-beta.
 - Updated the application platform and major server dependencies.
 - Improved startup so the site waits for database updates before accepting traffic.
 - Improved the reliability of builder stat calculations without intentionally changing their results.
+- Updated project and issue links to the maintained LegendHUB repository.
+- Temporarily hid the Discord widget and removed obsolete voting links.
 
 ### Fixed
 
 - Fixed several form pages after the server framework upgrade.
 - Fixed error responses so visitors receive the intended status and safe message.
 - Fixed startup and database-update failures that could leave the site partially available.
+- Fixed anonymous feedback delivery so submissions create public, triaged GitHub Issues in the maintained repository.
