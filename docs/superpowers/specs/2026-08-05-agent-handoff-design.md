@@ -7,8 +7,11 @@ LegendHUB repository after conversation history is cleared.
 
 ## Location
 
-Create a root-level `AGENTS.md`. Codex discovers this file automatically, unlike
-an ordinary handoff note that a future session might not know to open.
+Create a root-level `AGENTS.md` in the primary local checkout. Codex discovers
+this file automatically, unlike an ordinary handoff note that a future session
+might not know to open. Keep it local by adding `/AGENTS.md` to the clone-local
+`.git/info/exclude`; do not add it to the repository's `.gitignore`, stage it,
+commit it, or push it.
 
 ## Structure
 
@@ -33,13 +36,17 @@ facts before acting.
 - Record only that the token is stored in the ignored server `.env` file and
   that read access was verified.
 - Preserve the user-owned untracked `docker-compose-prod.yaml`.
+- Keep `AGENTS.md` untracked and clone-local.
 - Do not deploy, publish, tag, or push merely because the handoff records those
   workflows.
 - Do not alter application behavior as part of this documentation task.
 
 ## Validation
 
-- Confirm `AGENTS.md` contains the agreed handoff facts and no token-like value.
+- Confirm the primary checkout's `AGENTS.md` contains the agreed handoff facts
+  and no token-like value.
+- Confirm Git ignores `AGENTS.md` through `.git/info/exclude` and does not track
+  it.
 - Confirm the documented local and remote `master` SHA before recording it.
 - Confirm the immutable `v2.6.0-beta` tag target before recording it.
 - Confirm the only unrelated worktree item remains the user-owned untracked

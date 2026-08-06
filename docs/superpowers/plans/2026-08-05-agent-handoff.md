@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Create a root `AGENTS.md` that gives future Codex sessions durable LegendHUB conventions and a dated, secret-free operational handoff.
+**Goal:** Create a clone-local root `AGENTS.md` that gives future Codex sessions durable LegendHUB conventions and a dated, secret-free operational handoff without adding it to the repository.
 
 **Architecture:** Keep automatically discovered agent guidance in one root file. Separate durable instructions from time-sensitive state, date the latter, and require re-verification before future mutations.
 
@@ -13,6 +13,8 @@
 - Do not record the GitHub token, Docker credentials, `.env` contents, or any other secret.
 - Record only that the token is stored in the ignored server `.env` file and that read access was verified.
 - Preserve the user-owned untracked `docker-compose-prod.yaml`.
+- Create `AGENTS.md` only at `/Users/toddmckimmey/projects/legendhub/AGENTS.md` and exclude it through the clone-local `.git/info/exclude`.
+- Do not add `AGENTS.md` to `.gitignore`, stage it, commit it, or push it.
 - Do not deploy, publish, tag, or push merely because the handoff records those workflows.
 - Do not alter application behavior as part of this documentation task.
 - Mark operational state as dated `2026-08-05` and instruct future agents to verify it before acting.
@@ -22,11 +24,12 @@
 ### Task 1: Add the durable agent handoff
 
 **Files:**
-- Create: `AGENTS.md`
+- Create locally: `/Users/toddmckimmey/projects/legendhub/AGENTS.md`
+- Modify locally: `.git/info/exclude`
 
 **Interfaces:**
 - Consumes: Git state, the completed test deployment state, and the conventions approved in `docs/superpowers/specs/2026-08-05-agent-handoff-design.md`.
-- Produces: Automatically discovered repository guidance for future Codex sessions.
+- Produces: Automatically discovered, clone-local guidance for future Codex sessions.
 
 - [ ] **Step 1: Verify the time-sensitive source facts**
 
@@ -48,9 +51,16 @@ Expected:
 - `v2.6.0-beta` resolves to `72e5f24e10212439a4a19f57b1729e49daa3d193`.
 - Dunwichmass resolves to deployed commit `5e6978a314dc390fa35a16082097f0755e1025fb`.
 
-- [ ] **Step 2: Create the handoff file**
+- [ ] **Step 2: Exclude and create the local handoff file**
 
-Create `AGENTS.md` with this content:
+Add this exact line to the common Git directory's `info/exclude` if it is not
+already present:
+
+```text
+/AGENTS.md
+```
+
+Create `/Users/toddmckimmey/projects/legendhub/AGENTS.md` with this content:
 
 ```markdown
 # LegendHUB Agent Guidance
@@ -91,47 +101,48 @@ This section is time-sensitive. Verify Git, Docker Hub, and server state before 
 Run:
 
 ```bash
-test -f AGENTS.md
-rg -n '^## Durable conventions$|^## Current operational handoff — 2026-08-05$' AGENTS.md
-rg -n '5e6978a314dc390fa35a16082097f0755e1025fb|72e5f24e10212439a4a19f57b1729e49daa3d193|docker-compose-prod.yaml|v2.6.0-beta.1' AGENTS.md
-if rg -n 'github_pat_|ghp_|GITHUB_TOKEN[[:space:]]*=[[:space:]]*[^[:space:]]+' AGENTS.md; then exit 1; fi
-git diff --check -- AGENTS.md
+handoff=/Users/toddmckimmey/projects/legendhub/AGENTS.md
+test -f "$handoff"
+rg -n '^## Durable conventions$|^## Current operational handoff — 2026-08-05$' "$handoff"
+rg -n '5e6978a314dc390fa35a16082097f0755e1025fb|72e5f24e10212439a4a19f57b1729e49daa3d193|docker-compose-prod.yaml|v2.6.0-beta.1' "$handoff"
+if rg -n 'github_pat_|ghp_|GITHUB_TOKEN[[:space:]]*=[[:space:]]*[^[:space:]]+' "$handoff"; then exit 1; fi
+git -C /Users/toddmckimmey/projects/legendhub check-ignore -q AGENTS.md
+if git -C /Users/toddmckimmey/projects/legendhub ls-files --error-unmatch AGENTS.md >/dev/null 2>&1; then exit 1; fi
 ```
 
 Expected:
 
 - Both required sections and all key operational facts are present.
 - The secret-pattern scan prints nothing and exits successfully through the conditional.
-- `git diff --check` prints nothing.
+- Git reports `AGENTS.md` as ignored and not tracked.
 
 - [ ] **Step 4: Confirm the diff is documentation-only**
 
 Run:
 
 ```bash
-git status --short
-git diff -- AGENTS.md
+git -C /Users/toddmckimmey/projects/legendhub status --short
+git -C /Users/toddmckimmey/projects/legendhub diff -- .gitignore
 ```
 
 Expected:
 
-- `AGENTS.md` is the only new task file.
+- `AGENTS.md` does not appear because it is clone-locally ignored.
 - `docker-compose-prod.yaml` remains untracked and unchanged.
 - No application, deployment, environment, or credential file is modified.
+- The tracked `.gitignore` has no diff.
 
-- [ ] **Step 5: Commit the handoff**
+- [ ] **Step 5: Finish without tracking the handoff**
 
 Run:
 
 ```bash
-git add -- AGENTS.md
-git commit -m "Add durable agent handoff"
-git status --short --branch
+git -C /Users/toddmckimmey/projects/legendhub check-ignore -v AGENTS.md
+git -C /Users/toddmckimmey/projects/legendhub status --short --branch
 ```
 
 Expected:
 
-- The commit contains only `AGENTS.md`.
-- `master` is ahead of `origin/master` by the documentation commits.
+- `AGENTS.md` is excluded by `.git/info/exclude` and remains untracked.
 - `docker-compose-prod.yaml` remains the only untracked file.
-- Do not push as part of this plan without separate authorization.
+- No commit or push is made for `AGENTS.md`.
