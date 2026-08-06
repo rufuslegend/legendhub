@@ -21,7 +21,7 @@
         mv: ["constitution", "dexterity"],
         spelldam: ["mind"],
         spellcrit: ["mind", "perception", "spirit"],
-        hit: ["strength", "dexterity", "constitution"],
+        hit: ["dexterity"],
         dam: ["strength", "dexterity", "constitution"],
         mitigation: ["constitution"],
         ac: ["strength", "dexterity", "constitution", "perception"],
@@ -55,6 +55,10 @@
         return false;
     }
 
+    function calculateHitrollEquipmentCap(dexterity) {
+        return 30 + Math.max(dexterity - 90, 0);
+    }
+
     function calculateNaturalStatBonus(statName, stats, items) {
         items = items || [];
 
@@ -78,9 +82,19 @@
                     parseInt(Math.max(stats.perception - 60, 0) / 8) +
                     parseInt(Math.max(stats.spirit - 60, 0) / 8) + 5;
             case "hit": {
-                const dexHitroll = Math.floor(Math.max(stats.dexterity - 4, 0) / 3) + 1;
-                const strHitroll = Math.floor(Math.min(Math.max(stats.strength / 4, 0), 25));
-                const conHitroll = Math.floor(Math.min(Math.max(stats.constitution / 4, 0), 25));
+                const dexHitroll = Math.trunc((stats.dexterity - 1) / 3);
+
+                /*
+                 * The live game retains strength and constitution hitroll alternatives
+                 * behind a C-side feature flag, but that flag is disabled. Keep the prior
+                 * formulas documented here so these zero values and the weapon-selection
+                 * branches below remain intentional and traceable:
+                 *
+                 * strength: Math.floor(Math.min(Math.max(stats.strength / 4, 0), 25))
+                 * constitution: Math.floor(Math.min(Math.max(stats.constitution / 4, 0), 25))
+                 */
+                const strHitroll = 0;
+                const conHitroll = 0;
                 let bestStat = dexHitroll;
 
                 if (hasEquippedWeaponUsing(items, 1) && strHitroll > dexHitroll) {
@@ -137,6 +151,7 @@
     }
 
     return {
+        calculateHitrollEquipmentCap,
         calculateNaturalStatBonus,
         getNaturalStatDependencies
     };

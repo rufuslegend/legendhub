@@ -22,22 +22,31 @@ test("natural spell formulas retain their current behavior", function() {
     assert.equal(calculate("spellcrit", {mind: 68, perception: 68, spirit: 68}), 9);
 });
 
-test("hitroll defaults to dexterity and follows an equipped weapon stat", function() {
-    const stats = {strength: 100, dexterity: 40, constitution: 80};
-
-    assert.equal(calculate("hit", stats), 13);
-    assert.equal(calculate("hit", stats, [{slot: 14, weaponStat: 1}]), 25);
-    assert.equal(calculate("hit", stats, [{slot: 15, weaponStat: 3}]), 20);
+test("natural hitroll uses exact C-style dexterity division", function() {
+    assert.equal(calculate("hit", {dexterity: 1}), 0);
+    assert.equal(calculate("hit", {dexterity: 3}), 0);
+    assert.equal(calculate("hit", {dexterity: 4}), 1);
+    assert.equal(calculate("hit", {dexterity: 40}), 13);
 });
 
-test("hitroll retains current constitution precedence with two weapon stats", function() {
-    const stats = {strength: 100, dexterity: 40, constitution: 80};
+test("natural hitroll ignores disabled weapon-stat alternatives", function() {
+    const stats = {strength: 100, dexterity: 40, constitution: 100};
     const items = [
         {slot: 14, weaponStat: 1},
         {slot: 15, weaponStat: 3}
     ];
 
-    assert.equal(calculate("hit", stats, items), 20);
+    assert.equal(calculate("hit", stats, [{slot: 14, weaponStat: 1}]), 13);
+    assert.equal(calculate("hit", stats, [{slot: 15, weaponStat: 3}]), 13);
+    assert.equal(calculate("hit", stats, items), 13);
+});
+
+test("hitroll equipment cap increases above 90 dexterity", function() {
+    assert.equal(gameStats.calculateHitrollEquipmentCap(89), 30);
+    assert.equal(gameStats.calculateHitrollEquipmentCap(90), 30);
+    assert.equal(gameStats.calculateHitrollEquipmentCap(91), 31);
+    assert.equal(gameStats.calculateHitrollEquipmentCap(100), 40);
+    assert.equal(gameStats.calculateHitrollEquipmentCap(110), 50);
 });
 
 test("damroll defaults to strength and follows an equipped weapon stat", function() {
@@ -67,9 +76,7 @@ test("natural stat dependency lookup is isolated from callers", function() {
     dependencies.push("mind");
 
     assert.deepEqual(gameStats.getNaturalStatDependencies("hit"), [
-        "strength",
-        "dexterity",
-        "constitution"
+        "dexterity"
     ]);
     assert.deepEqual(gameStats.getNaturalStatDependencies("unknown"), []);
 });
@@ -98,6 +105,8 @@ test("browser loading registers the game-stat module with AngularJS", function()
     vm.runInNewContext(source, browserContext);
 
     assert.equal(typeof registeredGameStats.calculateNaturalStatBonus, "function");
+    assert.equal(typeof registeredGameStats.calculateHitrollEquipmentCap, "function");
+    assert.equal(registeredGameStats.calculateHitrollEquipmentCap(100), 40);
     assert.equal(
         registeredGameStats.calculateNaturalStatBonus("ma", {mind: 30}, []),
         446
