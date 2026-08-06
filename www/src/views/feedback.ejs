@@ -25,7 +25,7 @@
                 <div class="col-12 text-center">
                     <p>Thank you for your feedback!</p>
                     <div class="row justify-content-center">
-                        <a href="<%-vm.url%>" class="col-auto btn btn-outline-primary mr-3">Go to feedback</a>
+                        <a href="<%=vm.url%>" class="col-auto btn btn-outline-primary mr-3">Go to feedback</a>
                         <a href="/feedback.html" class="col-auto btn btn-outline-primary">Send more</a>
                     </div>
                 </div>
@@ -38,6 +38,9 @@
                     <%}else{%>
                     <p>Found a bug or have an idea to improve LegendHUB? Fill out the form below to let us know!</p>
                     <%}%>
+                    <p>Your feedback title and description will be publicly visible on GitHub.
+                    <a href="https://github.com/rufuslegend/legendhub/issues" target="_blank"
+                    rel="noopener noreferrer">LegendHUB GitHub Issues</a>.</p>
                 </div>
             </div>
             <div class="row">

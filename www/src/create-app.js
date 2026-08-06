@@ -7,6 +7,7 @@ const path = require("path");
 
 const createErrorHandlers = require("./error-handlers");
 const authRouter = require("./routes/auth");
+const createFeedbackRouter = require("./routes/feedback");
 
 const indexRouter = require("./routes/index");
 const apiRouter = require("./routes/api");
@@ -61,6 +62,10 @@ module.exports = function createApp(options = {}) {
     }));
     app.use(authRouter);
 
+    app.use("/", createFeedbackRouter({
+        fetchImpl: options.fetchImpl,
+        createFeedbackIssue: options.createFeedbackIssue
+    }));
     app.use("/", indexRouter);
     app.use("/items", itemsRouter);
     app.use("/mobs", mobsRouter);

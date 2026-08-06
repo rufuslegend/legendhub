@@ -33,6 +33,14 @@ The first startup is slower because MySQL imports the development seed. Docker
 waits for the database health check before starting the other services. The web
 service then applies the numbered migrations automatically.
 
+## Feedback configuration
+
+Anonymous feedback is submitted as a public Issue in
+`rufuslegend/legendhub`. `GITHUB_TOKEN` must be a fine-grained token with
+Issues write permission for that repository only. Set `GITHUB_REPOSITORY` to
+the readable repository slug `rufuslegend/legendhub`; it is not a GraphQL node
+ID. Feedback titles and descriptions are public once submitted.
+
 ## Everyday commands
 
 ```sh

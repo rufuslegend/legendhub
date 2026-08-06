@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, "../..");
 const baseEnvironment = {
     ...process.env,
     EXTERNAL_PORT: "127.0.0.1:7001",
-    GITHUB_REPOSITORY: "",
+    GITHUB_REPOSITORY: "rufuslegend/legendhub",
     GITHUB_TOKEN: "",
     MYSQL_DATABASE: "legendhub",
     MYSQL_PASSWORD: "test-app-password",
@@ -55,6 +55,13 @@ test("builds the web image from the repository root with its explicit Dockerfile
     const build = JSON.parse(result.stdout).services.www.build;
     assert.equal(path.resolve(build.context), root);
     assert.equal(path.resolve(root, build.dockerfile), path.join(root, "www/Dockerfile"));
+});
+
+test("passes the readable feedback repository slug to the web service", () => {
+    const result = renderBase();
+    assert.equal(result.status, 0, result.stderr);
+    const environment = JSON.parse(result.stdout).services.www.environment;
+    assert.equal(environment.GITHUB_REPOSITORY, "rufuslegend/legendhub");
 });
 
 test("requires an explicit registry image tag", () => {

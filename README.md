@@ -36,8 +36,9 @@
     * The type of reCAPTCHA is reCAPTCHA v2 checkbox.
     * This is required for the login and feedback pages.
     * Can probably be omitted if the reCAPTCHA elements are removed from those pages.
-* Ensure you have a github account as well as repository and token keys for authenticating.
-    * This is required for the feedback page.
+* Ensure you have a GitHub fine-grained token with Issues write permission for
+  `rufuslegend/legendhub`.
+    * This is required for the feedback page, which creates public GitHub Issues.
     * Can probably be omitted if the feedback page is removed.
 
 ## Installation
