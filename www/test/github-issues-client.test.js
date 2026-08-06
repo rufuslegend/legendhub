@@ -84,6 +84,23 @@ test("rejects GitHub failures without exposing the token", async () => {
     });
 });
 
+test("sanitizes fetch failures without retaining the token or cause", async () => {
+    const token = "token-sentinel-value\nheader-injection";
+
+    await assert.rejects(createFeedbackIssue({title: "x", body: ""}, {
+        fetchImpl: async () => {
+            throw new Error(`Invalid Authorization header: Bearer ${token}`);
+        },
+        repository: "rufuslegend/legendhub",
+        token
+    }), (error) => {
+        assert.equal(error.message, "GitHub Issue request failed");
+        assert.doesNotMatch(String(error), /token-sentinel-value|header-injection/);
+        assert.equal("cause" in error, false);
+        return true;
+    });
+});
+
 test("rejects malformed GitHub responses", async (t) => {
     const cases = [
         {

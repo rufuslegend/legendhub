@@ -39,23 +39,29 @@ async function createFeedbackIssue(feedback, options = {}) {
         process.env.GITHUB_TOKEN : options.token;
     requireConfiguration(repository, token);
 
-    const response = await fetchImpl(
-        `${GITHUB_API}/repos/${repository}/issues`, {
-            method: "POST",
-            headers: {
-                Accept: "application/vnd.github+json",
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-                "User-Agent": "LegendHUB",
-                "X-GitHub-Api-Version": "2022-11-28"
-            },
-            body: JSON.stringify({
-                title: feedback.title,
-                body: ISSUE_BODY_PREFIX + (feedback.body || ""),
-                labels: ["triage"],
-                assignees: ["rufuslegend"]
-            })
-        });
+    let response;
+    try {
+        response = await fetchImpl(
+            `${GITHUB_API}/repos/${repository}/issues`, {
+                method: "POST",
+                headers: {
+                    Accept: "application/vnd.github+json",
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                    "User-Agent": "LegendHUB",
+                    "X-GitHub-Api-Version": "2022-11-28"
+                },
+                body: JSON.stringify({
+                    title: feedback.title,
+                    body: ISSUE_BODY_PREFIX + (feedback.body || ""),
+                    labels: ["triage"],
+                    assignees: ["rufuslegend"]
+                })
+            });
+    }
+    catch {
+        throw new Error("GitHub Issue request failed");
+    }
 
     if (!response.ok)
         throw new Error(`GitHub Issue creation failed with status ${response.status}`);

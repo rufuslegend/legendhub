@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const Module = require("node:module");
 const test = require("node:test");
+const {inspect} = require("node:util");
 const httpFetch = globalThis.fetch;
 
 function loadAppWithoutDatabaseMetadataQuery(options = {}) {
@@ -23,7 +24,7 @@ function loadAppWithoutDatabaseMetadataQuery(options = {}) {
         return require("../src/create-app")({
             ...options,
             logging: false,
-            logError: function() {}
+            logError: options.logError || function() {}
         });
     }
     finally {
@@ -42,6 +43,8 @@ async function startFeedbackApp(t, options = {}) {
                 async json() { return {success: true}; }
             };
         }
+        if (options.githubFetchImpl)
+            return options.githubFetchImpl(url);
         return {
             ok: true,
             async json() {
@@ -253,6 +256,53 @@ test("POST /feedback.html sends Issue creation failures to the safe 500 boundary
     assert.equal(dependencies.calls.recaptcha, 1);
     assert.equal(dependencies.calls.issues, 1);
     assert.deepEqual(bypassedFetches, []);
+});
+
+test("POST /feedback.html logs a sanitized GitHub fetch failure", async function(t) {
+    const token = "http-token-sentinel\nheader-injection";
+    const fetchError = new Error(`Invalid Authorization header: Bearer ${token}`);
+    const loggedErrors = [];
+    const originalRepository = process.env.GITHUB_REPOSITORY;
+    const originalToken = process.env.GITHUB_TOKEN;
+    process.env.GITHUB_REPOSITORY = "rufuslegend/legendhub";
+    process.env.GITHUB_TOKEN = token;
+    t.after(function() {
+        if (originalRepository === undefined)
+            delete process.env.GITHUB_REPOSITORY;
+        else
+            process.env.GITHUB_REPOSITORY = originalRepository;
+        if (originalToken === undefined)
+            delete process.env.GITHUB_TOKEN;
+        else
+            process.env.GITHUB_TOKEN = originalToken;
+    });
+
+    const {baseUrl} = await startFeedbackApp(t, {
+        fetchImpl: async function(url) {
+            assert.equal(url, "https://www.google.com/recaptcha/api/siteverify");
+            return {
+                ok: true,
+                async json() { return {success: true}; }
+            };
+        },
+        githubFetchImpl: async function() { throw fetchError; },
+        logError: function(error) { loggedErrors.push(error); }
+    });
+    const response = await postFeedback(baseUrl, {
+        feedbackTitle: "Valid title",
+        feedbackBody: "Description",
+        "g-recaptcha-response": "token"
+    });
+
+    assert.equal(response.status, 500);
+    assert.equal(loggedErrors.length, 1);
+    assert.notEqual(loggedErrors[0], fetchError);
+    assert.equal(loggedErrors[0].message, "GitHub Issue request failed");
+    assert.equal("cause" in loggedErrors[0], false);
+    assert.doesNotMatch(String(loggedErrors[0]),
+        /http-token-sentinel|header-injection/);
+    assert.doesNotMatch(inspect(loggedErrors),
+        /http-token-sentinel|header-injection/);
 });
 
 test("POST /feedback.html escapes the returned Issue URL", async function(t) {
