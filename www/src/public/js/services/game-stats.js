@@ -75,7 +75,7 @@
                 }
                 return bonus;
             }
-            case "ma":
+            case "ma": {
                 /*
                  * The builder models level-50 characters. The fixed 296 base already
                  * includes the five SAV_*_MANA_BOOST flags (1 + 2 + 3 + 4 + 5 = 15).
@@ -86,7 +86,12 @@
                  * Mental Enhancement remains represented by compensating Other-slot
                  * objects and must not also be included in this natural calculation.
                  */
-                return 471 + ((stats.mind - 30) * 5);
+                const level = 50;
+                const manaForMindDiv = Math.max(10, 1);
+                const manaForMind = Math.trunc((level * stats.mind) / manaForMindDiv);
+
+                return 296 + 25 + manaForMind;
+            }
             case "mv":
                 return 496 + ((Math.max(stats.constitution, stats.dexterity) - 30) * 5);
             case "spelldam":
