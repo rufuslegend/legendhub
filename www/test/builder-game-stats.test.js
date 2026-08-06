@@ -132,13 +132,13 @@ test("builder raises only the equipment damroll cap with final strength", functi
     const scope = createBuilderScope();
     equipStats(scope, {
         dexterity: 90,
-        equipment: {strength: 10, strengthCap: 10, dam: 55},
+        equipment: {strength: 20, strengthCap: 10, dam: 55},
         other: {dam: 5}
     });
 
-    assert.equal(scope.getStatTotal("dam"), "78 (40)");
+    assert.equal(scope.getStatTotal("dam"), "91 (50)");
     assert.equal(scope.statRestrictions.dam.length, 1);
     assert.equal(scope.statRestrictions.dam[0].restriction, "fromItems");
     assert.equal(scope.statRestrictions.dam[0].amount, 55);
-    assert.equal(scope.statRestrictions.dam[0].limit, 40);
+    assert.equal(scope.statRestrictions.dam[0].limit, 50);
 });
