@@ -1941,6 +1941,10 @@
 
             switch (statName) {
                 case "hit":
+                    max = gameStats.calculateHitrollEquipmentCap(
+                        $scope.getStatTotal("dexterity")
+                    );
+                    break;
                 case "dam":
                     max = 27;
                     break;
