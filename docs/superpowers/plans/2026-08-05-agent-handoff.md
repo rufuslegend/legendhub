@@ -87,7 +87,7 @@ This section is time-sensitive. Verify Git, Docker Hub, and server state before 
 - All four test services were running after deployment, MySQL was healthy, and `/`, `/feedback.html`, and `/changelog` returned HTTP 200 locally and through `https://legendhub.dunwichmass.com/`.
 - The three SHA-tagged Docker images were verified as `linux/amd64`; their movable `test` aliases pointed to the same `5e6978a314dc` digests. Deployments use the immutable SHA, not `test`.
 - Dunwichmass Git fetch configuration was corrected from an obsolete single-feature-branch refspec to `+refs/heads/*:refs/remotes/origin/*`.
-- `/home/rufus/legendhub/.env` contains the ignored feedback configuration. `GITHUB_REPOSITORY` is `rufuslegend/legendhub`; the token itself must never be read into logs or committed. Authenticated repository and `triage`-label reads succeeded, but no test Issue was created.
+- The ignored server `.env` stores the GitHub token; never log or commit it. Feedback targets `rufuslegend/legendhub`; authenticated repository and `triage`-label reads succeeded, but no test Issue was created.
 - Feedback creates GitHub Issues labeled `triage` and assigned to `rufuslegend`. The page warns submitters about Issue visibility.
 - Repository links point to `rufuslegend/legendhub`; Vote and Discord displays are disabled while the Discord iframe source remains retained in code.
 - The immutable `v2.6.0-beta` tag still targets `72e5f24e10212439a4a19f57b1729e49daa3d193`, not the later deployed commit. Do not move it. Use a distinct prerelease tag such as `v2.6.0-beta.1` if another beta tag is authorized.
