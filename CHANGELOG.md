@@ -20,6 +20,7 @@ with version 2.6.0-beta.
 
 ### Fixed
 
+- Corrected builder damroll calculations to use strength alone and raise the equipment cap when strength exceeds 90.
 - Corrected builder hitroll calculations to use dexterity alone and raise the equipment cap when dexterity exceeds 90.
 - Fixed several form pages after the server framework upgrade.
 - Fixed error responses so visitors receive the intended status and safe message.
