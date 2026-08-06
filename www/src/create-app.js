@@ -15,7 +15,7 @@ const mobsRouter = require("./routes/mobs");
 const questsRouter = require("./routes/quests");
 const wikiRouter = require("./routes/wiki");
 const builderRouter = require("./routes/builder");
-const changelogRouter = require("./routes/changelog");
+const createChangelogRouter = require("./routes/changelog");
 const notificationsRouter = require("./routes/notifications");
 const accountRouter = require("./routes/account");
 
@@ -63,7 +63,9 @@ module.exports = function createApp(options = {}) {
     app.use("/quests", questsRouter);
     app.use("/wiki", wikiRouter);
     app.use("/builder", builderRouter);
-    app.use("/changelog", changelogRouter);
+    app.use("/changelog", createChangelogRouter({
+        changelogPath: options.changelogPath
+    }));
     app.use("/notifications", notificationsRouter);
     app.use("/account", accountRouter);
 
