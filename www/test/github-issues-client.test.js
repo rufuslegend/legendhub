@@ -53,6 +53,17 @@ test("requires an owner/repository configuration before calling GitHub", async (
     );
 });
 
+test("requires the LegendHUB repository before calling GitHub", async () => {
+    await assert.rejects(
+        createFeedbackIssue({title: "x", body: ""}, {
+            fetchImpl: async () => { throw new Error("must not fetch"); },
+            repository: "someone-else/another-repository",
+            token: "test-token"
+        }),
+        /GITHUB_REPOSITORY must be rufuslegend\/legendhub/
+    );
+});
+
 test("requires a token before calling GitHub", async () => {
     await assert.rejects(createFeedbackIssue({title: "x", body: ""}, {
         fetchImpl: async () => { throw new Error("must not fetch"); },

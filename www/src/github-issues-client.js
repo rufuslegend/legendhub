@@ -7,6 +7,8 @@ const ISSUE_BODY_PREFIX =
 function requireConfiguration(repository, token) {
     if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository || ""))
         throw new Error("GITHUB_REPOSITORY must use owner/repository format");
+    if (repository !== "rufuslegend/legendhub")
+        throw new Error("GITHUB_REPOSITORY must be rufuslegend/legendhub");
     if (typeof token !== "string" || token.length === 0)
         throw new Error("GITHUB_TOKEN is required to create feedback issues");
 }
