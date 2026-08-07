@@ -100,7 +100,7 @@ test("natural damroll ignores disabled weapon-stat alternatives", function() {
     assert.equal(calculate("dam", stats, [{slot: 15, weaponStat: 3}]), 13);
 });
 
-test("defensive and regeneration formulas retain their current behavior", function() {
+test("defensive formulas retain their current behavior", function() {
     const items = Array(26).fill(null);
     items[25] = {id: 1144};
 
@@ -111,7 +111,40 @@ test("defensive and regeneration formulas retain their current behavior", functi
         constitution: 40,
         perception: 40
     }), 72);
-    assert.equal(calculate("hpr", {constitution: 80}), 3);
+});
+
+test("natural regeneration mirrors Legend stat formulas", function() {
+    assert.equal(calculate("hpr", {constitution: 79}), 7);
+    assert.equal(calculate("hpr", {constitution: 80}), 9);
+    assert.equal(calculate("hpr", {constitution: 100}), 15);
+    assert.equal(calculate("hpr", {constitution: 105}), 16);
+    assert.equal(calculate("hpr", {constitution: 110}), 19);
+
+    assert.equal(calculate("mar", {mind: 79}), 7);
+    assert.equal(calculate("mar", {mind: 80}), 9);
+    assert.equal(calculate("mar", {mind: 100}), 15);
+    assert.equal(calculate("mar", {mind: 105}), 18);
+    assert.equal(calculate("mar", {mind: 110}), 23);
+
+    assert.equal(calculate("mvr", {dexterity: 53}), 0);
+    assert.equal(calculate("mvr", {dexterity: 54}), 1);
+    assert.equal(calculate("mvr", {dexterity: 79}), 6);
+    assert.equal(calculate("mvr", {dexterity: 80}), 7);
+    assert.equal(calculate("mvr", {dexterity: 100}), 15);
+    assert.equal(calculate("mvr", {dexterity: 105}), 17);
+});
+
+test("regeneration equipment allowance includes the high-stat contribution", function() {
+    assert.equal(gameStats.calculateRegenEquipmentCap(79), 20);
+    assert.equal(gameStats.calculateRegenEquipmentCap(80), 19);
+    assert.equal(gameStats.calculateRegenEquipmentCap(100), 15);
+    assert.equal(gameStats.calculateRegenEquipmentCap(105), 14);
+});
+
+test("regeneration formulas safely default missing governing stats", function() {
+    assert.equal(calculate("hpr", {}), 0);
+    assert.equal(calculate("mar", {}), 0);
+    assert.equal(calculate("mvr", {}), 0);
 });
 
 test("natural stat dependency lookup is isolated from callers", function() {
@@ -129,6 +162,15 @@ test("natural stat dependency lookup is isolated from callers", function() {
     ]);
     assert.deepEqual(gameStats.getNaturalStatDependencies("hp"), [
         "constitution"
+    ]);
+    assert.deepEqual(gameStats.getNaturalStatDependencies("hpr"), [
+        "constitution"
+    ]);
+    assert.deepEqual(gameStats.getNaturalStatDependencies("mar"), [
+        "mind"
+    ]);
+    assert.deepEqual(gameStats.getNaturalStatDependencies("mvr"), [
+        "dexterity"
     ]);
     assert.deepEqual(gameStats.getNaturalStatDependencies("unknown"), []);
 });
@@ -161,6 +203,8 @@ test("browser loading registers the game-stat module with AngularJS", function()
     assert.equal(registeredGameStats.calculateHitrollEquipmentCap(100), 40);
     assert.equal(typeof registeredGameStats.calculateDamrollEquipmentCap, "function");
     assert.equal(registeredGameStats.calculateDamrollEquipmentCap(100), 40);
+    assert.equal(typeof registeredGameStats.calculateRegenEquipmentCap, "function");
+    assert.equal(registeredGameStats.calculateRegenEquipmentCap(100), 15);
     assert.equal(typeof registeredGameStats.normalizeQuestResourceBonus, "function");
     assert.equal(registeredGameStats.normalizeQuestResourceBonus(4.9), 4);
     assert.equal(

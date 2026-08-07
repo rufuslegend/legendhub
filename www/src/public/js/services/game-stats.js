@@ -27,7 +27,9 @@
         dam: ["strength"],
         mitigation: ["constitution"],
         ac: ["strength", "dexterity", "constitution", "perception"],
-        hpr: ["constitution"]
+        hpr: ["constitution"],
+        mar: ["mind"],
+        mvr: ["dexterity"]
     };
 
     function normalizeQuestResourceBonus(value) {
@@ -77,7 +79,31 @@
         return 30 + Math.max(strength - 90, 0);
     }
 
+    /*
+     * Legend's get_*_regen_evt() functions add the high-stat contribution to
+     * object regeneration before get_max_regen() applies the level-50 cap of 20.
+     * Reducing the builder's equipment allowance by the same contribution keeps
+     * MIN(equipment + stat contribution, 20) equivalent to the C calculation.
+     */
+    const LEVEL_50_REGEN_EQUIPMENT_CAP = Math.trunc(50 / 3) + 4;
+
+    function normalizeRegenStat(value) {
+        const stat = Number(value);
+        return Number.isFinite(stat) ? stat : 0;
+    }
+
+    function calculateRegenInsideCapContribution(value) {
+        const stat = normalizeRegenStat(value);
+        return stat > 79 ? Math.trunc((stat - 75) / 5) : 0;
+    }
+
+    function calculateRegenEquipmentCap(governingStat) {
+        return LEVEL_50_REGEN_EQUIPMENT_CAP -
+            calculateRegenInsideCapContribution(governingStat);
+    }
+
     function calculateNaturalStatBonus(statName, stats, items) {
+        stats = stats || {};
         items = items || [];
 
         switch (statName) {
@@ -205,14 +231,35 @@
                 }
                 return total;
             }
+            /*
+             * These natural terms mirror get_hp_regen_con_bonus_internal(),
+             * get_mana_regen_mind_bonus(), and get_move_regen_wsp(). Innate
+             * Regeneration and spell/ability bonuses are supplied separately by the
+             * builder's uncapped Familiar and Other slots.
+             */
             case "hpr": {
-                const con = stats.constitution;
-                let bonus = parseInt(Math.max(con - 75, 0) * 0.2);
-                if (con > 79) {
-                    bonus += parseInt(Math.max(con - 70, 0) * 0.2);
+                const con = normalizeRegenStat(stats.constitution);
+                let naturalBonus = Math.trunc(con / 10);
+                if (con > 100) {
+                    naturalBonus += Math.trunc((con - 100) / 10);
                 }
-                bonus += Math.max(con - 100, 0);
-                return bonus;
+
+                return calculateRegenInsideCapContribution(con) + naturalBonus;
+            }
+            case "mar": {
+                const mind = normalizeRegenStat(stats.mind);
+                let naturalBonus = Math.trunc(mind / 10);
+                if (mind > 100) {
+                    naturalBonus += Math.trunc((mind - 100) / 2);
+                }
+
+                return calculateRegenInsideCapContribution(mind) + naturalBonus;
+            }
+            case "mvr": {
+                const dex = normalizeRegenStat(stats.dexterity);
+                const naturalBonus = dex > 53 ? Math.trunc((dex - 49) / 5) : 0;
+
+                return calculateRegenInsideCapContribution(dex) + naturalBonus;
             }
             default:
                 return 0;
@@ -223,6 +270,7 @@
         calculateDamrollEquipmentCap,
         calculateHitrollEquipmentCap,
         calculateNaturalStatBonus,
+        calculateRegenEquipmentCap,
         getNaturalStatDependencies,
         normalizeQuestResourceBonus
     };
