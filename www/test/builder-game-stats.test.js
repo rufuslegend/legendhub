@@ -293,6 +293,21 @@ test("builder damage cap uses capped strength and dynamic item modifiers", funct
     assert.equal(scope.getStatTotal("meleedamcap"), 151);
 });
 
+test("builder damage cap includes the two-handed Wield bonus exactly once", function() {
+    const scope = createBuilderScope();
+    equipStats(scope, {
+        strength: 100,
+        equipment: {
+            slot: 14,
+            twoHanded: true,
+            meleedamcap: 12
+        },
+        other: {meleedamcap: 8}
+    });
+
+    assert.equal(scope.getStatTotal("meleedamcap"), 211);
+});
+
 test("builder applies dynamic regen caps and uncapped Other bonuses", function() {
     const scope = createBuilderScope();
     equipStats(scope, {

@@ -61,6 +61,17 @@
         return false;
     }
 
+    function hasEquippedTwoHandedWeapon(items) {
+        for (let i = 0; i < items.length; ++i) {
+            const item = items[i];
+            if (item && item.slot == 14 && item.twoHanded) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     function hasBattleTraining(items) {
         for (let i = 25; i < items.length; ++i) {
             const item = items[i];
@@ -252,6 +263,10 @@
                     if (strength > 100) {
                         damageCap += Math.trunc((strength - 99) / 2);
                     }
+                }
+
+                if (hasEquippedTwoHandedWeapon(items)) {
+                    damageCap += 64;
                 }
 
                 return damageCap;

@@ -125,6 +125,24 @@ test("natural melee damage cap mirrors Legend's base and strength contribution",
     assert.equal(calculate("meleedamcap", {strength: 104}), 131);
 });
 
+test("natural melee damage cap adds the two-handed Wield bonus once", function() {
+    const stats = {strength: 100};
+
+    assert.equal(calculate("meleedamcap", stats, [
+        {slot: 14, twoHanded: true}
+    ]), 191);
+    assert.equal(calculate("meleedamcap", stats, [
+        {slot: 15, twoHanded: true}
+    ]), 127);
+    assert.equal(calculate("meleedamcap", stats, [
+        {slot: 14, twoHanded: false}
+    ]), 127);
+    assert.equal(calculate("meleedamcap", stats, [
+        {slot: 14, twoHanded: true},
+        {slot: 14, twoHanded: true}
+    ]), 191);
+});
+
 test("defensive formulas retain their current behavior", function() {
     const items = Array(26).fill(null);
     items[25] = {id: 1144};
