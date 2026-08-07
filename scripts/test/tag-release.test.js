@@ -28,7 +28,7 @@ function createReleaseRepository(t) {
     t.after(() => fs.rmSync(repo, {recursive: true, force: true}));
     fs.mkdirSync(path.join(repo, "www"));
     fs.writeFileSync(path.join(repo, "CHANGELOG.md"),
-        "# Changelog\n\n## [2.6.0-beta] - 2026-08-05\n\n- Safer releases\n");
+        "# Changelog\n\nAll notable user-facing changes are documented here beginning\nwith version 2.6.0-beta.\n\n## [2.6.0-beta] - 2026-08-05\n\n- Safer releases\n");
     fs.writeFileSync(path.join(repo, "README.md"),
         "[![Version v=2.6.0-beta](https://img.shields.io/badge/version-v=2.6.0--beta-brightgreen.svg)]\n");
     fs.writeFileSync(path.join(repo, "www/package.json"), JSON.stringify({
@@ -86,7 +86,7 @@ test("rejects a nested release root without tagging its Git ancestor", (t) => {
     const nested = path.join(repo, "nested");
     fs.mkdirSync(path.join(nested, "www"), {recursive: true});
     fs.writeFileSync(path.join(nested, "CHANGELOG.md"),
-        "# Changelog\n\n## [2.6.0-beta] - 2026-08-05\n\n- Safer releases\n");
+        "# Changelog\n\nAll notable user-facing changes are documented here beginning\nwith version 2.6.0-beta.\n\n## [2.6.0-beta] - 2026-08-05\n\n- Safer releases\n");
     fs.writeFileSync(path.join(nested, "README.md"),
         "[![Version v=2.6.0-beta](https://img.shields.io/badge/version-v=2.6.0--beta-brightgreen.svg)]\n");
     fs.writeFileSync(path.join(nested, "www/package.json"), JSON.stringify({
