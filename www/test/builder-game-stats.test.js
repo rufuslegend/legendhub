@@ -176,6 +176,32 @@ test("builder raises only the equipment hitroll cap with final dexterity", funct
     assert.equal(scope.statRestrictions.hit[0].limit, 50);
 });
 
+test("builder uses capped dexterity for all hitroll calculations", function() {
+    const scope = createBuilderScope();
+    equipStats(scope, {
+        dexterity: 90,
+        equipment: {dexterity: 20, dexterityCap: 4, hit: 55},
+        other: {}
+    });
+
+    assert.equal(scope.getStatTotal("dexterity"), 104);
+    assert.equal(scope.anyStatRestrictions("dexterity"), true);
+    assert.equal(scope.statRestrictions.dexterity.length, 1);
+    assert.equal(scope.statRestrictions.dexterity[0].restriction, "fromTotalMax");
+    assert.equal(scope.statRestrictions.dexterity[0].amount, 110);
+    assert.equal(scope.statRestrictions.dexterity[0].limit, 104);
+    assert.equal(
+        scope.getStatRestrictionText("dexterity"),
+        "The overall limit for this stat is 104. You currently have 110."
+    );
+
+    assert.equal(scope.getStatTotal("hit"), "78 (44)");
+    assert.equal(scope.statRestrictions.hit.length, 1);
+    assert.equal(scope.statRestrictions.hit[0].restriction, "fromItems");
+    assert.equal(scope.statRestrictions.hit[0].amount, 55);
+    assert.equal(scope.statRestrictions.hit[0].limit, 44);
+});
+
 test("builder uses the corrected base damroll equipment cap", function() {
     const scope = createBuilderScope();
     equipStats(scope, {
@@ -204,6 +230,32 @@ test("builder raises only the equipment damroll cap with final strength", functi
     assert.equal(scope.statRestrictions.dam[0].restriction, "fromItems");
     assert.equal(scope.statRestrictions.dam[0].amount, 55);
     assert.equal(scope.statRestrictions.dam[0].limit, 50);
+});
+
+test("builder uses capped strength for all damroll calculations", function() {
+    const scope = createBuilderScope();
+    equipStats(scope, {
+        dexterity: 90,
+        equipment: {strength: 20, strengthCap: 4, dam: 55},
+        other: {}
+    });
+
+    assert.equal(scope.getStatTotal("strength"), 104);
+    assert.equal(scope.anyStatRestrictions("strength"), true);
+    assert.equal(scope.statRestrictions.strength.length, 1);
+    assert.equal(scope.statRestrictions.strength[0].restriction, "fromTotalMax");
+    assert.equal(scope.statRestrictions.strength[0].amount, 110);
+    assert.equal(scope.statRestrictions.strength[0].limit, 104);
+    assert.equal(
+        scope.getStatRestrictionText("strength"),
+        "The overall limit for this stat is 104. You currently have 110."
+    );
+
+    assert.equal(scope.getStatTotal("dam"), "78 (44)");
+    assert.equal(scope.statRestrictions.dam.length, 1);
+    assert.equal(scope.statRestrictions.dam[0].restriction, "fromItems");
+    assert.equal(scope.statRestrictions.dam[0].amount, 55);
+    assert.equal(scope.statRestrictions.dam[0].limit, 44);
 });
 
 test("new builder lists default quest resource bonuses to zero", function() {
