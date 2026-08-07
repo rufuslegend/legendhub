@@ -109,21 +109,24 @@
             }
             case "ma": {
                 /*
-                 * The builder models level-50 characters. A fixed base character has
-                 * 100 mana plus 4 mana for each of levels 2 through 50: 296 total.
-                 * Remove the five assumed SAV_*_MANA_BOOST values (15), leaving 281.
-                 * VALLEY_COMPLETE and other resource quests are entered as Quest Mana.
+                 * The builder models level-50 characters. reroll_mana_internal() starts
+                 * with BASE_MANA (100) and adds MANA_PER_LEVEL (4) for levels 2 through
+                 * 50, producing a quest-less rerolled base of 296.
                  *
                  * ma_for_mind() is (level * current mind) / MANA_FOR_MIND_DIV. At
                  * level 50 with MANA_FOR_MIND_DIV set to 10, that is 5 mana per mind.
-                 * Mental Enhancement remains represented by compensating Other-slot
-                 * objects and must not also be included in this natural calculation.
+                 * Quest Mana contains all completed resource-quest bonuses and is added
+                 * exactly once. Mental Enhancement remains represented by compensating
+                 * Other-slot objects and must not also be included here.
                  */
                 const level = 50;
+                const baseMana = 100;
+                const manaPerLevel = 4;
                 const manaForMindDiv = Math.max(10, 1);
+                const rerolledMana = baseMana + (manaPerLevel * (level - 1));
                 const manaForMind = Math.trunc((level * stats.mind) / manaForMindDiv);
 
-                return 281 + manaForMind +
+                return rerolledMana + manaForMind +
                     normalizeQuestResourceBonus(stats.quest_mana);
             }
             case "mv":

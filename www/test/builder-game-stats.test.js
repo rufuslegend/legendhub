@@ -227,8 +227,20 @@ test("builder applies each quest bonus only to its matching resource", function(
     });
 
     assert.equal(scope.getStatTotal("hp"), 683);
-    assert.equal(scope.getStatTotal("ma"), 754);
+    assert.equal(scope.getStatTotal("ma"), 769);
     assert.equal(scope.getStatTotal("mv"), 825);
+});
+
+test("builder matches Hakim's corrected 766 mana profile", function() {
+    const scope = createBuilderScope();
+    equipStats(scope, {
+        dexterity: 90,
+        equipment: {mind: 15, mindCap: 5, ma: -55},
+        other: {}
+    });
+
+    assert.equal(scope.getStatTotal("mind"), 105);
+    assert.equal(scope.getStatTotal("ma"), 766);
 });
 
 test("builder stats block renders the three quest resource inputs", function() {

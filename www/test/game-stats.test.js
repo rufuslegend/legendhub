@@ -19,15 +19,16 @@ test("natural HP mirrors the level-50 Legend calculation", function() {
 });
 
 test("natural resource formulas default missing quest bonuses to zero", function() {
-    assert.equal(calculate("ma", {mind: 0}), 281);
-    assert.equal(calculate("ma", {mind: 30}), 431);
-    assert.equal(calculate("ma", {mind: 100}), 781);
+    assert.equal(calculate("ma", {mind: 0}), 296);
+    assert.equal(calculate("ma", {mind: 30}), 446);
+    assert.equal(calculate("ma", {mind: 100}), 796);
+    assert.equal(calculate("ma", {mind: 105}), 821);
     assert.equal(calculate("mv", {constitution: 40, dexterity: 50}), 596);
 });
 
 test("natural resource formulas add their matching quest bonuses", function() {
     assert.equal(calculate("hp", {constitution: 30, quest_hp: 17}), 383);
-    assert.equal(calculate("ma", {mind: 30, quest_mana: 23}), 454);
+    assert.equal(calculate("ma", {mind: 30, quest_mana: 23}), 469);
     assert.equal(calculate("mv", {
         constitution: 40,
         dexterity: 50,
@@ -164,6 +165,6 @@ test("browser loading registers the game-stat module with AngularJS", function()
     assert.equal(registeredGameStats.normalizeQuestResourceBonus(4.9), 4);
     assert.equal(
         registeredGameStats.calculateNaturalStatBonus("ma", {mind: 30}, []),
-        431
+        446
     );
 });
