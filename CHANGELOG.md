@@ -1,7 +1,13 @@
 # Changelog
 
 All notable user-facing changes to LegendHUB are documented here beginning
-with version 2.6.0-beta.
+with version 2.6.0.
+
+## [2.6.1-beta] - 2026-08-07
+
+### Fixed
+
+- Corrected the public changelog release text after the 2.6.0 promotion.
 
 ## [2.6.0] - 2026-08-07
 
