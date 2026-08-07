@@ -4,7 +4,7 @@
 
 **Goal:** Correct the level-50 builder's maximum-movement total to follow Legend's capped-dexterity-only calculation while retaining explicit Quest Mv and faux-item bonuses.
 
-**Architecture:** Keep the source-derived calculation in the shared `gameStats` service, where natural resource formulas already live. Change movement's declared dependency to dexterity only, express the configured level-50 C calculation with named constants, and let the existing builder total pipeline continue adding equipment, Familiar, Other-slot, and Quest Mv values.
+**Architecture:** Keep the source-derived calculation in the shared `gameStats` service, where natural resource formulas already live. Change movement's declared dependency to dexterity only, express the configured level-50 C calculation with named constants, add Quest Mv in `gameStats`, and let the existing builder total pipeline continue adding equipment, Familiar, and Other-slot values.
 
 **Tech Stack:** Browser-compatible JavaScript, AngularJS builder controller, Node.js built-in test runner, CommonJS test loading.
 
