@@ -93,6 +93,7 @@ function createBuilderScope() {
         "mv",
         "hit",
         "dam",
+        "meleedamcap",
         "hpr",
         "mar",
         "mvr"
@@ -269,6 +270,27 @@ test("builder uses capped strength for all damroll calculations", function() {
     assert.equal(scope.statRestrictions.dam[0].restriction, "fromItems");
     assert.equal(scope.statRestrictions.dam[0].amount, 55);
     assert.equal(scope.statRestrictions.dam[0].limit, 44);
+});
+
+test("builder damage cap uses capped strength and dynamic item modifiers", function() {
+    const scope = createBuilderScope();
+    equipStats(scope, {
+        strength: 90,
+        equipment: {
+            strength: 20,
+            strengthCap: 4,
+            meleedamcap: 12
+        },
+        other: {meleedamcap: 8}
+    });
+
+    assert.equal(scope.getStatTotal("strength"), 104);
+    assert.deepEqual(getRestrictions(scope, "strength"), [{
+        restriction: "fromTotalMax",
+        amount: 110,
+        limit: 104
+    }]);
+    assert.equal(scope.getStatTotal("meleedamcap"), 151);
 });
 
 test("builder applies dynamic regen caps and uncapped Other bonuses", function() {

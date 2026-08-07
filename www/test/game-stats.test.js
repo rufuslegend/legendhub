@@ -107,6 +107,24 @@ test("natural damroll ignores disabled weapon-stat alternatives", function() {
     assert.equal(calculate("dam", stats, [{slot: 15, weaponStat: 3}]), 13);
 });
 
+test("melee damage cap depends on current strength", function() {
+    assert.deepEqual(
+        gameStats.getNaturalStatDependencies("meleedamcap"),
+        ["strength"]
+    );
+});
+
+test("natural melee damage cap mirrors Legend's base and strength contribution", function() {
+    assert.equal(calculate("meleedamcap", {}), 102);
+    assert.equal(calculate("meleedamcap", {strength: 50}), 102);
+    assert.equal(calculate("meleedamcap", {strength: 51}), 102);
+    assert.equal(calculate("meleedamcap", {strength: 52}), 103);
+    assert.equal(calculate("meleedamcap", {strength: 99}), 126);
+    assert.equal(calculate("meleedamcap", {strength: 100}), 127);
+    assert.equal(calculate("meleedamcap", {strength: 101}), 128);
+    assert.equal(calculate("meleedamcap", {strength: 104}), 131);
+});
+
 test("defensive formulas retain their current behavior", function() {
     const items = Array(26).fill(null);
     items[25] = {id: 1144};

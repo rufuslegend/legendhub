@@ -25,6 +25,7 @@
         spellcrit: ["mind", "perception", "spirit"],
         hit: ["dexterity"],
         dam: ["strength"],
+        meleedamcap: ["strength"],
         mitigation: ["constitution"],
         ac: ["strength", "dexterity", "constitution", "perception"],
         hpr: ["constitution"],
@@ -234,6 +235,26 @@
                 }
 
                 return bestStat;
+            }
+            case "meleedamcap": {
+                /*
+                 * Legend initializes ch->damcap from DAMCAP (102). APPLY_DAMCAP is not
+                 * accumulated in mod_damcap; get_damcap_mod() sums objects and affects
+                 * on demand, so the builder's generic item path adds those separately.
+                 */
+                const parsedStrength = Number(stats.strength);
+                const strength = Number.isFinite(parsedStrength) ?
+                    Math.trunc(parsedStrength) : 0;
+                let damageCap = 102;
+
+                if (strength > 50) {
+                    damageCap += Math.trunc((strength - 50) / 2);
+                    if (strength > 100) {
+                        damageCap += Math.trunc((strength - 99) / 2);
+                    }
+                }
+
+                return damageCap;
             }
             case "mitigation":
                 return hasBattleTraining(items) ?
