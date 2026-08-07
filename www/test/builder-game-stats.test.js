@@ -66,6 +66,9 @@ function createBuilderScope() {
         "constitution",
         "perception",
         "spirit",
+        "hp",
+        "ma",
+        "mv",
         "hit",
         "dam"
     ].map(function(statName) {
@@ -91,7 +94,10 @@ function equipStats(scope, overrides) {
             spirit: 90,
             amulet: -1,
             hazelnut: -1,
-            longhouse: -1
+            longhouse: -1,
+            quest_hp: overrides.quest_hp || 0,
+            quest_mana: overrides.quest_mana || 0,
+            quest_move: overrides.quest_move || 0
         },
         ksmStats: {},
         items
@@ -141,4 +147,52 @@ test("builder raises only the equipment damroll cap with final strength", functi
     assert.equal(scope.statRestrictions.dam[0].restriction, "fromItems");
     assert.equal(scope.statRestrictions.dam[0].amount, 55);
     assert.equal(scope.statRestrictions.dam[0].limit, 50);
+});
+
+test("new builder lists default quest resource bonuses to zero", function() {
+    const scope = createBuilderScope();
+    const list = scope.getDefaultList("Original");
+
+    assert.equal(list.baseStats.quest_hp, 0);
+    assert.equal(list.baseStats.quest_mana, 0);
+    assert.equal(list.baseStats.quest_move, 0);
+});
+
+test("builder applies each quest bonus only to its matching resource", function() {
+    const scope = createBuilderScope();
+    equipStats(scope, {
+        dexterity: 90,
+        quest_hp: 17,
+        quest_mana: 23,
+        quest_move: 29,
+        equipment: {},
+        other: {}
+    });
+
+    assert.equal(scope.getStatTotal("hp"), 708);
+    assert.equal(scope.getStatTotal("ma"), 754);
+    assert.equal(scope.getStatTotal("mv"), 825);
+});
+
+test("builder stats block renders the three quest resource inputs", function() {
+    const template = fs.readFileSync(path.join(
+        __dirname,
+        "../src/views/builder/index.ejs"
+    ), "utf8");
+    const hazelnutIndex = template.indexOf('id="hazelnutSelect"');
+
+    const fields = [
+        ["questHpInput", "Quest HP", "quest_hp"],
+        ["questManaInput", "Quest Mana", "quest_mana"],
+        ["questMoveInput", "Quest Mv", "quest_move"]
+    ];
+
+    for (const [id, label, property] of fields) {
+        const inputIndex = template.indexOf(`id="${id}"`);
+        assert.ok(inputIndex > hazelnutIndex, `${id} must follow Hazelnut`);
+        assert.match(template, new RegExp(`for="${id}">${label}<\\/label>`));
+        assert.match(template, new RegExp(
+            `id="${id}"[^>]*ng-model="selectedList\\.baseStats\\.${property}"`
+        ));
+    }
 });

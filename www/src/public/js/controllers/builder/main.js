@@ -124,7 +124,20 @@
             list.name = name;
 
             // base stats
-            list.baseStats = {"strength": 0, "mind": 0, "dexterity": 0, "constitution": 0, "perception": 0, "spirit": 0, "longhouse": -1, "hazelnut": -1, "amulet": -1};
+            list.baseStats = {
+                "strength": 0,
+                "mind": 0,
+                "dexterity": 0,
+                "constitution": 0,
+                "perception": 0,
+                "spirit": 0,
+                "longhouse": -1,
+                "hazelnut": -1,
+                "amulet": -1,
+                "quest_hp": 0,
+                "quest_mana": 0,
+                "quest_move": 0
+            };
             list.ksmStats = {"strength": 0, "mind": 0, "dexterity": 0, "constitution": 0, "perception": 0, "spirit": 0};
             
             // runecraft charms
@@ -1897,6 +1910,11 @@
                 const dependency = dependencies[i];
                 stats[dependency] = $scope.getStatTotal(dependency);
             }
+
+            const baseStats = $scope.selectedList.baseStats || {};
+            stats.quest_hp = baseStats.quest_hp;
+            stats.quest_mana = baseStats.quest_mana;
+            stats.quest_move = baseStats.quest_move;
 
             return gameStats.calculateNaturalStatBonus(
                 statName,

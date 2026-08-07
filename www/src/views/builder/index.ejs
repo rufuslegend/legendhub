@@ -172,6 +172,35 @@
 								</select>
 							</div>
 						</div>
+						<div class="row mt-3">
+							<div class="input-group input-group-sm col-8 col-sm-4 mb-3 mb-sm-0">
+								<div class="input-group-prepend">
+									<label class="input-group-text" for="questHpInput">Quest HP</label>
+								</div>
+								<input type="number" id="questHpInput" class="form-control form-control-sm"
+									ng-model="selectedList.baseStats.quest_hp"
+									ng-change="saveClientSideData()"
+									ng-model-options="{debounce:250}" min="0" max="238327" step="1">
+							</div>
+							<div class="input-group input-group-sm col-8 col-sm-4 mb-3 mb-sm-0">
+								<div class="input-group-prepend">
+									<label class="input-group-text" for="questManaInput">Quest Mana</label>
+								</div>
+								<input type="number" id="questManaInput" class="form-control form-control-sm"
+									ng-model="selectedList.baseStats.quest_mana"
+									ng-change="saveClientSideData()"
+									ng-model-options="{debounce:250}" min="0" max="238327" step="1">
+							</div>
+							<div class="input-group input-group-sm col-8 col-sm-4">
+								<div class="input-group-prepend">
+									<label class="input-group-text" for="questMoveInput">Quest Mv</label>
+								</div>
+								<input type="number" id="questMoveInput" class="form-control form-control-sm"
+									ng-model="selectedList.baseStats.quest_move"
+									ng-change="saveClientSideData()"
+									ng-model-options="{debounce:250}" min="0" max="238327" step="1">
+							</div>
+						</div>
 					</div>
 				</div>
 			</div>
