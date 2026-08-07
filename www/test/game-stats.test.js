@@ -10,16 +10,33 @@ function calculate(statName, stats, items = []) {
     return gameStats.calculateNaturalStatBonus(statName, stats, items);
 }
 
-test("natural resource formulas retain their current behavior", function() {
+test("natural resource formulas default missing quest bonuses to zero", function() {
     assert.equal(calculate("hp", {constitution: 30}), 381);
     assert.equal(calculate("hp", {constitution: 90}), 691);
+    assert.equal(calculate("ma", {mind: 0}), 281);
+    assert.equal(calculate("ma", {mind: 30}), 431);
+    assert.equal(calculate("ma", {mind: 100}), 781);
     assert.equal(calculate("mv", {constitution: 40, dexterity: 50}), 596);
 });
 
-test("natural mana includes assumed Valley completion at level 50", function() {
-    assert.equal(calculate("ma", {mind: 0}), 321);
-    assert.equal(calculate("ma", {mind: 30}), 471);
-    assert.equal(calculate("ma", {mind: 100}), 821);
+test("natural resource formulas add their matching quest bonuses", function() {
+    assert.equal(calculate("hp", {constitution: 30, quest_hp: 17}), 398);
+    assert.equal(calculate("ma", {mind: 30, quest_mana: 23}), 454);
+    assert.equal(calculate("mv", {
+        constitution: 40,
+        dexterity: 50,
+        quest_move: 29
+    }), 625);
+});
+
+test("quest resource bonuses normalize to the version-5 storage range", function() {
+    assert.equal(gameStats.normalizeQuestResourceBonus(undefined), 0);
+    assert.equal(gameStats.normalizeQuestResourceBonus("not a number"), 0);
+    assert.equal(gameStats.normalizeQuestResourceBonus(Infinity), 0);
+    assert.equal(gameStats.normalizeQuestResourceBonus(-4), 0);
+    assert.equal(gameStats.normalizeQuestResourceBonus(4.9), 4);
+    assert.equal(gameStats.normalizeQuestResourceBonus("23"), 23);
+    assert.equal(gameStats.normalizeQuestResourceBonus(238328), 238327);
 });
 
 test("natural spell formulas retain their current behavior", function() {
@@ -134,8 +151,10 @@ test("browser loading registers the game-stat module with AngularJS", function()
     assert.equal(registeredGameStats.calculateHitrollEquipmentCap(100), 40);
     assert.equal(typeof registeredGameStats.calculateDamrollEquipmentCap, "function");
     assert.equal(registeredGameStats.calculateDamrollEquipmentCap(100), 40);
+    assert.equal(typeof registeredGameStats.normalizeQuestResourceBonus, "function");
+    assert.equal(registeredGameStats.normalizeQuestResourceBonus(4.9), 4);
     assert.equal(
         registeredGameStats.calculateNaturalStatBonus("ma", {mind: 30}, []),
-        471
+        431
     );
 });

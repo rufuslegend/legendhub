@@ -15,6 +15,8 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function() {
     "use strict";
 
+    const MAX_QUEST_RESOURCE_BONUS = 238327;
+
     const naturalStatDependencies = {
         hp: ["constitution"],
         ma: ["mind"],
@@ -27,6 +29,18 @@
         ac: ["strength", "dexterity", "constitution", "perception"],
         hpr: ["constitution"]
     };
+
+    function normalizeQuestResourceBonus(value) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) {
+            return 0;
+        }
+
+        return Math.min(
+            Math.max(Math.trunc(number), 0),
+            MAX_QUEST_RESOURCE_BONUS
+        );
+    }
 
     function getNaturalStatDependencies(statName) {
         const dependencies = naturalStatDependencies[statName];
@@ -73,13 +87,14 @@
                 if (con > 89) {
                     bonus += Math.max(con - 88, 0) * 5;
                 }
-                return bonus;
+                return bonus + normalizeQuestResourceBonus(stats.quest_hp);
             }
             case "ma": {
                 /*
-                 * The builder models level-50 characters. The fixed 296 base already
-                 * includes the five SAV_*_MANA_BOOST flags (1 + 2 + 3 + 4 + 5 = 15).
-                 * Assume VALLEY_COMPLETE for another 25 mana.
+                 * The builder models level-50 characters. A fixed base character has
+                 * 100 mana plus 4 mana for each of levels 2 through 50: 296 total.
+                 * Remove the five assumed SAV_*_MANA_BOOST values (15), leaving 281.
+                 * VALLEY_COMPLETE and other resource quests are entered as Quest Mana.
                  *
                  * ma_for_mind() is (level * current mind) / MANA_FOR_MIND_DIV. At
                  * level 50 with MANA_FOR_MIND_DIV set to 10, that is 5 mana per mind.
@@ -90,10 +105,13 @@
                 const manaForMindDiv = Math.max(10, 1);
                 const manaForMind = Math.trunc((level * stats.mind) / manaForMindDiv);
 
-                return 296 + 25 + manaForMind;
+                return 281 + manaForMind +
+                    normalizeQuestResourceBonus(stats.quest_mana);
             }
             case "mv":
-                return 496 + ((Math.max(stats.constitution, stats.dexterity) - 30) * 5);
+                return 496 +
+                    ((Math.max(stats.constitution, stats.dexterity) - 30) * 5) +
+                    normalizeQuestResourceBonus(stats.quest_move);
             case "spelldam":
                 return parseInt((stats.mind - 52) / 2);
             case "spellcrit":
@@ -184,6 +202,7 @@
         calculateDamrollEquipmentCap,
         calculateHitrollEquipmentCap,
         calculateNaturalStatBonus,
-        getNaturalStatDependencies
+        getNaturalStatDependencies,
+        normalizeQuestResourceBonus
     };
 });
