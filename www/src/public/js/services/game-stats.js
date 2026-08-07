@@ -82,12 +82,30 @@
 
         switch (statName) {
             case "hp": {
-                const con = stats.constitution;
-                let bonus = 381 + ((con - 30) * 5);
-                if (con > 89) {
-                    bonus += Math.max(con - 88, 0) * 5;
+                /*
+                 * The builder models level-50 characters. Mirror reroll_hps_internal()
+                 * and hp_for_con_internal() using the current Legend configuration.
+                 * Quest HP supplies all permanent quest boosts, including the five India
+                 * boosts. Physical Endurance is represented by a compensating object.
+                 */
+                const level = 50;
+                const baseHp = 20;
+                const hpPerLevel = 4;
+                const conCutoff = 89;
+                const hpForConDiv = Math.max(10, 1);
+                const rerolledHp = baseHp + (hpPerLevel * (level - 1));
+                let effectiveConstitution = stats.constitution;
+
+                if (effectiveConstitution > conCutoff) {
+                    effectiveConstitution += effectiveConstitution - conCutoff - 1;
                 }
-                return bonus + normalizeQuestResourceBonus(stats.quest_hp);
+
+                const hpForConstitution = Math.trunc(
+                    (level * effectiveConstitution) / hpForConDiv
+                );
+
+                return rerolledHp + hpForConstitution +
+                    normalizeQuestResourceBonus(stats.quest_hp);
             }
             case "ma": {
                 /*

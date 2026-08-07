@@ -226,7 +226,7 @@ test("builder applies each quest bonus only to its matching resource", function(
         other: {}
     });
 
-    assert.equal(scope.getStatTotal("hp"), 708);
+    assert.equal(scope.getStatTotal("hp"), 683);
     assert.equal(scope.getStatTotal("ma"), 754);
     assert.equal(scope.getStatTotal("mv"), 825);
 });

@@ -10,9 +10,15 @@ function calculate(statName, stats, items = []) {
     return gameStats.calculateNaturalStatBonus(statName, stats, items);
 }
 
+test("natural HP mirrors the level-50 Legend calculation", function() {
+    assert.equal(calculate("hp", {constitution: 30}), 366);
+    assert.equal(calculate("hp", {constitution: 89}), 661);
+    assert.equal(calculate("hp", {constitution: 90}), 666);
+    assert.equal(calculate("hp", {constitution: 91}), 676);
+    assert.equal(calculate("hp", {constitution: 100}), 766);
+});
+
 test("natural resource formulas default missing quest bonuses to zero", function() {
-    assert.equal(calculate("hp", {constitution: 30}), 381);
-    assert.equal(calculate("hp", {constitution: 90}), 691);
     assert.equal(calculate("ma", {mind: 0}), 281);
     assert.equal(calculate("ma", {mind: 30}), 431);
     assert.equal(calculate("ma", {mind: 100}), 781);
@@ -20,7 +26,7 @@ test("natural resource formulas default missing quest bonuses to zero", function
 });
 
 test("natural resource formulas add their matching quest bonuses", function() {
-    assert.equal(calculate("hp", {constitution: 30, quest_hp: 17}), 398);
+    assert.equal(calculate("hp", {constitution: 30, quest_hp: 17}), 383);
     assert.equal(calculate("ma", {mind: 30, quest_mana: 23}), 454);
     assert.equal(calculate("mv", {
         constitution: 40,
@@ -119,6 +125,9 @@ test("natural stat dependency lookup is isolated from callers", function() {
     ]);
     assert.deepEqual(gameStats.getNaturalStatDependencies("ma"), [
         "mind"
+    ]);
+    assert.deepEqual(gameStats.getNaturalStatDependencies("hp"), [
+        "constitution"
     ]);
     assert.deepEqual(gameStats.getNaturalStatDependencies("unknown"), []);
 });
