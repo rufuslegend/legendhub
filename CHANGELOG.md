@@ -22,7 +22,7 @@ with version 2.6.0-beta.
 ### Fixed
 
 - Corrected level-50 builder hit points to mirror Legend's current base and constitution formulas while using entered Quest HP instead of assuming India quest boosts.
-- Corrected level-50 builder mana to use the entered quest bonus instead of assuming completed mana quests.
+- Corrected level-50 builder mana to use Legend's 296 quest-less reroll base before adding entered Quest Mana.
 - Corrected builder damroll calculations to use strength alone and raise the equipment cap when strength exceeds 90.
 - Corrected builder hitroll calculations to use dexterity alone and raise the equipment cap when dexterity exceeds 90.
 - Fixed several form pages after the server framework upgrade.
