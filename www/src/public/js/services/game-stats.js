@@ -20,7 +20,7 @@
     const naturalStatDependencies = {
         hp: ["constitution"],
         ma: ["mind"],
-        mv: ["constitution", "dexterity"],
+        mv: ["dexterity"],
         spelldam: ["mind"],
         spellcrit: ["mind", "perception", "spirit"],
         hit: ["dexterity"],
@@ -155,10 +155,29 @@
                 return rerolledMana + manaForMind +
                     normalizeQuestResourceBonus(stats.quest_mana);
             }
-            case "mv":
-                return 496 +
-                    ((Math.max(stats.constitution, stats.dexterity) - 30) * 5) +
+            case "mv": {
+                /*
+                 * The builder models level-50 characters. reroll_move_internal() starts
+                 * with BASE_MOVE (150) and adds MOVE_PER_LEVEL (4) for levels 2 through
+                 * 50, producing a stat-independent rerolled base of 346.
+                 *
+                 * MV_STATIC_SUBTITUTE_FOR_DEX is configured to zero, so mv_for_stat()
+                 * uses capped current dexterity: (level * dexterity) / MV_DIV. Quest Mv
+                 * is explicit, while Physical Enhancement remains represented by its
+                 * faux builder item and must not also be included here.
+                 */
+                const level = 50;
+                const baseMove = 150;
+                const movePerLevel = 4;
+                const moveForStatDiv = Math.max(10, 1);
+                const rerolledMove = baseMove + (movePerLevel * (level - 1));
+                const moveForDexterity = Math.trunc(
+                    (level * stats.dexterity) / moveForStatDiv
+                );
+
+                return rerolledMove + moveForDexterity +
                     normalizeQuestResourceBonus(stats.quest_move);
+            }
             case "spelldam":
                 return parseInt((stats.mind - 52) / 2);
             case "spellcrit":

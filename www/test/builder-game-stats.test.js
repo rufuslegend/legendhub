@@ -357,6 +357,32 @@ test("builder applies each quest bonus only to its matching resource", function(
     assert.equal(scope.getStatTotal("mv"), 825);
 });
 
+test("builder movement uses capped dexterity and keeps faux-item bonuses additive", function() {
+    const scope = createBuilderScope();
+    equipStats(scope, {
+        dexterity: 90,
+        constitution: 100,
+        quest_move: 29,
+        equipment: {
+            dexterity: 20,
+            dexterityCap: 4,
+            constitution: 20,
+            constitutionCap: 10,
+            mv: 11
+        },
+        other: {mv: 20}
+    });
+
+    assert.equal(scope.getStatTotal("dexterity"), 104);
+    assert.equal(scope.getStatTotal("constitution"), 110);
+    assert.deepEqual(getRestrictions(scope, "dexterity"), [{
+        restriction: "fromTotalMax",
+        amount: 110,
+        limit: 104
+    }]);
+    assert.equal(scope.getStatTotal("mv"), 926);
+});
+
 test("builder matches Hakim's corrected 766 mana profile", function() {
     const scope = createBuilderScope();
     equipStats(scope, {
