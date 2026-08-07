@@ -2020,14 +2020,19 @@
                     max = 40;
                     break;
                 case "hpr":
-                    var con = $scope.getStatTotal("constitution");
-
-                    max = 20;
-                    max -= parseInt(Math.max(con - 75, 0) * 0.2);
+                    max = gameStats.calculateRegenEquipmentCap(
+                        $scope.getStatTotal("constitution")
+                    );
                     break;
                 case "mar":
+                    max = gameStats.calculateRegenEquipmentCap(
+                        $scope.getStatTotal("mind")
+                    );
+                    break;
                 case "mvr":
-                    max = 20;
+                    max = gameStats.calculateRegenEquipmentCap(
+                        $scope.getStatTotal("dexterity")
+                    );
                     break;
                 default:
                     break;
@@ -2218,6 +2223,8 @@
                 case "dam":
                 case "hit":
                 case "hpr":
+                case "mar":
+                case "mvr":
                 case "spelldam":
                 case "spellcrit":
                     total = total + " (" + fromItems + ")";

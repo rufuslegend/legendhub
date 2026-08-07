@@ -92,13 +92,26 @@ function createBuilderScope() {
         "ma",
         "mv",
         "hit",
-        "dam"
+        "dam",
+        "hpr",
+        "mar",
+        "mvr"
     ].map(function(statName) {
         return {var: statName, type: "int"};
     });
     scope.allLists = [];
 
     return scope;
+}
+
+function getRestrictions(scope, statName) {
+    return Array.from(scope.statRestrictions[statName], function(entry) {
+        return {
+            restriction: entry.restriction,
+            amount: entry.amount,
+            limit: entry.limit
+        };
+    });
 }
 
 function importBuilderList(scope, input) {
@@ -143,10 +156,10 @@ function equipStats(scope, overrides) {
     Object.assign(items[24], overrides.other);
     scope.selectedList = {
         baseStats: {
-            strength: 90,
-            mind: 90,
-            dexterity: overrides.dexterity,
-            constitution: 90,
+            strength: overrides.strength ?? 90,
+            mind: overrides.mind ?? 90,
+            dexterity: overrides.dexterity ?? 90,
+            constitution: overrides.constitution ?? 90,
             perception: 90,
             spirit: 90,
             amulet: -1,
@@ -256,6 +269,67 @@ test("builder uses capped strength for all damroll calculations", function() {
     assert.equal(scope.statRestrictions.dam[0].restriction, "fromItems");
     assert.equal(scope.statRestrictions.dam[0].amount, 55);
     assert.equal(scope.statRestrictions.dam[0].limit, 44);
+});
+
+test("builder applies dynamic regen caps and uncapped Other bonuses", function() {
+    const scope = createBuilderScope();
+    equipStats(scope, {
+        mind: 100,
+        dexterity: 100,
+        constitution: 100,
+        equipment: {hpr: 30, mar: 30, mvr: 30},
+        other: {hpr: 3, mar: 3, mvr: 3}
+    });
+
+    for (const statName of ["hpr", "mar", "mvr"]) {
+        assert.equal(scope.getStatTotal(statName), "33 (15)");
+        assert.deepEqual(getRestrictions(scope, statName), [{
+            restriction: "fromItems",
+            amount: 30,
+            limit: 15
+        }]);
+    }
+});
+
+test("builder uses capped current stats for all regen calculations", function() {
+    const scope = createBuilderScope();
+    equipStats(scope, {
+        mind: 90,
+        dexterity: 90,
+        constitution: 90,
+        equipment: {
+            mind: 20,
+            mindCap: 4,
+            dexterity: 20,
+            dexterityCap: 4,
+            constitution: 20,
+            constitutionCap: 4,
+            hpr: 30,
+            mar: 30,
+            mvr: 30
+        },
+        other: {}
+    });
+
+    for (const statName of ["mind", "dexterity", "constitution"]) {
+        assert.equal(scope.getStatTotal(statName), 104);
+        assert.deepEqual(getRestrictions(scope, statName), [{
+            restriction: "fromTotalMax",
+            amount: 110,
+            limit: 104
+        }]);
+    }
+
+    assert.equal(scope.getStatTotal("hpr"), "30 (15)");
+    assert.equal(scope.getStatTotal("mar"), "32 (15)");
+    assert.equal(scope.getStatTotal("mvr"), "31 (15)");
+    for (const statName of ["hpr", "mar", "mvr"]) {
+        assert.deepEqual(getRestrictions(scope, statName), [{
+            restriction: "fromItems",
+            amount: 30,
+            limit: 15
+        }]);
+    }
 });
 
 test("new builder lists default quest resource bonuses to zero", function() {
