@@ -21,6 +21,7 @@ with version 2.6.0-beta.
 
 ### Fixed
 
+- Corrected builder hit point, mana, and move regeneration to match Legend's current stat bonuses and stat-adjusted equipment caps while leaving Familiar and Other-slot bonuses uncapped.
 - Corrected level-50 builder hit points to mirror Legend's current base and constitution formulas while using entered Quest HP instead of assuming India quest boosts.
 - Corrected level-50 builder mana to use Legend's 296 quest-less reroll base before adding entered Quest Mana.
 - Corrected builder damroll to use capped current strength alone for its natural bonus and equipment cap while retaining raw over-cap warnings.

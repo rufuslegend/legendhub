@@ -62,6 +62,14 @@ function loadApplication(changelogPath) {
     }
 }
 
+test("tracked changelog records the builder regeneration fix", () => {
+    const tracked = fs.readFileSync(path.join(__dirname, "../../CHANGELOG.md"), "utf8");
+
+    assert.match(tracked,
+        /Corrected builder hit point, mana, and move regeneration/);
+    assert.match(tracked, /stat-adjusted equipment caps/);
+});
+
 test("renders changelog Markdown while escaping embedded HTML", (t) => {
     const file = temporaryChangelog(t,
         "# Changelog\n\n## [2.6.0-beta]\n\n- Safer releases\n\n<script>alert(1)</script>\n");
