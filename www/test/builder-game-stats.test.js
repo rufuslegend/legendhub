@@ -101,6 +101,40 @@ function createBuilderScope() {
     return scope;
 }
 
+function importBuilderList(scope, input) {
+    scope.importModel = {
+        input,
+        lists: [],
+        message: "",
+        loading: true
+    };
+    scope.onImportInputChanged();
+    return scope.importModel.lists[0].variants[0];
+}
+
+function createCompactImport(scope, version, sentinelIndex, sentinelId) {
+    const encoder = createEncoder();
+    const baseStats = Array(6).fill(encoder.fromNumber(30, 2)).join("");
+    const ksmStats = "0".repeat(6);
+    const questSelections = "_".repeat(version >= 3 ? 3 : 2);
+    const itemCount = version === 2 ? 29 : scope.slotOrder.length;
+    const items = Array(itemCount).fill("_");
+    items[sentinelIndex] = encoder.fromNumber(sentinelId, 3);
+    return `${version}*Version ${version}~Original~${baseStats}${ksmStats}` +
+        `${questSelections}${items.join("")}`;
+}
+
+function createLegacyImport(scope, name, sentinelIndex, sentinelId) {
+    const items = Array(scope.slotOrder.length).fill("0");
+    items[sentinelIndex] = String(sentinelId);
+    const fields = [
+        "30", "30", "30", "30", "30", "30",
+        "-1", "-1", "-1",
+        ...items
+    ];
+    return `${name}!Original_${fields.join("_")}`;
+}
+
 function equipStats(scope, overrides) {
     const items = Array.from({length: 25}, function() {
         return {};
@@ -232,7 +266,7 @@ test("builder version 5 round-trips quest resources without shifting items", fun
         spirit: 30,
         quest_hp: 17,
         quest_mana: 23,
-        quest_move: 29
+        quest_move: 300000
     });
     list.items[0] = {id: 1144, slot: 0, name: "Test Item"};
     scope.allLists = [{name: "Quest Hero", variants: [list]}];
@@ -242,6 +276,8 @@ test("builder version 5 round-trips quest resources without shifting items", fun
 
     scope.onExportClicked();
     assert.match(scope.exportModel.curVariant, /^5\*/);
+    const compactData = scope.exportModel.curVariant.split("~")[2];
+    assert.equal(compactData.slice(21, 30), "00H00Nzzz");
 
     scope.importModel = {
         input: scope.exportModel.curVariant,
@@ -254,43 +290,93 @@ test("builder version 5 round-trips quest resources without shifting items", fun
     const imported = scope.importModel.lists[0].variants[0];
     assert.equal(imported.baseStats.quest_hp, 17);
     assert.equal(imported.baseStats.quest_mana, 23);
-    assert.equal(imported.baseStats.quest_move, 29);
+    assert.equal(imported.baseStats.quest_move, 238327);
     assert.equal(imported.items.length, scope.slotOrder.length);
     assert.equal(imported.items[0].id, 1144);
 });
 
-test("builder version 4 imports default quest resources without shifting items", function() {
+test("builder version 1 imports its legacy sentinel without shifting items", function() {
     const scope = createBuilderScope();
-    const encoder = createEncoder();
-    const baseStats = Array(6).fill(encoder.fromNumber(30, 2)).join("");
-    const ksmStats = "0".repeat(6);
-    const questSelectionsAndItems = "_".repeat(3 + scope.slotOrder.length);
-    scope.importModel = {
-        input: `4*Legacy~Original~${baseStats}${ksmStats}${questSelectionsAndItems}`,
-        lists: [],
-        message: "",
-        loading: true
-    };
+    const imported = importBuilderList(
+        scope,
+        `1*${createLegacyImport(scope, "Version One", 1, 101)}`
+    );
 
-    scope.onImportInputChanged();
-
-    const imported = scope.importModel.lists[0].variants[0];
     assert.equal(imported.baseStats.quest_hp, 0);
     assert.equal(imported.baseStats.quest_mana, 0);
     assert.equal(imported.baseStats.quest_move, 0);
     assert.equal(imported.items.length, scope.slotOrder.length);
-    assert.equal(imported.items[0].id, 0);
+    assert.equal(imported.items[1].id, 101);
+    assert.equal(imported.items[1].slot, 1);
 });
 
-test("legacy builder imports default quest resources without shifting items", function() {
+test("builder version 2 imports its compact sentinel without shifting items", function() {
     const scope = createBuilderScope();
-    const fields = [
-        "30", "30", "30", "30", "30", "30",
-        "-1", "-1", "-1",
-        ...Array(scope.slotOrder.length).fill("0")
-    ];
+    const imported = importBuilderList(
+        scope,
+        createCompactImport(scope, 2, 5, 202)
+    );
+
+    assert.equal(imported.baseStats.quest_hp, 0);
+    assert.equal(imported.baseStats.quest_mana, 0);
+    assert.equal(imported.baseStats.quest_move, 0);
+    assert.equal(imported.items.length, scope.slotOrder.length);
+    assert.equal(imported.items[5].id, 202);
+    assert.equal(imported.items[5].slot, 3);
+});
+
+test("builder version 3 imports its compact sentinel without shifting items", function() {
+    const scope = createBuilderScope();
+    const imported = importBuilderList(
+        scope,
+        createCompactImport(scope, 3, 11, 303)
+    );
+
+    assert.equal(imported.baseStats.quest_hp, 0);
+    assert.equal(imported.baseStats.quest_mana, 0);
+    assert.equal(imported.baseStats.quest_move, 0);
+    assert.equal(imported.items.length, scope.slotOrder.length);
+    assert.equal(imported.items[11].id, 303);
+    assert.equal(imported.items[11].slot, 9);
+});
+
+test("builder version 4 imports its compact sentinel without shifting items", function() {
+    const scope = createBuilderScope();
+    const imported = importBuilderList(
+        scope,
+        createCompactImport(scope, 4, 16, 404)
+    );
+
+    assert.equal(imported.baseStats.quest_hp, 0);
+    assert.equal(imported.baseStats.quest_mana, 0);
+    assert.equal(imported.baseStats.quest_move, 0);
+    assert.equal(imported.items.length, scope.slotOrder.length);
+    assert.equal(imported.items[16].id, 404);
+    assert.equal(imported.items[16].slot, 14);
+});
+
+test("unversioned legacy builder imports its sentinel without shifting items", function() {
+    const scope = createBuilderScope();
+    const imported = importBuilderList(
+        scope,
+        createLegacyImport(scope, "Legacy", 22, 505)
+    );
+
+    assert.equal(imported.baseStats.quest_hp, 0);
+    assert.equal(imported.baseStats.quest_mana, 0);
+    assert.equal(imported.baseStats.quest_move, 0);
+    assert.equal(imported.items.length, scope.slotOrder.length);
+    assert.equal(imported.items[22].id, 505);
+    assert.equal(imported.items[22].slot, 18);
+});
+
+test("unversioned legacy builder imports preserve multiple lists", function() {
+    const scope = createBuilderScope();
     scope.importModel = {
-        input: `Legacy!Original_${fields.join("_")}`,
+        input: [
+            createLegacyImport(scope, "Legacy One", 2, 606),
+            createLegacyImport(scope, "Legacy Two", 3, 707)
+        ].join("*"),
         lists: [],
         message: "",
         loading: true
@@ -298,12 +384,9 @@ test("legacy builder imports default quest resources without shifting items", fu
 
     scope.onImportInputChanged();
 
-    const imported = scope.importModel.lists[0].variants[0];
-    assert.equal(imported.baseStats.quest_hp, 0);
-    assert.equal(imported.baseStats.quest_mana, 0);
-    assert.equal(imported.baseStats.quest_move, 0);
-    assert.equal(imported.items.length, scope.slotOrder.length);
-    assert.equal(imported.items[0].id, 0);
+    assert.equal(scope.importModel.lists.length, 2);
+    assert.equal(scope.importModel.lists[0].variants[0].items[2].id, 606);
+    assert.equal(scope.importModel.lists[1].variants[0].items[3].id, 707);
 });
 
 test("builder rejects malformed version-5 quest resource data", function() {
@@ -320,5 +403,68 @@ test("builder rejects malformed version-5 quest resource data", function() {
 
     assert.throws(function() {
         scope.onImportInputChanged();
+    }, /Invalid list/);
+});
+
+test("builder rejects truncated version-5 quest data followed by a valid item ID", function() {
+    const scope = createBuilderScope();
+    const encoder = createEncoder();
+    const baseStats = Array(6).fill(encoder.fromNumber(30, 2)).join("");
+    const ksmStats = "0".repeat(6);
+    const items = Array(scope.slotOrder.length).fill("_");
+    items[0] = encoder.fromNumber(1144, 3);
+
+    assert.throws(function() {
+        importBuilderList(
+            scope,
+            `5*Truncated~Original~${baseStats}${ksmStats}___000000${items.join("")}`
+        );
+    }, /Invalid list/);
+});
+
+test("builder rejects partial version-5 item tokens", function() {
+    const scope = createBuilderScope();
+    const encoder = createEncoder();
+    const baseStats = Array(6).fill(encoder.fromNumber(30, 2)).join("");
+    const ksmStats = "0".repeat(6);
+    const items = Array(scope.slotOrder.length).fill("_");
+    items[items.length - 1] = "0I";
+
+    assert.throws(function() {
+        importBuilderList(
+            scope,
+            `5*Partial~Original~${baseStats}${ksmStats}___000000000${items.join("")}`
+        );
+    }, /Invalid list/);
+});
+
+test("builder rejects partial version-5 rune tokens that consume the next item", function() {
+    const scope = createBuilderScope();
+    const encoder = createEncoder();
+    const baseStats = Array(6).fill(encoder.fromNumber(30, 2)).join("");
+    const ksmStats = "0".repeat(6);
+    const items = Array(scope.slotOrder.length + 1).fill("_");
+    items[3] = "-AAAA";
+
+    assert.throws(function() {
+        importBuilderList(
+            scope,
+            `5*Partial Rune~Original~${baseStats}${ksmStats}___000000000${items.join("")}`
+        );
+    }, /Invalid list/);
+});
+
+test("builder rejects version-5 item over-counts", function() {
+    const scope = createBuilderScope();
+    const encoder = createEncoder();
+    const baseStats = Array(6).fill(encoder.fromNumber(30, 2)).join("");
+    const ksmStats = "0".repeat(6);
+    const items = "_".repeat(scope.slotOrder.length + 1);
+
+    assert.throws(function() {
+        importBuilderList(
+            scope,
+            `5*Overflow~Original~${baseStats}${ksmStats}___000000000${items}`
+        );
     }, /Invalid list/);
 });

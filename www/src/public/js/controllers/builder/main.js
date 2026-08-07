@@ -411,6 +411,10 @@
             var items = [];
             var itemIndex = 0;
             while (listStr.length > 0) {
+                if (listVersion >= 5 && itemIndex >= $scope.slotOrder.length) {
+                    throw "Invalid list.";
+                }
+
                 let isLocked = false;
                 if (listStr[0] === '.') {
                     isLocked = true;
@@ -426,6 +430,10 @@
                     listStr = listStr.substring(1);
                 }
                 else if (listStr[0] === '-') {
+                    if (listVersion >= 5 && !(/^-[A-Y]{5}/).test(listStr)) {
+                        throw "Invalid list.";
+                    }
+
                     items.push({
                         id: $scope.runeCharmId,
                         slot: $scope.slotOrder[itemIndex],
@@ -447,6 +455,10 @@
                     listStr = listStr.substring(6);
                 }
                 else {
+                    if (listVersion >= 5 && !(/^[0-9A-Za-z]{3}/).test(listStr)) {
+                        throw "Invalid list.";
+                    }
+
                     items.push({
                         id: encoder.toNumber(listStr.slice(0,3)),
                         slot: $scope.slotOrder[itemIndex],
@@ -455,6 +467,10 @@
                     listStr = listStr.substring(3);
                 }
                 itemIndex++;
+            }
+
+            if (listVersion >= 5 && itemIndex !== $scope.slotOrder.length) {
+                throw "Invalid list.";
             }
 
             if (itemIndex < $scope.slotOrder.length) {
@@ -1114,8 +1130,7 @@
 
                 // check if list has a version number
                 var asteriskIdx = importStr.indexOf("*");
-                var tildeIdx = importStr.indexOf("~");
-                if (asteriskIdx < tildeIdx && asteriskIdx != -1) {
+                if (/^\d+\*/.test(importStr)) {
                     listVersion = Number(importStr.substring(0, asteriskIdx));
                     importStr = importStr.slice(asteriskIdx);
                 }
@@ -1123,7 +1138,10 @@
                 var listStrs = importStr.split("*").filter(function(el) {return el.length != 0});;
                 for (let i = 0; i < listStrs.length; ++i) {
                     var newList;
-                    if (listVersion > 0) {
+                    if (listVersion === 1) {
+                        newList = createListFromString(listStrs[i]);
+                    }
+                    else if (listVersion > 1) {
                         newList = createListFromStringV2(listStrs[i], listVersion);
                     }
                     else {
