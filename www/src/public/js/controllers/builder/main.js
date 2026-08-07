@@ -5,7 +5,7 @@
         /** Initializes the controller. */
         $scope.initialize = function() {
             $scope.exceptionEncountered = false;
-            $scope.listVer = 4;
+            $scope.listVer = 5;
             exceptionService.addCallback(function (exception, cause) {
                 $scope.exceptionEncountered = true;
             });
@@ -291,6 +291,10 @@
             newList.baseStats.hazelnut = Number(each[0]);
 			each.shift();
 
+            newList.baseStats.quest_hp = 0;
+            newList.baseStats.quest_mana = 0;
+            newList.baseStats.quest_move = 0;
+
             newList.ksmStats = {
                 strength: 0,
                 mind: 0,
@@ -380,6 +384,23 @@
             }
             else {
                 baseStats.hazelnut = 5;
+            }
+
+            baseStats.quest_hp = 0;
+            baseStats.quest_mana = 0;
+            baseStats.quest_move = 0;
+
+            // v5: character-specific quest resource bonuses
+            if (listVersion >= 5) {
+                const encodedQuestResources = listStr.slice(0, 9);
+                if (!(/^[0-9A-Za-z]{9}$/).test(encodedQuestResources)) {
+                    throw "Invalid list.";
+                }
+
+                baseStats.quest_hp = encoder.toNumber(encodedQuestResources.slice(0, 3));
+                baseStats.quest_mana = encoder.toNumber(encodedQuestResources.slice(3, 6));
+                baseStats.quest_move = encoder.toNumber(encodedQuestResources.slice(6, 9));
+                listStr = listStr.substring(9);
             }
             
             runeCharms.charm1 = "AAAAA";
@@ -814,6 +835,14 @@
                 listCookieStr += encoder.fromNumber(list.baseStats.hazelnut,1);
 			else
                 listCookieStr += "_";    
+
+            const questResourceStats = ["quest_hp", "quest_mana", "quest_move"];
+            for (const questResourceStat of questResourceStats) {
+                const value = gameStats.normalizeQuestResourceBonus(
+                    list.baseStats[questResourceStat]
+                );
+                listCookieStr += encoder.fromNumber(value, 3);
+            }
 
             var charmStr = "";
 

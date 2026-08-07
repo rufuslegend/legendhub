@@ -6,6 +6,27 @@ const vm = require("node:vm");
 
 const gameStats = require("../src/public/js/services/game-stats");
 
+function createEncoder() {
+    const digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+    return {
+        fromNumber: function(number, minLength) {
+            let residual = Math.floor(Math.abs(Number(number) || 0));
+            let result = "";
+            do {
+                result = digits[residual % digits.length] + result;
+                residual = Math.floor(residual / digits.length);
+            } while (residual > 0);
+            return result.padStart(minLength || 0, "0");
+        },
+        toNumber: function(value) {
+            return Array.from(value).reduce(function(total, digit) {
+                return (total * digits.length) + digits.indexOf(digit);
+            }, 0);
+        }
+    };
+}
+
 function createBuilderScope() {
     let builderController;
     const angular = {
@@ -21,7 +42,8 @@ function createBuilderScope() {
     };
     const $ = function() {
         return {
-            on: function() {}
+            on: function() {},
+            modal: function() {}
         };
     };
     const browserContext = {
@@ -55,7 +77,7 @@ function createBuilderScope() {
         {},
         function() {},
         {selectShortOptions: {slot: []}},
-        {},
+        createEncoder(),
         {addCallback: function() {}},
         gameStats
     );
@@ -74,6 +96,7 @@ function createBuilderScope() {
     ].map(function(statName) {
         return {var: statName, type: "int"};
     });
+    scope.allLists = [];
 
     return scope;
 }
@@ -195,4 +218,107 @@ test("builder stats block renders the three quest resource inputs", function() {
             `id="${id}"[^>]*ng-model="selectedList\\.baseStats\\.${property}"`
         ));
     }
+});
+
+test("builder version 5 round-trips quest resources without shifting items", function() {
+    const scope = createBuilderScope();
+    const list = scope.getDefaultList("Original");
+    Object.assign(list.baseStats, {
+        strength: 30,
+        mind: 30,
+        dexterity: 30,
+        constitution: 30,
+        perception: 30,
+        spirit: 30,
+        quest_hp: 17,
+        quest_mana: 23,
+        quest_move: 29
+    });
+    list.items[0] = {id: 1144, slot: 0, name: "Test Item"};
+    scope.allLists = [{name: "Quest Hero", variants: [list]}];
+    scope.selectedListIndex = 0;
+    scope.selectedListVariantIndex = 0;
+    scope.selectedList = list;
+
+    scope.onExportClicked();
+    assert.match(scope.exportModel.curVariant, /^5\*/);
+
+    scope.importModel = {
+        input: scope.exportModel.curVariant,
+        lists: [],
+        message: "",
+        loading: true
+    };
+    scope.onImportInputChanged();
+
+    const imported = scope.importModel.lists[0].variants[0];
+    assert.equal(imported.baseStats.quest_hp, 17);
+    assert.equal(imported.baseStats.quest_mana, 23);
+    assert.equal(imported.baseStats.quest_move, 29);
+    assert.equal(imported.items.length, scope.slotOrder.length);
+    assert.equal(imported.items[0].id, 1144);
+});
+
+test("builder version 4 imports default quest resources without shifting items", function() {
+    const scope = createBuilderScope();
+    const encoder = createEncoder();
+    const baseStats = Array(6).fill(encoder.fromNumber(30, 2)).join("");
+    const ksmStats = "0".repeat(6);
+    const questSelectionsAndItems = "_".repeat(3 + scope.slotOrder.length);
+    scope.importModel = {
+        input: `4*Legacy~Original~${baseStats}${ksmStats}${questSelectionsAndItems}`,
+        lists: [],
+        message: "",
+        loading: true
+    };
+
+    scope.onImportInputChanged();
+
+    const imported = scope.importModel.lists[0].variants[0];
+    assert.equal(imported.baseStats.quest_hp, 0);
+    assert.equal(imported.baseStats.quest_mana, 0);
+    assert.equal(imported.baseStats.quest_move, 0);
+    assert.equal(imported.items.length, scope.slotOrder.length);
+    assert.equal(imported.items[0].id, 0);
+});
+
+test("legacy builder imports default quest resources without shifting items", function() {
+    const scope = createBuilderScope();
+    const fields = [
+        "30", "30", "30", "30", "30", "30",
+        "-1", "-1", "-1",
+        ...Array(scope.slotOrder.length).fill("0")
+    ];
+    scope.importModel = {
+        input: `Legacy!Original_${fields.join("_")}`,
+        lists: [],
+        message: "",
+        loading: true
+    };
+
+    scope.onImportInputChanged();
+
+    const imported = scope.importModel.lists[0].variants[0];
+    assert.equal(imported.baseStats.quest_hp, 0);
+    assert.equal(imported.baseStats.quest_mana, 0);
+    assert.equal(imported.baseStats.quest_move, 0);
+    assert.equal(imported.items.length, scope.slotOrder.length);
+    assert.equal(imported.items[0].id, 0);
+});
+
+test("builder rejects malformed version-5 quest resource data", function() {
+    const scope = createBuilderScope();
+    const encoder = createEncoder();
+    const baseStats = Array(6).fill(encoder.fromNumber(30, 2)).join("");
+    const ksmStats = "0".repeat(6);
+    scope.importModel = {
+        input: `5*Broken~Original~${baseStats}${ksmStats}${"_".repeat(12)}`,
+        lists: [],
+        message: "",
+        loading: true
+    };
+
+    assert.throws(function() {
+        scope.onImportInputChanged();
+    }, /Invalid list/);
 });
