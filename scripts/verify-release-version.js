@@ -30,12 +30,27 @@ function verifyReleaseVersion(repoRoot) {
     const packageLock = readJson(path.join(repoRoot, "www/package-lock.json"));
     const readme = readFile(path.join(repoRoot, "README.md"));
     const headings = [...changelog.matchAll(/^## \[([^\]]+)\](?: - \d{4}-\d{2}-\d{2})?$/gm)];
-    const changelogMatch = headings[0]?.[1] === "Unreleased" ? headings[1] : headings[0];
+    const releaseHeadings = headings.filter((heading) => heading[1] !== "Unreleased");
+    const changelogMatch = releaseHeadings[0];
 
     if (!changelogMatch || !semanticVersion.test(changelogMatch[1] || ""))
         throw new Error("CHANGELOG.md does not begin with a valid semantic version heading");
 
     const version = changelogMatch[1];
+    const beginningMatch = changelog.match(
+        /documented here beginning\s+with version ([0-9A-Za-z.+-]+)\./);
+    const beginningVersion = beginningMatch?.[1];
+    const oldestVersion = releaseHeadings.at(-1)?.[1];
+
+    if (!beginningVersion || !semanticVersion.test(beginningVersion))
+        throw new Error("CHANGELOG.md does not contain a valid beginning version");
+    if (!oldestVersion || !semanticVersion.test(oldestVersion))
+        throw new Error("CHANGELOG.md does not end with a valid semantic version heading");
+    if (beginningVersion !== oldestVersion) {
+        throw new Error(
+            `CHANGELOG.md beginning version ${beginningVersion} does not match oldest release ${oldestVersion}`);
+    }
+
     const observed = [
         ["www/package.json", packageJson.version],
         ["www/package-lock.json", packageLock.version],
