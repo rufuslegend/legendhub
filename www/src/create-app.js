@@ -43,7 +43,7 @@ module.exports = function createApp(options = {}) {
                 frameAncestors: [
                     "'self'",
                     "https://play.legendmud.org",
-                    "https://legend.dunwichmass.com:8000",
+                    "https://legend.dunwichmass.com",
                     "http://localhost:5173"
                 ]
             }

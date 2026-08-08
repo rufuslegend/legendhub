@@ -61,7 +61,7 @@ test("application HTTP smoke test", async function(t) {
         assert.equal(
             response.headers.get("content-security-policy"),
             "frame-ancestors 'self' https://play.legendmud.org " +
-                "https://legend.dunwichmass.com:8000 http://localhost:5173"
+                "https://legend.dunwichmass.com http://localhost:5173"
         );
         assert.equal(response.headers.get("strict-transport-security"), null);
         const body = await response.text();
