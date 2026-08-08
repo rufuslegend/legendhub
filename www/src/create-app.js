@@ -33,9 +33,22 @@ module.exports = function createApp(options = {}) {
     app.disable("x-powered-by");
 
     app.use(helmet({
-        // Existing views use inline and third-party scripts. Add CSP after those
-        // scripts have been inventoried and migrated to a nonce-based policy.
-        contentSecurityPolicy: false,
+        contentSecurityPolicy: {
+            // Existing views use inline and third-party scripts, so limit this
+            // policy to the framing restriction until those are inventoried.
+            useDefaults: false,
+            directives: {
+                defaultSrc:
+                    helmet.contentSecurityPolicy.dangerouslyDisableDefaultSrc,
+                frameAncestors: [
+                    "'self'",
+                    "https://play.legendmud.org",
+                    "https://legend.dunwichmass.com:8000",
+                    "http://localhost:5173"
+                ]
+            }
+        },
+        frameguard: false,
         strictTransportSecurity: environment === "production"
     }));
     app.use(compression());

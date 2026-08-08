@@ -57,7 +57,12 @@ test("application HTTP smoke test", async function(t) {
         assert.equal(response.headers.get("content-encoding"), "gzip");
         assert.equal(response.headers.get("x-powered-by"), null);
         assert.equal(response.headers.get("x-content-type-options"), "nosniff");
-        assert.equal(response.headers.get("x-frame-options"), "SAMEORIGIN");
+        assert.equal(response.headers.get("x-frame-options"), null);
+        assert.equal(
+            response.headers.get("content-security-policy"),
+            "frame-ancestors 'self' https://play.legendmud.org " +
+                "https://legend.dunwichmass.com:8000 http://localhost:5173"
+        );
         assert.equal(response.headers.get("strict-transport-security"), null);
         const body = await response.text();
         assert.match(body, /Welcome to LegendHUB!/);

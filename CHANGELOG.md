@@ -5,6 +5,10 @@ with version 2.6.0.
 
 ## [2.6.1-beta] - 2026-08-07
 
+### Changed
+
+- Allowed approved LegendMUD proxy and development sites to embed LegendHUB while continuing to block other framing origins.
+
 ### Fixed
 
 - Corrected the public changelog release text after the 2.6.0 promotion.
