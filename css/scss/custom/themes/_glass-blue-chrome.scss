@@ -1,0 +1,193 @@
+:root {
+  --glass-line: #{$glass-line};
+  --glass-glow: rgba(70, 140, 220, .35);
+  --glass-wash: rgba(88, 170, 255, .14);
+  --glass-well: #{$glass-well};
+  --glass-header-gradient: linear-gradient(
+    to bottom,
+    #8fb8dd 0%,
+    #4a7dab 8%,
+    #2b5580 45%,
+    #12293f 50%,
+    #0d1f30 100%
+  );
+  --glass-button-gradient: linear-gradient(
+    to bottom,
+    rgba(150, 190, 230, .35) 0%,
+    rgba(70, 110, 160, .25) 45%,
+    rgba(8, 20, 38, .55) 50%,
+    rgba(3, 10, 22, .65) 100%
+  );
+}
+
+body {
+  background-color: $glass-backdrop;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.navbar-brand,
+.card-header,
+.modal-title,
+.popover-header {
+  font-family: $headings-font-family;
+  font-weight: 700;
+  letter-spacing: .025em;
+}
+
+.navbar,
+.card-header,
+.modal-header,
+.popover-header,
+.categoryListContainer h2,
+.table thead th {
+  color: $glass-ink;
+  text-shadow: 0 1px 2px rgba($black, .7);
+  background-color: #0d1f30;
+  background-image: var(--glass-header-gradient);
+  border-color: $glass-line;
+  box-shadow: inset 0 1px 0 rgba($white, .4), inset 0 -1px 0 rgba($black, .6), 0 1px 3px rgba($black, .6);
+}
+
+.navbar.bg-dark {
+  background-color: #0d1f30 !important;
+}
+
+.breadcrumbNav.bg-dark {
+  background-color: $glass-surface !important;
+}
+
+.breadcrumbNav,
+.card,
+.jumbotron,
+.dropdown-menu,
+.modal-content,
+.popover,
+.list-group,
+.categoryListContainer {
+  background-color: $glass-surface;
+  border-color: $glass-line;
+  box-shadow: 0 0 6px var(--glass-glow);
+}
+
+.card-body,
+.modal-body,
+.popover-body,
+.list-group-item {
+  background-color: $glass-surface;
+}
+
+.card-footer,
+.modal-footer,
+.dropdown-divider,
+.list-group-item {
+  border-color: rgba($glass-line, .7);
+}
+
+.btn {
+  text-shadow: 0 1px 2px rgba($black, .7);
+  background-image: var(--glass-button-gradient);
+  border-color: rgba(143, 184, 221, .8);
+  box-shadow: inset 0 1px 0 rgba($white, .25);
+}
+
+.btn:hover {
+  filter: brightness(1.14);
+  box-shadow: inset 0 1px 0 rgba($white, .3), 0 0 6px rgba(70, 140, 220, .45);
+}
+
+/* stylelint-disable selector-not-notation */
+.btn:not(:disabled):not(.disabled):active,
+.btn:not(:disabled):not(.disabled).active {
+  filter: brightness(.9);
+  box-shadow: inset 0 2px 4px rgba($black, .65);
+}
+/* stylelint-enable selector-not-notation */
+
+.form-control,
+.custom-select,
+.custom-file-label,
+.input-group-text {
+  color: $glass-ink;
+  background-color: $glass-well;
+  border-color: $glass-line;
+  box-shadow: inset 0 1px 3px rgba($black, .8), 0 1px 0 rgba($white, .05);
+}
+
+.form-control:focus,
+.custom-select:focus,
+.custom-file-input:focus ~ .custom-file-label,
+.btn:focus,
+.btn.focus,
+.page-link:focus {
+  border-color: #58aaff;
+  outline: 0;
+  box-shadow: 0 0 0 .2rem rgba(88, 170, 255, .35);
+}
+
+.table {
+  color: $body-color;
+  border-color: rgba($glass-line, .7);
+}
+
+.table th,
+.table td {
+  border-color: rgba($glass-line, .7);
+}
+
+.table-hover tbody tr:hover,
+.dropdown-item:hover,
+.dropdown-item:focus,
+.list-group-item-action:hover,
+.list-group-item-action:focus {
+  color: $white;
+  background-color: var(--glass-wash);
+}
+
+.pagination,
+.alert,
+.progress,
+.badge {
+  border-color: $glass-line;
+  box-shadow: inset 0 1px 0 rgba($white, .12);
+}
+
+.progress {
+  background-color: $glass-well;
+  box-shadow: inset 0 1px 3px rgba($black, .8);
+}
+
+.modal-content,
+.popover,
+.tooltip-inner {
+  border: 1px solid $glass-line;
+  border-radius: $border-radius-lg;
+}
+
+.tooltip-inner {
+  color: $glass-ink;
+  background-color: $glass-well;
+  box-shadow: 0 0 6px var(--glass-glow);
+}
+
+.cookie-consent-banner {
+  background-color: rgba(2, 5, 10, .98);
+  border-top: 1px solid $glass-line;
+  box-shadow: 0 -2px 8px var(--glass-glow);
+}
+
+@media (max-width: 767px) {
+  .categoryListContainer {
+    background-color: $glass-surface;
+    border-right-color: $glass-line;
+  }
+
+  .categoryListClose {
+    color: $glass-ink;
+    text-shadow: 0 0 6px rgba(70, 140, 220, .7);
+  }
+}

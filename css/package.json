@@ -7,7 +7,7 @@
     "build:compile": "sass --style expanded --source-map --embed-sources scss:dist/css",
     "build:lint": "stylelint \"scss/**/*.scss\"",
     "build:prefix": "postcss --config build/postcss.config.js --replace \"dist/css/*.css\" \"!dist/css/*.min.css\"",
-    "build:minify": "lightningcss --minify --sourcemap --output-file dist/css/bootstrap-light.min.css dist/css/bootstrap-light.css && lightningcss --minify --sourcemap --output-file dist/css/bootstrap-dark.min.css dist/css/bootstrap-dark.css && lightningcss --minify --sourcemap --output-file dist/css/bootstrap-solarized-dark.min.css dist/css/bootstrap-solarized-dark.css",
+    "build:minify": "lightningcss --minify --sourcemap --output-file dist/css/bootstrap-light.min.css dist/css/bootstrap-light.css && lightningcss --minify --sourcemap --output-file dist/css/bootstrap-dark.min.css dist/css/bootstrap-dark.css && lightningcss --minify --sourcemap --output-file dist/css/bootstrap-solarized-dark.min.css dist/css/bootstrap-solarized-dark.css && lightningcss --minify --sourcemap --output-file dist/css/bootstrap-glass-blue.min.css dist/css/bootstrap-glass-blue.css",
     "build:copy": "shx cp dist/css/*.min.css dist/css/*.min.css.map ../www/src/public/css/",
     "test": "npm run build:lint"
   },

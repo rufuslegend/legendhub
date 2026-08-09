@@ -1,0 +1,119 @@
+$white: #fff;
+$gray-100: #eaf4ff;
+$gray-200: #d7e5f2;
+$gray-300: #adc3d8;
+$gray-400: #829db7;
+$gray-500: #607d99;
+$gray-600: #46627e;
+$gray-700: #18314a;
+$gray-800: #0a1522;
+$gray-900: #05070b;
+$black: #000;
+
+$blue: #4a8fdd;
+$indigo: #6c71c4;
+$purple: #8d63c7;
+$pink: #d35b8c;
+$red: #d84545;
+$orange: #d98235;
+$yellow: #d6ad32;
+$green: #4fa85d;
+$teal: #38a99b;
+$cyan: #4aa9c8;
+
+$glass-line: #3a6a99;
+$glass-backdrop: #05070b;
+$glass-surface: #060b12;
+$glass-well: #02050a;
+$glass-ink: #eaf4ff;
+
+$primary: $blue;
+$secondary: $gray-600;
+$success: $green;
+$info: $cyan;
+$warning: $yellow;
+$danger: $red;
+$light: $gray-200;
+$dark: $gray-800;
+
+$body-bg: #05070b;
+$body-color: $gray-200;
+$link-color: #7fc4ff;
+$link-hover-color: #aad8ff;
+$text-muted: $gray-400;
+
+$border-color: $glass-line;
+$border-radius: .5rem;
+$border-radius-lg: .625rem;
+$border-radius-sm: .375rem;
+$box-shadow: 0 0 .375rem rgba(70, 140, 220, .35);
+
+$font-family-sans-serif: -apple-system, "BlinkMacSystemFont", "Segoe UI", "Roboto",
+  "Helvetica Neue", "Arial", sans-serif;
+$headings-font-family: "Palatino Linotype", "Palatino", "Georgia", serif;
+$headings-font-weight: 700;
+$headings-color: $glass-ink;
+
+$component-active-color: $glass-ink;
+$component-active-bg: $primary;
+$input-btn-focus-color: rgba(88, 170, 255, .35);
+$input-btn-focus-box-shadow: 0 0 0 .2rem $input-btn-focus-color;
+
+$table-color: $body-color;
+$table-bg: transparent;
+$table-accent-bg: rgba($blue, .08);
+$table-hover-bg: rgba($blue, .14);
+$table-border-color: rgba($glass-line, .7);
+$table-dark-bg: $glass-well;
+$table-dark-border-color: $glass-line;
+$table-dark-color: $body-color;
+
+$input-bg: $glass-well;
+$input-disabled-bg: $gray-700;
+$input-color: $glass-ink;
+$input-border-color: $glass-line;
+$input-focus-bg: #040b14;
+$input-focus-color: $white;
+$input-focus-border-color: #58aaff;
+$input-placeholder-color: $gray-500;
+$input-group-addon-bg: $gray-700;
+$input-group-addon-color: $glass-ink;
+
+$dropdown-bg: rgba(4, 9, 15, .98);
+$dropdown-border-color: $glass-line;
+$dropdown-link-color: $body-color;
+$dropdown-link-hover-color: $white;
+$dropdown-link-hover-bg: rgba($blue, .2);
+$dropdown-divider-bg: rgba($glass-line, .65);
+
+$pagination-bg: $gray-800;
+$pagination-border-color: $glass-line;
+$pagination-color: $glass-ink;
+$pagination-hover-bg: $gray-700;
+$pagination-hover-border-color: #58aaff;
+$pagination-disabled-bg: $glass-well;
+$pagination-disabled-color: $gray-500;
+$pagination-disabled-border-color: $gray-600;
+
+$jumbotron-bg: $glass-surface;
+$card-border-color: $glass-line;
+$card-bg: $glass-surface;
+$card-cap-bg: $gray-700;
+$list-group-bg: $glass-surface;
+$list-group-border-color: rgba($glass-line, .7);
+$list-group-hover-bg: $gray-800;
+$list-group-action-color: $body-color;
+
+$modal-content-bg: $glass-surface;
+$modal-content-border-color: $glass-line;
+$modal-header-border-color: $glass-line;
+$modal-footer-border-color: $glass-line;
+$popover-bg: $glass-surface;
+$popover-border-color: $glass-line;
+$popover-header-bg: $gray-700;
+$tooltip-bg: $gray-200;
+$tooltip-color: $glass-well;
+$close-color: $glass-ink;
+$close-text-shadow: 0 1px 0 $black;
+$progress-bg: $glass-well;
+$breadcrumb-bg: $gray-800;

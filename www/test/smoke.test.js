@@ -89,6 +89,10 @@ test("application HTTP smoke test", async function(t) {
 
         const sourceMapResponse = await fetch(`${baseUrl}/css/bootstrap-light.min.css.map`);
         assert.equal(sourceMapResponse.status, 200);
+
+        const glassMapResponse = await fetch(
+            `${baseUrl}/css/bootstrap-glass-blue.min.css.map`);
+        assert.equal(glassMapResponse.status, 200);
     });
 
     await t.test("serves the GraphQL endpoint", async function() {
