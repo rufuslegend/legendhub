@@ -1,6 +1,19 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+
+async function renderHome(cookies = {}) {
+    const ejs = require("ejs");
+    return ejs.renderFile(path.join(__dirname, "../src/views/index.ejs"), {
+        cookies,
+        showDiscordWidget: false,
+        title: "Home",
+        url: {path: "/"},
+        user: null,
+        version: "test"
+    });
+}
 
 test("PHP-compatible password hashes can be created and verified", function() {
     const passwords = require("../src/routes/api/php-password");
@@ -12,21 +25,41 @@ test("PHP-compatible password hashes can be created and verified", function() {
 });
 
 test("EJS renders the home page and its shared includes", async function() {
-    const ejs = require("ejs");
-    const html = await ejs.renderFile(path.join(__dirname, "../src/views/index.ejs"), {
-        cookies: {},
-        showDiscordWidget: false,
-        title: "Home",
-        url: {
-            path: "/"
-        },
-        user: null,
-        version: "test"
-    });
+    const html = await renderHome();
 
     assert.match(html, /Welcome to LegendHUB!/);
     assert.match(html, /Builder/);
     assert.match(html, /Cookie Policy/);
+});
+
+test("Glass Blue is the default while saved themes remain unchanged", async function() {
+    const defaultHtml = await renderHome();
+    assert.match(defaultHtml,
+        /href="\/css\/bootstrap-glass-blue\.min\.css\?v=test"/);
+    assert.match(defaultHtml,
+        /<meta property="theme-color" content="#0d1f30" \/>/);
+
+    for (const theme of ["light", "dark", "solarized-dark"]) {
+        const html = await renderHome({theme});
+        assert.match(html, new RegExp(
+            `href="/css/bootstrap-${theme}\\.min\\.css\\?v=test"`));
+        assert.doesNotMatch(html, /bootstrap-glass-blue\.min\.css/);
+    }
+});
+
+test("theme chooser exposes Glass Blue and preserves the existing choices", function() {
+    const source = fs.readFileSync(path.join(
+        __dirname, "../src/public/js/apps/legendwiki-app.js"), "utf8");
+    assert.match(source,
+        /\$scope\.themes = \['Glass Blue', 'Light', 'Dark', 'Solarized Dark'\]/);
+    assert.match(source, /toLowerCase\(\)\.replace\(\/\\s\/g, '-'\)/);
+});
+
+test("installable app metadata uses the Glass Blue browser colors", function() {
+    const manifest = JSON.parse(fs.readFileSync(path.join(
+        __dirname, "../src/public/site.webmanifest"), "utf8"));
+    assert.equal(manifest.theme_color, "#0d1f30");
+    assert.equal(manifest.background_color, "#05070b");
 });
 
 test("fatal error page renders without request locals", async function() {

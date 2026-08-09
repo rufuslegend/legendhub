@@ -448,7 +448,7 @@ HeaderController.$inject = ["$scope", "$http", "$cookies", "$compile", "breadcru
 
 function HeaderController($scope, $http, $cookies, $compile, breadcrumb) {
 	$scope.initialize = function() {
-        $scope.themes = ['Light', 'Dark', 'Solarized Dark'];
+        $scope.themes = ['Glass Blue', 'Light', 'Dark', 'Solarized Dark'];
 		$scope.bcFactory = breadcrumb;
 		$scope.returnUrl = window.location.pathname + window.location.search;
 
