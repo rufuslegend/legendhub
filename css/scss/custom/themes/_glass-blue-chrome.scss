@@ -269,15 +269,6 @@ body[ng-controller="builder"] > .container-fluid > .row:first-child > .col-lg-6 
     font-size: percentage($glass-density-space-scale);
   }
 
-  body,
-  .btn,
-  .form-control,
-  .custom-select,
-  .custom-file-label,
-  .input-group-text {
-    font-size: $glass-density-copy-size;
-  }
-
   .container,
   .container-fluid {
     padding-right: $glass-density-gutter;
@@ -296,15 +287,15 @@ body[ng-controller="builder"] > .container-fluid > .row:first-child > .col-lg-6 
   }
 
   .breadcrumbList {
-    padding: 4px 12px;
+    padding: 3.75px 11.25px;
   }
 
   .categoryListContainer {
-    padding: 0 24px 0 12px;
+    padding: 0 22.5px 0 11.25px;
   }
 
   .cookie-consent-banner {
-    padding: 8px 0;
+    padding: 7.5px 0;
   }
 
   .navbar-dark .navbar-toggler:focus,
@@ -314,7 +305,8 @@ body[ng-controller="builder"] > .container-fluid > .row:first-child > .col-lg-6 
   .btn:focus,
   .btn.focus,
   .page-link:focus {
-    box-shadow: 0 0 0 .25rem rgba(88, 170, 255, .35);
+    /* stylelint-disable-next-line number-max-precision */
+    box-shadow: 0 0 0 .266667rem rgba(88, 170, 255, .35);
   }
 }
 

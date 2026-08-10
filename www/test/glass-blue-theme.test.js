@@ -160,24 +160,23 @@ test("Glass Blue applies balanced density only above mobile", function() {
         "desktop density must precede and remain separate from mobile rules");
     const density = expanded.slice(densityStart, mobileStart);
 
-    assert.match(density, /html\s*\{\s*font-size:\s*80%;/);
+    assert.match(density, /html\s*\{\s*font-size:\s*75%;/);
+    assert.doesNotMatch(density, /body,[\s\S]*font-size:/);
     assert.match(density,
-        /body,[\s\S]*\.input-group-text\s*\{\s*font-size:\s*1\.09375rem;/);
+        /\.container,[\s\S]*\.container-fluid\s*\{[\s\S]*padding-right:\s*11\.25px;[\s\S]*padding-left:\s*11\.25px;/);
     assert.match(density,
-        /\.container,[\s\S]*\.container-fluid\s*\{[\s\S]*padding-right:\s*12px;[\s\S]*padding-left:\s*12px;/);
+        /\.row:not\(\.no-gutters\)\s*\{[\s\S]*margin-right:\s*-11\.25px;[\s\S]*margin-left:\s*-11\.25px;/);
     assert.match(density,
-        /\.row:not\(\.no-gutters\)\s*\{[\s\S]*margin-right:\s*-12px;[\s\S]*margin-left:\s*-12px;/);
+        /\.breadcrumbList\s*\{[\s\S]*padding:\s*3\.75px 11\.25px;/);
     assert.match(density,
-        /\.breadcrumbList\s*\{[\s\S]*padding:\s*4px 12px;/);
+        /\.categoryListContainer\s*\{[\s\S]*padding:\s*0 22\.5px 0 11\.25px;/);
     assert.match(density,
-        /\.categoryListContainer\s*\{[\s\S]*padding:\s*0 24px 0 12px;/);
+        /\.cookie-consent-banner\s*\{[\s\S]*padding:\s*7\.5px 0;/);
     assert.match(density,
-        /\.cookie-consent-banner\s*\{[\s\S]*padding:\s*8px 0;/);
-    assert.match(density,
-        /\.page-link:focus\s*\{[\s\S]*box-shadow:\s*0 0 0 0?\.25rem rgba\(88, 170, 255, 0?\.35\);/);
+        /\.page-link:focus\s*\{[\s\S]*box-shadow:\s*0 0 0 0?\.266667rem rgba\(88, 170, 255, 0?\.35\);/);
 
     const rootSizeRules = [...expanded.matchAll(
-        /html\s*\{\s*font-size:\s*80%;/g)];
+        /html\s*\{\s*font-size:\s*75%;/g)];
     assert.equal(rootSizeRules.length, 1,
         "desktop density must not leak into the mobile base style");
 });

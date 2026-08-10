@@ -48,9 +48,9 @@ or isolated page-specific fixes.
 
 At viewport widths of 768 pixels and above:
 
-- use a `0.875` type-scale target so ordinary text renders at 87.5% of its
-  current size;
-- use a `0.8` space-scale target for component padding, vertical rhythm, grid
+- use a `0.75` type-scale target so ordinary text renders at 12px (75% of its
+  current 16px size);
+- use a `0.75` space-scale target for component padding, vertical rhythm, grid
   gutters, and common gaps;
 - reduce control heights in proportion to their padding without weakening
   their borders or focus indicators;
@@ -89,10 +89,9 @@ does not make the whole interface feel like one compact skin.
 
 ### Balanced responsive density
 
-The selected approach combines roughly 80% spatial density with a less
-aggressive text reduction. It preserves the character of the preferred view
-without adopting browser-zoom side effects or unnecessarily small default
-copy.
+The selected approach applies a consistent 75% spatial and type density. It
+preserves the character of the preferred view without adopting browser-zoom
+side effects.
 
 ## Existing Builder Overrides
 

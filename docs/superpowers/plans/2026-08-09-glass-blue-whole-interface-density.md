@@ -4,7 +4,7 @@
 
 **Goal:** Make Glass Blue at normal desktop browser zoom feel approximately as compact as the current theme at 80% Chrome zoom while preserving readable text and current mobile sizing.
 
-**Architecture:** Add Glass-only density constants to the pre-Bootstrap theme partial and a single desktop media block to the post-Bootstrap chrome partial. An 80% root rem scale compacts Bootstrap's rem-based layout, while a 1.09375rem copy size resolves to 14px and preserves the approved 87.5% ordinary-text target; explicit 12px grid and shared pixel values complete the spatial scale without CSS zoom or transforms.
+**Architecture:** Add Glass-only density constants to the pre-Bootstrap theme partial and a single desktop media block to the post-Bootstrap chrome partial. A 75% root rem scale compacts Bootstrap's rem-based layout while inherited 1rem body/control rules resolve to 12px; explicit 11.25px grid and shared pixel values complete the spatial scale without CSS zoom or transforms.
 
 **Tech Stack:** Bootstrap 4 SCSS, Dart Sass, PostCSS/Autoprefixer, Lightning CSS, Stylelint, Node.js built-in test runner.
 
@@ -12,7 +12,7 @@
 
 - Start execution on a new feature branch created from current `master`; suggested name: `feat/glass-blue-whole-interface-density`.
 - Change Glass Blue only. Light, Dark, and Solarized Dark source and generated artifacts must remain unchanged.
-- At viewport widths of 768px and above, use a `0.875` type-scale target and a `0.8` space-scale target.
+- At viewport widths of 768px and above, use a `0.75` type-scale target and a `0.75` space-scale target.
 - Below 768px, retain current font sizes, spacing, control dimensions, responsive stacking, and touch targets.
 - Keep one-pixel structural borders, existing Glass gradients and shadows, and the current visible focus-ring thickness.
 - Do not use CSS `zoom`, whole-page `transform: scale(...)`, viewport metadata changes, JavaScript sizing logic, new breakpoints, or page-specific markup changes.
@@ -75,24 +75,24 @@ test("Glass Blue applies balanced density only above mobile", function() {
         "desktop density must precede and remain separate from mobile rules");
     const density = expanded.slice(densityStart, mobileStart);
 
-    assert.match(density, /html\s*\{\s*font-size:\s*80%;/);
+    assert.match(density, /html\s*\{\s*font-size:\s*75%;/);
     assert.match(density,
         /body,[\s\S]*\.input-group-text\s*\{\s*font-size:\s*1\.09375rem;/);
     assert.match(density,
-        /\.container,[\s\S]*\.container-fluid\s*\{[\s\S]*padding-right:\s*12px;[\s\S]*padding-left:\s*12px;/);
+        /\.container,[\s\S]*\.container-fluid\s*\{[\s\S]*padding-right:\s*11\.25px;[\s\S]*padding-left:\s*11\.25px;/);
     assert.match(density,
-        /\.row:not\(\.no-gutters\)\s*\{[\s\S]*margin-right:\s*-12px;[\s\S]*margin-left:\s*-12px;/);
+        /\.row:not\(\.no-gutters\)\s*\{[\s\S]*margin-right:\s*-11\.25px;[\s\S]*margin-left:\s*-11\.25px;/);
     assert.match(density,
-        /\.breadcrumbList\s*\{[\s\S]*padding:\s*4px 12px;/);
+        /\.breadcrumbList\s*\{[\s\S]*padding:\s*3\.75px 11\.25px;/);
     assert.match(density,
-        /\.categoryListContainer\s*\{[\s\S]*padding:\s*0 24px 0 12px;/);
+        /\.categoryListContainer\s*\{[\s\S]*padding:\s*0 22\.5px 0 11\.25px;/);
     assert.match(density,
-        /\.cookie-consent-banner\s*\{[\s\S]*padding:\s*8px 0;/);
+        /\.cookie-consent-banner\s*\{[\s\S]*padding:\s*7\.5px 0;/);
     assert.match(density,
-        /\.page-link:focus\s*\{[\s\S]*box-shadow:\s*0 0 0 0?\.25rem rgba\(88, 170, 255, 0?\.35\);/);
+        /\.page-link:focus\s*\{[\s\S]*box-shadow:\s*0 0 0 0?\.266667rem rgba\(88, 170, 255, 0?\.35\);/);
 
     const rootSizeRules = [...expanded.matchAll(
-        /html\s*\{\s*font-size:\s*80%;/g)];
+        /html\s*\{\s*font-size:\s*75%;/g)];
     assert.equal(rootSizeRules.length, 1,
         "desktop density must not leak into the mobile base style");
 });
@@ -124,16 +124,13 @@ Add this block immediately after the existing `$glass-ink` declaration in
 
 ```scss
 $glass-density-breakpoint: 768px;
-$glass-density-type-scale: .875;
-$glass-density-space-scale: .8;
-$glass-density-copy-size: 1.09375rem;
-$glass-density-gutter: 12px;
+$glass-density-type-scale: .75;
+$glass-density-space-scale: .75;
+$glass-density-gutter: 11.25px;
 ```
 
-The root rem becomes 12.8px at desktop widths. The copy-size value is the exact
-ratio `0.875 / 0.8`, so `1.09375rem` resolves to 14px: 87.5% of the existing
-16px ordinary text. The 12px gutter is 80% of Bootstrap's current 15px column
-half-gutter.
+The 75% root resolves inherited `1rem` body and control text to 12px. The
+11.25px gutter is 75% of Bootstrap's current 15px column half-gutter.
 
 - [ ] **Step 4: Add the desktop density block without changing mobile rules**
 
@@ -144,15 +141,6 @@ before the existing `@media (max-width: 767px)` block:
 @media (min-width: $glass-density-breakpoint) {
   html {
     font-size: percentage($glass-density-space-scale);
-  }
-
-  body,
-  .btn,
-  .form-control,
-  .custom-select,
-  .custom-file-label,
-  .input-group-text {
-    font-size: $glass-density-copy-size;
   }
 
   .container,
@@ -173,15 +161,15 @@ before the existing `@media (max-width: 767px)` block:
   }
 
   .breadcrumbList {
-    padding: 4px 12px;
+    padding: 3.75px 11.25px;
   }
 
   .categoryListContainer {
-    padding: 0 24px 0 12px;
+    padding: 0 22.5px 0 11.25px;
   }
 
   .cookie-consent-banner {
-    padding: 8px 0;
+    padding: 7.5px 0;
   }
 
   .navbar-dark .navbar-toggler:focus,
@@ -191,7 +179,7 @@ before the existing `@media (max-width: 767px)` block:
   .btn:focus,
   .btn.focus,
   .page-link:focus {
-    box-shadow: 0 0 0 .25rem rgba(88, 170, 255, .35);
+    box-shadow: 0 0 0 .266667rem rgba(88, 170, 255, .35);
   }
 }
 ```
