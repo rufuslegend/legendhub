@@ -9271,6 +9271,24 @@ body[ng-controller=builder] > .container-fluid > .row:first-child > .col-lg-6 {
   color: inherit;
 }
 
+.modal[aria-labelledby=columnsModalLabel] .list-group-item-light {
+  color: #d7e5f2;
+  background-color: #02050a;
+}
+
+.modal[aria-labelledby=columnsModalLabel] .list-group-item-light.list-group-item-action:hover,
+.modal[aria-labelledby=columnsModalLabel] .list-group-item-light.list-group-item-action:focus {
+  color: #fff;
+  background-color: var(--glass-wash);
+}
+
+.modal[aria-labelledby=columnsModalLabel] .list-group-item-light.list-group-item-action:active,
+.modal[aria-labelledby=columnsModalLabel] .list-group-item-light.list-group-item-action.active {
+  color: #eaf4ff;
+  background-color: #18314a;
+  border-color: #3a6a99;
+}
+
 .navbar,
 .card-header,
 .modal-header,

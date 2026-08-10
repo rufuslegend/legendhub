@@ -163,6 +163,28 @@ test("Glass Blue compacts builder panels and preserves Columns label contrast", 
         /\.list-group-item-action h5\s*\{\s*color:\s*inherit;/);
 });
 
+test("Glass Blue uses dark material for Columns modal choices", function() {
+    const expanded = fs.readFileSync(path.join(
+        distRoot, "bootstrap-glass-blue.css"), "utf8");
+    const modalSelector = String.raw`\.modal\[aria-labelledby=(?:"columnsModalLabel"|columnsModalLabel)\]`;
+    const normalRule = expanded.match(new RegExp(
+        `${modalSelector} \\.list-group-item-light\\s*\\{([^}]*)\\}`));
+    const hoverRule = expanded.match(new RegExp(
+        `${modalSelector} \\.list-group-item-light\\.list-group-item-action:hover,\\s*${modalSelector} \\.list-group-item-light\\.list-group-item-action:focus\\s*\\{([^}]*)\\}`));
+    const activeRule = expanded.match(new RegExp(
+        `${modalSelector} \\.list-group-item-light\\.list-group-item-action:active,\\s*${modalSelector} \\.list-group-item-light\\.list-group-item-action\\.active\\s*\\{([^}]*)\\}`));
+
+    assert.ok(normalRule, "missing dark Columns modal choice rule");
+    assert.match(normalRule[1], /color:\s*#d7e5f2;/);
+    assert.match(normalRule[1], /background-color:\s*#02050a;/);
+    assert.ok(hoverRule, "missing Columns modal hover/focus rule");
+    assert.match(hoverRule[1], /color:\s*#fff;/);
+    assert.match(hoverRule[1], /background-color:\s*var\(--glass-wash\);/);
+    assert.ok(activeRule, "missing Columns modal active rule");
+    assert.match(activeRule[1], /color:\s*#eaf4ff;/);
+    assert.match(activeRule[1], /background-color:\s*#18314a;/);
+});
+
 test("Glass Blue build artifacts are complete and copied to the web app", function() {
     const artifacts = [
         path.join(distRoot, "bootstrap-glass-blue.css"),

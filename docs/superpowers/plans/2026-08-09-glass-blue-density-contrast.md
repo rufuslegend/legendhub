@@ -162,23 +162,25 @@ Expected: one commit containing only the Glass Blue SCSS, generated artifacts, a
 - Generate: the same six Glass Blue CSS and source-map artifacts listed in Task 1
 
 **Interfaces:**
-- Consumes: `#columnsModal`, `.list-group-item-light`, and the existing Glass material variables.
+- Consumes: the Columns modal's `aria-labelledby="columnsModalLabel"`
+  attribute, `.list-group-item-light`, and the existing Glass material variables.
 - Produces: dark normal, blue hover/focus, and distinct active states scoped only to the Columns modal.
 
-- [ ] **Step 1: Add and run a failing compiled-CSS regression**
+- [x] **Step 1: Add and run a failing compiled-CSS regression**
 
-Assert that `#columnsModal .list-group-item-light` compiles with light text on
-`$glass-well`, and that its action hover/focus and active states compile after
-Bootstrap's contextual light rules. Run `node --test www/test/glass-blue-theme.test.js`
-and confirm the new test fails against the current white background.
+Assert that the Columns modal's `.list-group-item-light` compiles with light
+text on `$glass-well`, and that its action hover/focus and active states compile
+after Bootstrap's contextual light rules. Run
+`node --test www/test/glass-blue-theme.test.js` and confirm the new test fails
+against the current white background.
 
-- [ ] **Step 2: Add the scoped post-Bootstrap overrides**
+- [x] **Step 2: Add the scoped post-Bootstrap overrides**
 
 Add normal, hover/focus, and active selectors beneath the existing
 `.list-group-item-action h5` rule. Do not change the shared modal template or
 contextual list groups elsewhere.
 
-- [ ] **Step 3: Rebuild and verify**
+- [x] **Step 3: Rebuild and verify**
 
 Run the CSS build, focused Glass tests, CSS lint, full web and script suites,
 artifact byte comparisons, and scoped whitespace checks. Commit only the

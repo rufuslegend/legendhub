@@ -59,6 +59,24 @@ body[ng-controller="builder"] > .container-fluid > .row:first-child > .col-lg-6 
   color: inherit;
 }
 
+.modal[aria-labelledby="columnsModalLabel"] .list-group-item-light {
+  color: $body-color;
+  background-color: $glass-well;
+}
+
+.modal[aria-labelledby="columnsModalLabel"] .list-group-item-light.list-group-item-action:hover,
+.modal[aria-labelledby="columnsModalLabel"] .list-group-item-light.list-group-item-action:focus {
+  color: $white;
+  background-color: var(--glass-wash);
+}
+
+.modal[aria-labelledby="columnsModalLabel"] .list-group-item-light.list-group-item-action:active,
+.modal[aria-labelledby="columnsModalLabel"] .list-group-item-light.list-group-item-action.active {
+  color: $component-active-color;
+  background-color: $gray-700;
+  border-color: $glass-line;
+}
+
 .navbar,
 .card-header,
 .modal-header,
