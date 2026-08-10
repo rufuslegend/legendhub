@@ -125,7 +125,7 @@ body[ng-controller="builder"] > .container-fluid > .row:first-child > .col-lg-6 
 .navbar-dark .navbar-toggler:focus {
   border-color: #58aaff;
   outline: 0;
-  box-shadow: 0 0 0 .2rem rgba(88, 170, 255, .35);
+  box-shadow: $input-btn-focus-box-shadow;
 }
 
 .breadcrumbNav,
@@ -203,7 +203,7 @@ body[ng-controller="builder"] > .container-fluid > .row:first-child > .col-lg-6 
 .page-link:focus {
   border-color: #58aaff;
   outline: 0;
-  box-shadow: 0 0 0 .2rem rgba(88, 170, 255, .35);
+  box-shadow: $input-btn-focus-box-shadow;
 }
 
 .table {
@@ -266,7 +266,7 @@ body[ng-controller="builder"] > .container-fluid > .row:first-child > .col-lg-6 
 
 @media (min-width: $glass-density-breakpoint) {
   html {
-    font-size: percentage($glass-density-space-scale);
+    font-size: percentage($glass-density-scale);
   }
 
   .container,
@@ -296,17 +296,6 @@ body[ng-controller="builder"] > .container-fluid > .row:first-child > .col-lg-6 
 
   .cookie-consent-banner {
     padding: 7.5px 0;
-  }
-
-  .navbar-dark .navbar-toggler:focus,
-  .form-control:focus,
-  .custom-select:focus,
-  .custom-file-input:focus ~ .custom-file-label,
-  .btn:focus,
-  .btn.focus,
-  .page-link:focus {
-    /* stylelint-disable-next-line number-max-precision */
-    box-shadow: 0 0 0 .266667rem rgba(88, 170, 255, .35);
   }
 }
 

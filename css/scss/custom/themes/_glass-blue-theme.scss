@@ -28,8 +28,7 @@ $glass-well: #02050a;
 $glass-ink: #eaf4ff;
 
 $glass-density-breakpoint: 768px;
-$glass-density-type-scale: .75;
-$glass-density-space-scale: .75;
+$glass-density-scale: .75;
 $glass-density-gutter: 11.25px;
 
 $primary: $blue;
@@ -61,8 +60,9 @@ $headings-color: $glass-ink;
 
 $component-active-color: $glass-ink;
 $component-active-bg: $primary;
+$input-btn-focus-width: 3.2px;
 $input-btn-focus-color: rgba(88, 170, 255, .35);
-$input-btn-focus-box-shadow: 0 0 0 .2rem $input-btn-focus-color;
+$input-btn-focus-box-shadow: 0 0 0 $input-btn-focus-width $input-btn-focus-color;
 
 $table-color: $body-color;
 $table-bg: transparent;

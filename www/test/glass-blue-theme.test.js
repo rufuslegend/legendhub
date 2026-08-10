@@ -10,6 +10,59 @@ const sourceRoot = path.join(root, "css/scss");
 const distRoot = path.join(root, "css/dist/css");
 const publicRoot = path.join(root, "www/src/public/css");
 
+function findCssBlock(css, header, startIndex, useLastMatch = false) {
+    const headerIndex = useLastMatch
+        ? css.lastIndexOf(header)
+        : css.indexOf(header, startIndex);
+    assert.ok(headerIndex >= 0, `missing CSS block ${header}`);
+
+    const openBrace = css.indexOf("{", headerIndex + header.length);
+    assert.ok(openBrace >= 0, `missing opening brace for ${header}`);
+
+    let depth = 1;
+    for (let index = openBrace + 1; index < css.length; index++) {
+        if (css[index] === "{")
+            depth++;
+        else if (css[index] === "}")
+            depth--;
+
+        if (depth === 0) {
+            return {
+                body: css.slice(openBrace + 1, index),
+                end: index + 1,
+                start: headerIndex
+            };
+        }
+    }
+
+    assert.fail(`missing closing brace for ${header}`);
+}
+
+function cssRules(css) {
+    return [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(function(match) {
+        return {
+            declarations: match[2],
+            selectors: match[1].split(",").map(function(selector) {
+                return selector.replace(/\s+/g, " ").trim();
+            })
+        };
+    });
+}
+
+function rulesForSelector(css, expectedSelector) {
+    return cssRules(css).filter(function(rule) {
+        return rule.selectors.includes(expectedSelector);
+    });
+}
+
+function assertFocusWidth(css, selector) {
+    const rules = rulesForSelector(css, selector);
+    assert.ok(rules.length > 0, `missing focus rule ${selector}`);
+    assert.match(rules.at(-1).declarations,
+        /box-shadow:[^;]*0 0 0 3\.2px(?:\s|,)/,
+        `${selector} must retain a 3.2px focus ring`);
+}
+
 test("Glass Blue has a standalone source and minification pipeline", function() {
     const entry = fs.readFileSync(path.join(
         sourceRoot, "bootstrap-glass-blue.scss"), "utf8");
@@ -119,7 +172,7 @@ test("Glass Blue finishes and focuses the navbar toggler", function() {
     assert.match(chrome,
         /\.navbar-toggler\s*\{[\s\S]*background-image:\s*var\(--glass-button-gradient\);[\s\S]*border:\s*1px solid \$glass-line;/);
     assert.match(chrome,
-        /\.navbar-toggler:focus\s*\{[\s\S]*border-color:\s*#58aaff;[\s\S]*box-shadow:\s*0 0 0 \.2rem rgba\(88, 170, 255, \.35\);/);
+        /\.navbar-toggler:focus\s*\{[\s\S]*border-color:\s*#58aaff;[\s\S]*outline:\s*0;/);
 });
 
 test("Glass Blue reserves hover glow for enabled buttons", function() {
@@ -153,15 +206,26 @@ test("Glass Blue applies balanced density only above mobile", function() {
     assert.doesNotMatch(expanded,
         /(?:^|})\s*(?:html|body)(?:\s*,\s*(?:html|body))*\s*\{[^}]*transform:\s*scale\(/m);
 
-    const densityStart = expanded.lastIndexOf("@media (min-width: 768px)");
-    const mobileStart = expanded.indexOf("@media (max-width: 767px)", densityStart);
-    assert.ok(densityStart >= 0, "missing desktop Glass density breakpoint");
-    assert.ok(mobileStart > densityStart,
-        "desktop density must precede and remain separate from mobile rules");
-    const density = expanded.slice(densityStart, mobileStart);
+    const densityBlock = findCssBlock(
+        expanded, "@media (min-width: 768px)", 0, true);
+    const mobileBlock = findCssBlock(
+        expanded, "@media (max-width: 767px)", densityBlock.end);
+    const density = densityBlock.body;
 
     assert.match(density, /html\s*\{\s*font-size:\s*75%;/);
-    assert.doesNotMatch(density, /body,[\s\S]*font-size:/);
+    for (const selector of ["html", "body"]) {
+        const densityRules = rulesForSelector(density, selector);
+        if (selector === "body") {
+            assert.ok(densityRules.every(function(rule) {
+                return !/font-size\s*:/.test(rule.declarations);
+            }), "desktop density must not override body font-size");
+        }
+
+        const mobileRules = rulesForSelector(mobileBlock.body, selector);
+        assert.ok(mobileRules.every(function(rule) {
+            return !/font-size\s*:/.test(rule.declarations);
+        }), `mobile ${selector} rules must retain the base font size`);
+    }
     assert.match(density,
         /\.container,[\s\S]*\.container-fluid\s*\{[\s\S]*padding-right:\s*11\.25px;[\s\S]*padding-left:\s*11\.25px;/);
     assert.match(density,
@@ -172,13 +236,32 @@ test("Glass Blue applies balanced density only above mobile", function() {
         /\.categoryListContainer\s*\{[\s\S]*padding:\s*0 22\.5px 0 11\.25px;/);
     assert.match(density,
         /\.cookie-consent-banner\s*\{[\s\S]*padding:\s*7\.5px 0;/);
-    assert.match(density,
-        /\.page-link:focus\s*\{[\s\S]*box-shadow:\s*0 0 0 0?\.266667rem rgba\(88, 170, 255, 0?\.35\);/);
+    const outsideDensity = expanded.slice(0, densityBlock.start)
+        + expanded.slice(densityBlock.end);
+    assert.doesNotMatch(outsideDensity, /html\s*\{\s*font-size:\s*75%;/,
+        "desktop density must not leak into base or mobile styles");
+    assert.ok(rulesForSelector(outsideDensity, "body").some(function(rule) {
+        return /font-size:\s*1rem;/.test(rule.declarations);
+    }), "base body font size must remain 1rem");
+});
 
-    const rootSizeRules = [...expanded.matchAll(
-        /html\s*\{\s*font-size:\s*75%;/g)];
-    assert.equal(rootSizeRules.length, 1,
-        "desktop density must not leak into the mobile base style");
+test("Glass Blue keeps its full focus vocabulary at 3.2px", function() {
+    const expanded = fs.readFileSync(path.join(
+        distRoot, "bootstrap-glass-blue.css"), "utf8");
+
+    for (const selector of [
+        ".was-validated .form-control:valid:focus",
+        ".form-control.is-invalid:focus",
+        ".custom-control-input:focus ~ .custom-control-label::before",
+        ".btn-primary:not(:disabled):not(.disabled):active:focus",
+        ".show > .btn-primary.dropdown-toggle:focus",
+        "a.badge-primary:focus",
+        ".navbar-dark .navbar-toggler:focus",
+        ".form-control:focus",
+        ".btn-primary:focus",
+        ".page-link:focus"
+    ])
+        assertFocusWidth(expanded, selector);
 });
 
 test("Glass Blue compacts builder panels and preserves Columns label contrast", function() {
