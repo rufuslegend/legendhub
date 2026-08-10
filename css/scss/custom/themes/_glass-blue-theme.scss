@@ -27,6 +27,13 @@ $glass-surface: #060b12;
 $glass-well: #02050a;
 $glass-ink: #eaf4ff;
 
+$glass-density-breakpoint: 768px;
+$glass-density-type-scale: .875;
+$glass-density-space-scale: .8;
+/* stylelint-disable-next-line number-max-precision */
+$glass-density-copy-size: 1.09375rem;
+$glass-density-gutter: 12px;
+
 $primary: $blue;
 $secondary: $gray-600;
 $success: $green;

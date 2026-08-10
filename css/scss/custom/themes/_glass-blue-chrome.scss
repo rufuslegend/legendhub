@@ -264,6 +264,60 @@ body[ng-controller="builder"] > .container-fluid > .row:first-child > .col-lg-6 
   box-shadow: 0 -2px 8px var(--glass-glow);
 }
 
+@media (min-width: $glass-density-breakpoint) {
+  html {
+    font-size: percentage($glass-density-space-scale);
+  }
+
+  body,
+  .btn,
+  .form-control,
+  .custom-select,
+  .custom-file-label,
+  .input-group-text {
+    font-size: $glass-density-copy-size;
+  }
+
+  .container,
+  .container-fluid {
+    padding-right: $glass-density-gutter;
+    padding-left: $glass-density-gutter;
+  }
+
+  .row:not(.no-gutters) {
+    margin-right: -$glass-density-gutter;
+    margin-left: -$glass-density-gutter;
+  }
+
+  .row:not(.no-gutters) > .col,
+  .row:not(.no-gutters) > [class*="col-"] {
+    padding-right: $glass-density-gutter;
+    padding-left: $glass-density-gutter;
+  }
+
+  .breadcrumbList {
+    padding: 4px 12px;
+  }
+
+  .categoryListContainer {
+    padding: 0 24px 0 12px;
+  }
+
+  .cookie-consent-banner {
+    padding: 8px 0;
+  }
+
+  .navbar-dark .navbar-toggler:focus,
+  .form-control:focus,
+  .custom-select:focus,
+  .custom-file-input:focus ~ .custom-file-label,
+  .btn:focus,
+  .btn.focus,
+  .page-link:focus {
+    box-shadow: 0 0 0 .25rem rgba(88, 170, 255, .35);
+  }
+}
+
 @media (max-width: 767px) {
   .categoryListContainer {
     background-color: $glass-surface;

@@ -145,6 +145,42 @@ test("Glass Blue keeps outline-secondary controls readable", function() {
     assert.match(finalRule, /border-color:\s*#829db7;/);
 });
 
+test("Glass Blue applies balanced density only above mobile", function() {
+    const expanded = fs.readFileSync(path.join(
+        distRoot, "bootstrap-glass-blue.css"), "utf8");
+
+    assert.doesNotMatch(expanded, /(^|[;{]\s*)zoom\s*:/m);
+    assert.doesNotMatch(expanded, /transform:\s*scale\(/);
+
+    const densityStart = expanded.lastIndexOf("@media (min-width: 768px)");
+    const mobileStart = expanded.indexOf("@media (max-width: 767px)", densityStart);
+    assert.ok(densityStart >= 0, "missing desktop Glass density breakpoint");
+    assert.ok(mobileStart > densityStart,
+        "desktop density must precede and remain separate from mobile rules");
+    const density = expanded.slice(densityStart, mobileStart);
+
+    assert.match(density, /html\s*\{\s*font-size:\s*80%;/);
+    assert.match(density,
+        /body,[\s\S]*\.input-group-text\s*\{\s*font-size:\s*1\.09375rem;/);
+    assert.match(density,
+        /\.container,[\s\S]*\.container-fluid\s*\{[\s\S]*padding-right:\s*12px;[\s\S]*padding-left:\s*12px;/);
+    assert.match(density,
+        /\.row:not\(\.no-gutters\)\s*\{[\s\S]*margin-right:\s*-12px;[\s\S]*margin-left:\s*-12px;/);
+    assert.match(density,
+        /\.breadcrumbList\s*\{[\s\S]*padding:\s*4px 12px;/);
+    assert.match(density,
+        /\.categoryListContainer\s*\{[\s\S]*padding:\s*0 24px 0 12px;/);
+    assert.match(density,
+        /\.cookie-consent-banner\s*\{[\s\S]*padding:\s*8px 0;/);
+    assert.match(density,
+        /\.page-link:focus\s*\{[\s\S]*box-shadow:\s*0 0 0 \.25rem rgba\(88, 170, 255, \.35\);/);
+
+    const rootSizeRules = [...expanded.matchAll(
+        /html\s*\{\s*font-size:\s*80%;/g)];
+    assert.equal(rootSizeRules.length, 1,
+        "desktop density must not leak into the mobile base style");
+});
+
 test("Glass Blue compacts builder panels and preserves Columns label contrast", function() {
     const expanded = fs.readFileSync(path.join(
         distRoot, "bootstrap-glass-blue.css"), "utf8");
