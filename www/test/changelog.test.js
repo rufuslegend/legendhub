@@ -70,6 +70,14 @@ test("tracked changelog records the builder regeneration fix", () => {
     assert.match(tracked, /stat-adjusted equipment caps/);
 });
 
+test("tracked changelog records the Glass Blue default theme", () => {
+    const tracked = fs.readFileSync(path.join(__dirname, "../../CHANGELOG.md"), "utf8");
+
+    assert.match(tracked, /Added the Glass Blue theme/);
+    assert.match(tracked, /default for visitors without a saved preference/);
+    assert.match(tracked, /Light, Dark, and Solarized Dark remain available/);
+});
+
 test("renders changelog Markdown while escaping embedded HTML", (t) => {
     const file = temporaryChangelog(t,
         "# Changelog\n\n## [2.6.0-beta]\n\n- Safer releases\n\n<script>alert(1)</script>\n");

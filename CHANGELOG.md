@@ -5,6 +5,10 @@ with version 2.6.0.
 
 ## [2.6.1-beta] - 2026-08-07
 
+### Added
+
+- Added the Glass Blue theme as the default for visitors without a saved preference; Light, Dark, and Solarized Dark remain available.
+
 ### Changed
 
 - Allowed approved LegendMUD proxy and development sites to embed LegendHUB while continuing to block other framing origins.
