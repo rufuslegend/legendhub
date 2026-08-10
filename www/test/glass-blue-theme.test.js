@@ -74,6 +74,17 @@ test("Glass Blue preserves contextual and active menu states", function() {
         /\.dropdown-item\.active,[\s\S]*\.list-group-item\.active\s*\{[\s\S]*background-color:\s*\$component-active-bg;/);
 });
 
+test("Glass Blue keeps pressed list actions readable", function() {
+    const expanded = fs.readFileSync(path.join(
+        distRoot, "bootstrap-glass-blue.css"), "utf8");
+    const pressedRule = expanded.match(
+        /\.list-group-item-action:active\s*\{([^}]*)\}/);
+
+    assert.ok(pressedRule, "missing pressed list action rule");
+    assert.match(pressedRule[1], /color:\s*#eaf4ff;/);
+    assert.match(pressedRule[1], /background-color:\s*#18314a;/);
+});
+
 test("Glass Blue draws explicit steel-blue navigation and panel rims", function() {
     const chrome = fs.readFileSync(path.join(
         sourceRoot, "custom/themes/_glass-blue-chrome.scss"), "utf8");
@@ -120,6 +131,18 @@ test("Glass Blue reserves hover glow for enabled buttons", function() {
         /\.btn:not\(:disabled\):not\(\.disabled\):hover\s*\{/);
     assert.match(chrome,
         /\.btn:disabled,\s*\.btn\.disabled\s*\{[\s\S]*box-shadow:\s*none;/);
+});
+
+test("Glass Blue keeps outline-secondary controls readable", function() {
+    const expanded = fs.readFileSync(path.join(
+        distRoot, "bootstrap-glass-blue.css"), "utf8");
+    const outlineRules = [...expanded.matchAll(
+        /\.btn-outline-secondary\s*\{([^}]*)\}/g)];
+
+    assert.ok(outlineRules.length > 0, "missing outline-secondary rule");
+    const finalRule = outlineRules.at(-1)[1];
+    assert.match(finalRule, /color:\s*#adc3d8;/);
+    assert.match(finalRule, /border-color:\s*#829db7;/);
 });
 
 test("Glass Blue compacts builder panels and preserves Columns label contrast", function() {

@@ -472,12 +472,13 @@ function HeaderController($scope, $http, $cookies, $compile, breadcrumb) {
 	};
 
 	$scope.setTheme = function(theme) {
+        theme = theme.toLowerCase().replace(/\s/g, '-');
+        $('link[id="theme"]').attr('href', '/css/bootstrap-' + theme + '.min.css');
+
         if ($cookies.get("cookie-consent")) {
-            theme = theme.toLowerCase().replace(/\s/g, '-');
             var cookieDate = new Date();
             cookieDate.setFullYear(cookieDate.getFullYear() + 20);
             $cookies.put("theme", theme, {path: "/", samesite: "lax", secure: true, expires: cookieDate});
-            $('link[id="theme"]').attr('href', '/css/bootstrap-' + theme + '.min.css');
         }
 	}
 
