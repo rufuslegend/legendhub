@@ -14,8 +14,9 @@ other themes or shared application markup.
   half, from roughly 24–30 pixels to 12–15 pixels. Keep the outer page padding
   and responsive stacking behavior intact.
 - Make headings inside contextual list-group action buttons inherit the
-  button's computed text color. This fixes the Columns modal's white-on-white
-  labels while preserving contextual hover, focus, and active colors.
+  button's computed text color. Scope the Columns modal's `.list-group-item-light`
+  rows to a dark Glass well with light text, blue hover/focus treatment, and a
+  distinct pressed state. Preserve contextual list groups outside that modal.
 
 ## Implementation Boundary
 
@@ -26,8 +27,9 @@ Dark, or Solarized Dark, or alter application behavior.
 
 ## Verification
 
-- Add source/compiled contract assertions for the smaller card-header title,
-  reduced builder spacing, and inherited contextual-list heading color.
+- Add compiled contract assertions for the smaller card-header title, reduced
+  builder spacing, inherited contextual-list heading color, and dark Columns
+  modal row states.
 - Run the focused Glass Blue tests, CSS lint/build, and full web suite.
 - Confirm generated dist/public CSS and source maps remain byte-identical.
 - Perform a local desktop visual check if available without MCP browser
