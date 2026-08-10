@@ -7,7 +7,7 @@ with version 2.6.0.
 
 ### Added
 
-- Added the Glass Blue theme as the default for visitors without a saved preference; Light, Dark, and Solarized Dark remain available.
+- Added the compact Glass Blue theme as the default for visitors without a saved preference; Light, Dark, and Solarized Dark remain available.
 
 ### Changed
 
