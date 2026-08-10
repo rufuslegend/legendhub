@@ -142,10 +142,10 @@ unrelated working-tree files remain untouched.
 Implementation verification will include:
 
 - tests written before the density behavior changes;
-- source and compiled-CSS assertions for the desktop density breakpoint,
-  readable type scale, shared component padding, grid gutters, and unscaled
-  mobile defaults;
-- assertions that CSS `zoom` and transform-based whole-page scaling are absent;
+- compiled-CSS assertions for the desktop density breakpoint, readable type
+  scale, shared component padding, grid gutters, and unscaled mobile defaults;
+- shipped-CSS assertions that `zoom` and transform-based whole-page scaling are
+  absent;
 - a complete CSS build and lint pass;
 - byte comparisons proving Light, Dark, and Solarized Dark artifacts did not
   change;
