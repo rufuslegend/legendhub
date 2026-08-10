@@ -76,8 +76,7 @@ test("Glass Blue applies balanced density only above mobile", function() {
     const density = expanded.slice(densityStart, mobileStart);
 
     assert.match(density, /html\s*\{\s*font-size:\s*75%;/);
-    assert.match(density,
-        /body,[\s\S]*\.input-group-text\s*\{\s*font-size:\s*1\.09375rem;/);
+    assert.doesNotMatch(density, /body,[\s\S]*font-size:/);
     assert.match(density,
         /\.container,[\s\S]*\.container-fluid\s*\{[\s\S]*padding-right:\s*11\.25px;[\s\S]*padding-left:\s*11\.25px;/);
     assert.match(density,
@@ -102,7 +101,7 @@ Maintainer-approved correction: the no-scale guard applies to whole-page
 `html`/`body` rules only, allowing existing Bootstrap component animations
 such as `.spinner-grow` while still forbidding a page-level transform hack.
 This test reads the actual expanded consumer artifact. The media-slice
-assertions ensure the 80% root scale appears only in the desktop block, while
+assertions ensure the 75% root scale appears only in the desktop block, while
 the base/mobile stylesheet remains unchanged. It deliberately avoids locking
 tests to private SCSS variable names.
 
@@ -185,8 +184,8 @@ before the existing `@media (max-width: 767px)` block:
 ```
 
 Do not move or alter the existing mobile media block. Do not remove the
-builder-specific `.5rem` top-row gutters: those were part of the view approved
-at 80% Chrome zoom and continue to scale through the new desktop root size.
+builder-specific `.5rem` top-row gutters: those were part of the previously
+approved compact view and continue to scale through the new desktop root size.
 Do not change the existing `.card-header h4` rule or Columns-modal rules.
 
 - [ ] **Step 5: Rebuild every CSS artifact**
@@ -253,7 +252,7 @@ Open the theme menu, one dropdown, the builder Columns modal, a tooltip, and a
 focusable form/button sequence. Confirm:
 
 - the desktop interface has the compact impression of the previously approved
-  80% view;
+  compact view;
 - ordinary copy remains readable and heading hierarchy remains clear;
 - cards, grids, tables, controls, dropdowns, and overlays do not clip or
   overlap;
@@ -395,7 +394,7 @@ Expected: one commit containing only the changelog and its regression test.
 
 The feature is complete only when:
 
-- Glass Blue uses the 0.8 spatial and 0.875 ordinary-type targets at widths of
+- Glass Blue uses the 0.75 spatial and 0.75 ordinary-type targets at widths of
   768px and above;
 - Glass Blue below 768px retains its previous sizing and touch behavior;
 - no global CSS zoom, scale transform, viewport, JavaScript, template, route,
