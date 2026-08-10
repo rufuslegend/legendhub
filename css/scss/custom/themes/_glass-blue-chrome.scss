@@ -39,6 +39,26 @@ h6,
   letter-spacing: .025em;
 }
 
+.card-header h4,
+.card-header .h4 {
+  font-size: 1.25rem;
+}
+
+body[ng-controller="builder"] > .container-fluid > .row:first-child {
+  margin-right: -.5rem;
+  margin-left: -.5rem;
+}
+
+body[ng-controller="builder"] > .container-fluid > .row:first-child > .col-lg-6 {
+  padding-right: .5rem;
+  padding-left: .5rem;
+  margin-bottom: .75rem !important;
+}
+
+.list-group-item-action h5 {
+  color: inherit;
+}
+
 .navbar,
 .card-header,
 .modal-header,

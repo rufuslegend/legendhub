@@ -122,6 +122,24 @@ test("Glass Blue reserves hover glow for enabled buttons", function() {
         /\.btn:disabled,\s*\.btn\.disabled\s*\{[\s\S]*box-shadow:\s*none;/);
 });
 
+test("Glass Blue compacts builder panels and preserves Columns label contrast", function() {
+    const expanded = fs.readFileSync(path.join(
+        distRoot, "bootstrap-glass-blue.css"), "utf8");
+
+    assert.match(expanded,
+        /\.card-header h4,\s*\.card-header \.h4\s*\{\s*font-size:\s*1\.25rem;/);
+
+    const builderPanelRule = expanded.match(
+        /body\[ng-controller=(?:"builder"|builder)\] > \.container-fluid > \.row:first-child > \.col-lg-6\s*\{([^}]*)\}/);
+    assert.ok(builderPanelRule, "missing compact Glass builder panel rule");
+    assert.match(builderPanelRule[1], /padding-right:\s*0\.5rem;/);
+    assert.match(builderPanelRule[1], /padding-left:\s*0\.5rem;/);
+    assert.match(builderPanelRule[1], /margin-bottom:\s*0\.75rem !important;/);
+
+    assert.match(expanded,
+        /\.list-group-item-action h5\s*\{\s*color:\s*inherit;/);
+});
+
 test("Glass Blue build artifacts are complete and copied to the web app", function() {
     const artifacts = [
         path.join(distRoot, "bootstrap-glass-blue.css"),
