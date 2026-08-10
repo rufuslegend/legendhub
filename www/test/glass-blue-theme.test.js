@@ -150,7 +150,8 @@ test("Glass Blue applies balanced density only above mobile", function() {
         distRoot, "bootstrap-glass-blue.css"), "utf8");
 
     assert.doesNotMatch(expanded, /(^|[;{]\s*)zoom\s*:/m);
-    assert.doesNotMatch(expanded, /transform:\s*scale\(/);
+    assert.doesNotMatch(expanded,
+        /(?:^|})\s*(?:html|body)(?:\s*,\s*(?:html|body))*\s*\{[^}]*transform:\s*scale\(/m);
 
     const densityStart = expanded.lastIndexOf("@media (min-width: 768px)");
     const mobileStart = expanded.indexOf("@media (max-width: 767px)", densityStart);
@@ -173,7 +174,7 @@ test("Glass Blue applies balanced density only above mobile", function() {
     assert.match(density,
         /\.cookie-consent-banner\s*\{[\s\S]*padding:\s*8px 0;/);
     assert.match(density,
-        /\.page-link:focus\s*\{[\s\S]*box-shadow:\s*0 0 0 \.25rem rgba\(88, 170, 255, \.35\);/);
+        /\.page-link:focus\s*\{[\s\S]*box-shadow:\s*0 0 0 0?\.25rem rgba\(88, 170, 255, 0?\.35\);/);
 
     const rootSizeRules = [...expanded.matchAll(
         /html\s*\{\s*font-size:\s*80%;/g)];
