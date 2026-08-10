@@ -41,24 +41,21 @@ Append this test before the artifact-completeness test in `www/test/glass-blue-t
 
 ```js
 test("Glass Blue compacts builder panels and preserves Columns label contrast", function() {
-    const chrome = fs.readFileSync(path.join(
-        sourceRoot, "custom/themes/_glass-blue-chrome.scss"), "utf8");
     const expanded = fs.readFileSync(path.join(
         distRoot, "bootstrap-glass-blue.css"), "utf8");
 
-    assert.match(chrome,
-        /\.card-header h4,\s*\.card-header \.h4\s*\{\s*font-size:\s*1\.25rem;/);
-    assert.match(chrome,
-        /body\[ng-controller="builder"\][\s\S]*padding-right:\s*\.5rem;[\s\S]*padding-left:\s*\.5rem;[\s\S]*margin-bottom:\s*\.75rem !important;/);
-    assert.match(chrome,
-        /\.list-group-item-action h5\s*\{\s*color:\s*inherit;/);
-
     assert.match(expanded,
         /\.card-header h4,\s*\.card-header \.h4\s*\{\s*font-size:\s*1\.25rem;/);
+    assert.match(expanded,
+        /body\[ng-controller="builder"\][\s\S]*padding-right:\s*\.5rem;[\s\S]*padding-left:\s*\.5rem;[\s\S]*margin-bottom:\s*\.75rem !important;/);
     assert.match(expanded,
         /\.list-group-item-action h5\s*\{\s*color:\s*inherit;/);
 });
 ```
+
+These assertions target the expanded stylesheet served by the build rather
+than grepping SCSS implementation text. Removing or changing any of the three
+consumer-visible rules makes the test fail.
 
 - [ ] **Step 2: Run the focused test and confirm RED**
 
