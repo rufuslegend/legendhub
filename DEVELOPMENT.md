@@ -137,14 +137,18 @@ The command must print one `backup-mysql: success` line. Verify both artifacts
 without displaying their contents:
 
 ```sh
-docker compose exec mysql-backup \
-  find /backups/private /backups/public -type f -size +0c \
-  -printf '%p %s bytes\n'
+docker compose exec mysql-backup bash -c '
+  private_backup="/backups/private/database_$(date +%m-%d-%Y).sql.gz"
+  test -s "$private_backup"
+  stat -c "%n %s bytes" "$private_backup"
+  test -s /backups/public/database.sql
+  stat -c "%n %s bytes" /backups/public/database.sql
+'
 docker compose logs --tail=100 mysql-backup
 ```
 
 Scheduled backups run daily at 06:11 UTC. Treat a missing success line, an
-empty artifact list, or a nonzero command as a failed backup.
+empty artifact, or a nonzero command as a failed backup.
 
 ## Publish x86_64 images
 

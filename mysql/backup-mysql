@@ -7,6 +7,78 @@ mkdir -p /backups/private /backups/public
 
 private_backup="/backups/private/database_$(date +%m-%d-%Y).sql.gz"
 public_backup="/backups/public/database.sql"
+private_temporary=""
+public_temporary=""
+private_rollback=""
+public_rollback=""
+private_had_final=0
+public_had_final=0
+private_promoted=0
+public_promoted=0
+transaction_committed=0
+
+cleanup() {
+  status="$?"
+  cleanup_failed=0
+  trap - EXIT
+
+  if [[ "$status" -ne 0 && "$transaction_committed" -eq 0 ]]; then
+    if [[ "$public_promoted" -eq 1 ]]; then
+      if [[ "$public_had_final" -eq 1 ]]; then
+        if mv -f -- "$public_rollback" "$public_backup"; then
+          public_rollback=""
+        else
+          printf 'backup-mysql: failed to roll back public backup; preserved rollback at %s\n' \
+            "$public_rollback" >&2
+          public_rollback=""
+          cleanup_failed=1
+        fi
+      elif ! rm -f -- "$public_backup"; then
+        printf 'backup-mysql: failed to remove promoted public backup\n' >&2
+        cleanup_failed=1
+      fi
+    fi
+
+    if [[ "$private_promoted" -eq 1 ]]; then
+      if [[ "$private_had_final" -eq 1 ]]; then
+        if mv -f -- "$private_rollback" "$private_backup"; then
+          private_rollback=""
+        else
+          printf 'backup-mysql: failed to roll back private backup; preserved rollback at %s\n' \
+            "$private_rollback" >&2
+          private_rollback=""
+          cleanup_failed=1
+        fi
+      elif ! rm -f -- "$private_backup"; then
+        printf 'backup-mysql: failed to remove promoted private backup\n' >&2
+        cleanup_failed=1
+      fi
+    fi
+  fi
+
+  for cleanup_path in \
+    "$private_temporary" \
+    "$public_temporary" \
+    "$private_rollback" \
+    "$public_rollback"; do
+    if [[ -n "$cleanup_path" ]] && ! rm -f -- "$cleanup_path"; then
+      printf 'backup-mysql: failed to remove temporary backup file\n' >&2
+      cleanup_failed=1
+    fi
+  done
+
+  if [[ "$status" -eq 0 && "$cleanup_failed" -ne 0 ]]; then
+    status=1
+  fi
+  exit "$status"
+}
+
+umask 077
+trap cleanup EXIT
+private_temporary="$(mktemp "${private_backup}.tmp.XXXXXX")"
+public_temporary="$(mktemp "${public_backup}.tmp.XXXXXX")"
+private_rollback="${private_temporary}.rollback"
+public_rollback="${public_temporary}.rollback"
 
 mysqldump \
     -P "${MYSQL_PORT}" \
@@ -17,7 +89,7 @@ mysqldump \
     --lock-tables=false \
     --no-tablespaces \
     -B "${MYSQL_DATABASE}" \
-    | gzip > "${private_backup}"
+    | gzip > "${private_temporary}"
 
 mysqldump \
     -P "${MYSQL_PORT}" \
@@ -29,7 +101,7 @@ mysqldump \
     --no-tablespaces \
     --no-data \
     "${MYSQL_DATABASE}" \
-    | sed -e 's/DEFINER[ ]*=[ ]*[^*  ]*\*/\*/' > "${public_backup}"
+    | sed -e 's/DEFINER[ ]*=[ ]*[^*  ]*\*/\*/' > "${public_temporary}"
 
 mysqldump \
     -P "${MYSQL_PORT}" \
@@ -50,19 +122,51 @@ mysqldump \
     --ignore-table="${MYSQL_DATABASE}.Notifications" \
     --ignore-table="${MYSQL_DATABASE}.Permissions" \
     --ignore-table="${MYSQL_DATABASE}.PersistentLogins" \
-    "${MYSQL_DATABASE}" >> "${public_backup}"
+    "${MYSQL_DATABASE}" >> "${public_temporary}"
 
-[[ -s "$private_backup" ]] || {
+[[ -s "$private_temporary" ]] || {
   printf 'backup-mysql: private backup is missing or empty\n' >&2
   exit 1
 }
 
-[[ -s "$public_backup" ]] || {
+[[ -s "$public_temporary" ]] || {
   printf 'backup-mysql: public backup is missing or empty\n' >&2
   exit 1
 }
 
+private_bytes="$(stat -c %s "$private_temporary")"
+public_bytes="$(stat -c %s "$public_temporary")"
+
+[[ "$private_bytes" =~ ^[1-9][0-9]*$ ]] || {
+  printf 'backup-mysql: private backup size is invalid\n' >&2
+  exit 1
+}
+
+[[ "$public_bytes" =~ ^[1-9][0-9]*$ ]] || {
+  printf 'backup-mysql: public backup size is invalid\n' >&2
+  exit 1
+}
+
+if [[ -e "$private_backup" ]]; then
+  ln -- "$private_backup" "$private_rollback"
+  private_had_final=1
+fi
+
+if [[ -e "$public_backup" ]]; then
+  ln -- "$public_backup" "$public_rollback"
+  public_had_final=1
+fi
+
+mv -f -- "$private_temporary" "$private_backup"
+private_temporary=""
+private_promoted=1
+
+mv -f -- "$public_temporary" "$public_backup"
+public_temporary=""
+public_promoted=1
+transaction_committed=1
+
 printf 'backup-mysql: success timestamp=%s private=%s private-bytes=%s public=%s public-bytes=%s\n' \
   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  "$private_backup" "$(stat -c %s "$private_backup")" \
-  "$public_backup" "$(stat -c %s "$public_backup")"
+  "$private_backup" "$private_bytes" \
+  "$public_backup" "$public_bytes"
