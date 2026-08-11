@@ -20,7 +20,8 @@ check_route() {
   local route="$3"
   local http_code
 
-  http_code="$(curl -sS -L -o /dev/null -w '%{http_code}' \
+  http_code="$(curl -sS --connect-timeout 5 --max-time 15 \
+    -o /dev/null -w '%{http_code}' \
     "${base_url}${route}" || true)"
   [[ "$http_code" == 200 ]] ||
     fail "${label} ${route} returned HTTP ${http_code:-no-response}"
@@ -44,32 +45,59 @@ run_remote() {
 
   compose_hash="$(sha256sum docker-compose.yaml | awk '{print $1}')"
   info "Compose SHA-256 ${compose_hash}"
-  "${compose[@]}" config |
-    awk '$1 == "image:" {print "INFO: configured image " $2}'
+  rendered_compose="$("${compose[@]}" config)" ||
+    fail 'Compose rendering failed'
+  compose_images="$(printf '%s\n' "$rendered_compose" | awk '
+    /^services:$/ { in_services = 1; next }
+    in_services && /^[^ ]/ { in_services = 0 }
+    in_services && /^  [^ ]+:[[:space:]]*$/ {
+      service = $1
+      sub(/:$/, "", service)
+    }
+    in_services && /^    image:[[:space:]]/ { print service, $2 }
+  ')"
+  unset rendered_compose
 
-  containers=(
-    legendhub260_mysql_1
-    legendhub260_mysql-backup_1
-    legendhub260_python_1
-    legendhub260_www_1
+  expected_entries=(
+    'mysql|legendhub260_mysql_1|mysql:5.7.44'
+    'mysql-backup|legendhub260_mysql-backup_1|tmckimmey/legendhub-mysql-backup:6ddaeab948a1'
+    'python|legendhub260_python_1|tmckimmey/legendhub-python:6ddaeab948a1'
+    'www|legendhub260_www_1|tmckimmey/legendhub-www:4bb661fd5dd7'
   )
 
-  for container in "${containers[@]}"; do
+  for entry in "${expected_entries[@]}"; do
+    IFS='|' read -r service container expected_image <<< "$entry"
+    compose_image="$(printf '%s\n' "$compose_images" | awk \
+      -v wanted="$service" '$1 == wanted {print $2}')"
+    [[ "$compose_image" == "$expected_image" ]] ||
+      fail "Compose image for $service is ${compose_image:-missing}; expected $expected_image"
+
     project="$(docker inspect --format \
       '{{index .Config.Labels "com.docker.compose.project"}}' "$container")"
+    container_service="$(docker inspect --format \
+      '{{index .Config.Labels "com.docker.compose.service"}}' "$container")"
     image="$(docker inspect --format '{{.Config.Image}}' "$container")"
     state="$(docker inspect --format '{{.State.Status}}' "$container")"
     restarts="$(docker inspect --format '{{.RestartCount}}' "$container")"
     container_id="$(docker inspect --format '{{.Id}}' "$container")"
-    platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image")"
+    running_image_id="$(docker inspect --format '{{.Image}}' "$container")"
+    expected_image_id="$(docker image inspect --format '{{.Id}}' "$expected_image")"
+    platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' \
+      "$expected_image")"
 
     [[ "$project" == legendhub260 ]] ||
       fail "$container belongs to project $project"
+    [[ "$container_service" == "$service" ]] ||
+      fail "$container has service label $container_service; expected $service"
+    [[ "$image" == "$expected_image" ]] ||
+      fail "container image for $service is $image; expected $expected_image"
+    [[ "$running_image_id" == "$expected_image_id" ]] ||
+      fail "running image ID for $service does not match $expected_image"
     [[ "$state" == running ]] || fail "$container is $state"
     [[ "$restarts" == 0 ]] || fail "$container has $restarts restarts"
-    [[ "$platform" == linux/amd64 ]] || fail "$image is $platform"
+    [[ "$platform" == linux/amd64 ]] || fail "$expected_image is $platform"
 
-    pass "$container running; image=$image; platform=$platform; restarts=0"
+    pass "$container running; image=$expected_image; platform=$platform; restarts=0"
     info "$container id=$container_id"
   done
 
@@ -90,17 +118,70 @@ run_remote() {
   pass 'Manual backup artifacts are nonempty and readable'
 
   [[ -s "$cutover_dump" ]] || fail 'Cutover backup is missing or empty'
+  dump_metadata="$(stat -c '%s %a %U' "$cutover_dump")" ||
+    fail 'Cutover backup metadata could not be read'
+  read -r dump_size dump_mode dump_owner <<< "$dump_metadata"
+  [[ "$dump_size" =~ ^[0-9]+$ && "$dump_size" -gt 1048576 ]] ||
+    fail "Cutover backup is only ${dump_size:-unknown} bytes"
+  [[ "$dump_mode" == 600 ]] ||
+    fail "Cutover backup mode is ${dump_mode:-unknown}; expected 600"
+  current_user="$(id -un)"
+  [[ "$dump_owner" == "$current_user" ]] ||
+    fail "Cutover backup owner is ${dump_owner:-unknown}; expected $current_user"
   gzip -t "$cutover_dump" || fail 'Cutover backup failed gzip validation'
-  stat -c 'INFO: %n — %s bytes — mode %a' "$cutover_dump"
+  info "$cutover_dump — $dump_size bytes — mode $dump_mode — owner $dump_owner"
   pass 'Cutover backup is valid'
 
   [[ -d "$rollback_root" ]] || fail 'Rollback directory is missing'
-  rollback_ids="$(docker ps -aq --filter label=com.docker.compose.project=legendhub)"
-  [[ -n "$rollback_ids" ]] || fail 'Rollback containers are missing'
-  pass 'Rollback directory and containers are present'
-  docker ps -a \
-    --filter label=com.docker.compose.project=legendhub \
-    --format 'INFO: rollback container={{.Names}} image={{.Image}} state={{.Status}}'
+  [[ -s "$rollback_root/docker-compose.yaml" ]] ||
+    fail 'Rollback docker-compose.yaml is missing'
+  [[ -s "$rollback_root/.env" ]] || fail 'Rollback .env is missing'
+  (cd "$rollback_root" && docker-compose config --quiet) ||
+    fail 'Rollback Compose validation failed'
+
+  rollback_containers=(
+    legendhub_mysql_1
+    legendhub_python_1
+    legendhub_www_1
+  )
+  rollback_volumes=''
+
+  for rollback_container in "${rollback_containers[@]}"; do
+    if ! rollback_state="$(docker inspect --format '{{.State.Status}}' \
+      "$rollback_container")"; then
+      fail "Rollback container $rollback_container is missing"
+    fi
+    [[ "$rollback_state" == exited ]] ||
+      fail "Rollback container $rollback_container is $rollback_state; expected exited"
+
+    rollback_image="$(docker inspect --format '{{.Config.Image}}' \
+      "$rollback_container")"
+    rollback_image_id="$(docker inspect --format '{{.Image}}' \
+      "$rollback_container")"
+    rollback_platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' \
+      "$rollback_image_id")" ||
+      fail "Rollback image for $rollback_container is missing"
+    [[ "$rollback_platform" == linux/amd64 ]] ||
+      fail "Rollback image for $rollback_container is $rollback_platform"
+
+    container_volumes="$(docker inspect --format \
+      '{{range .Mounts}}{{if eq .Type "volume"}}{{println .Name}}{{end}}{{end}}' \
+      "$rollback_container")"
+    rollback_volumes="${rollback_volumes}${container_volumes}"$'\n'
+    pass "$rollback_container stopped; image=$rollback_image; platform=$rollback_platform"
+  done
+
+  rollback_volumes="$(printf '%s\n' "$rollback_volumes" | awk 'NF && !seen[$0]++')"
+  [[ -n "$rollback_volumes" ]] || fail 'Rollback named volumes are missing'
+  while IFS= read -r rollback_volume; do
+    [[ "$rollback_volume" == legendhub_* ]] ||
+      fail "Unexpected rollback volume $rollback_volume"
+    docker volume inspect "$rollback_volume" >/dev/null ||
+      fail "Rollback volume $rollback_volume is missing"
+    pass "Rollback volume $rollback_volume is present"
+  done <<< "$rollback_volumes"
+
+  pass 'Rollback files, containers, images, and volumes are present'
 
   routes=(
     /
