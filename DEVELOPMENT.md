@@ -133,6 +133,19 @@ Generate a database backup immediately with:
 docker compose exec mysql-backup /usr/local/bin/backup-mysql
 ```
 
+The command must print one `backup-mysql: success` line. Verify both artifacts
+without displaying their contents:
+
+```sh
+docker compose exec mysql-backup \
+  find /backups/private /backups/public -type f -size +0c \
+  -printf '%p %s bytes\n'
+docker compose logs --tail=100 mysql-backup
+```
+
+Scheduled backups run daily at 06:11 UTC. Treat a missing success line, an
+empty artifact list, or a nonzero command as a failed backup.
+
 ## Publish x86_64 images
 
 The publisher requires clean committed inputs under `www`, `python`, and `mysql`,
