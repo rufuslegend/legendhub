@@ -14,6 +14,20 @@ info() {
   printf 'INFO: %s\n' "$1"
 }
 
+sorted_lines() {
+  awk 'NF && !seen[$0]++' | LC_ALL=C sort
+}
+
+require_exact_set() {
+  local label="$1"
+  local actual="$2"
+  local expected="$3"
+
+  [[ "$(printf '%s\n' "$actual" | sorted_lines)" == \
+    "$(printf '%s\n' "$expected" | sorted_lines)" ]] ||
+    fail "$label does not match the expected set"
+}
+
 check_route() {
   local label="$1"
   local base_url="$2"
@@ -42,6 +56,20 @@ run_remote() {
   [[ -f .env ]] || fail '.env is missing'
   "${compose[@]}" config --quiet || fail 'Compose validation failed'
   pass 'Compose configuration validates'
+
+  expected_services=$'mysql\nmysql-backup\npython\nwww'
+  current_services="$("${compose[@]}" config --services)" ||
+    fail 'Current Compose services could not be listed'
+  require_exact_set 'Current Compose services' \
+    "$current_services" "$expected_services"
+
+  expected_containers=$'legendhub260_mysql_1\nlegendhub260_mysql-backup_1\nlegendhub260_python_1\nlegendhub260_www_1'
+  current_containers="$(docker ps -a \
+    --filter label=com.docker.compose.project=legendhub260 \
+    --format '{{.Names}}')" || fail 'Current project containers could not be listed'
+  require_exact_set 'Current project containers' \
+    "$current_containers" "$expected_containers"
+  pass 'Current Compose services and project containers are exact'
 
   compose_hash="$(sha256sum docker-compose.yaml | awk '{print $1}')"
   info "Compose SHA-256 ${compose_hash}"
@@ -139,14 +167,38 @@ run_remote() {
   (cd "$rollback_root" && docker-compose config --quiet) ||
     fail 'Rollback Compose validation failed'
 
-  rollback_containers=(
-    legendhub_mysql_1
-    legendhub_python_1
-    legendhub_www_1
+  rollback_services="$(cd "$rollback_root" && docker-compose config --services)" ||
+    fail 'Rollback Compose services could not be listed'
+  require_exact_set 'Rollback Compose services' \
+    "$rollback_services" $'mysql\npython\nwww'
+
+  rollback_project_containers="$(docker ps -a \
+    --filter label=com.docker.compose.project=legendhub \
+    --format '{{.Names}}')" || fail 'Rollback project containers could not be listed'
+  expected_rollback_project_containers=$'legendhub_mysql_1\nlegendhub_python_1\nlegendhub_www_1\nlegendhub_www_2'
+  require_exact_set 'Rollback project containers' \
+    "$rollback_project_containers" "$expected_rollback_project_containers"
+
+  while IFS= read -r rollback_project_container; do
+    rollback_project_state="$(docker inspect --format '{{.State.Status}}' \
+      "$rollback_project_container")" ||
+      fail "Rollback project container $rollback_project_container is missing"
+    case "$rollback_project_state" in
+      created|exited) ;;
+      *) fail "Rollback project container $rollback_project_container is $rollback_project_state" ;;
+    esac
+  done <<< "$rollback_project_containers"
+
+  rollback_entries=(
+    'mysql|legendhub_mysql_1|legendhub_mysql'
+    'python|legendhub_python_1|legendhub_python'
+    'www|legendhub_www_1|legendhub_www'
   )
   rollback_volumes=''
 
-  for rollback_container in "${rollback_containers[@]}"; do
+  for rollback_entry in "${rollback_entries[@]}"; do
+    IFS='|' read -r rollback_service rollback_container \
+      expected_rollback_image <<< "$rollback_entry"
     if ! rollback_state="$(docker inspect --format '{{.State.Status}}' \
       "$rollback_container")"; then
       fail "Rollback container $rollback_container is missing"
@@ -154,13 +206,31 @@ run_remote() {
     [[ "$rollback_state" == exited ]] ||
       fail "Rollback container $rollback_container is $rollback_state; expected exited"
 
+    rollback_project="$(docker inspect --format \
+      '{{index .Config.Labels "com.docker.compose.project"}}' \
+      "$rollback_container")"
+    rollback_container_service="$(docker inspect --format \
+      '{{index .Config.Labels "com.docker.compose.service"}}' \
+      "$rollback_container")"
     rollback_image="$(docker inspect --format '{{.Config.Image}}' \
       "$rollback_container")"
     rollback_image_id="$(docker inspect --format '{{.Image}}' \
       "$rollback_container")"
+    expected_rollback_image_id="$(docker image inspect --format '{{.Id}}' \
+      "$expected_rollback_image")" ||
+      fail "Rollback image $expected_rollback_image is missing"
     rollback_platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' \
-      "$rollback_image_id")" ||
+      "$expected_rollback_image")" ||
       fail "Rollback image for $rollback_container is missing"
+
+    [[ "$rollback_project" == legendhub ]] ||
+      fail "$rollback_container belongs to project $rollback_project"
+    [[ "$rollback_container_service" == "$rollback_service" ]] ||
+      fail "$rollback_container has service label $rollback_container_service; expected $rollback_service"
+    [[ "$rollback_image" == "$expected_rollback_image" ]] ||
+      fail "Rollback container image for $rollback_service is $rollback_image; expected $expected_rollback_image"
+    [[ "$rollback_image_id" == "$expected_rollback_image_id" ]] ||
+      fail "Rollback running image ID for $rollback_service does not match $expected_rollback_image"
     [[ "$rollback_platform" == linux/amd64 ]] ||
       fail "Rollback image for $rollback_container is $rollback_platform"
 
@@ -171,15 +241,15 @@ run_remote() {
     pass "$rollback_container stopped; image=$rollback_image; platform=$rollback_platform"
   done
 
-  rollback_volumes="$(printf '%s\n' "$rollback_volumes" | awk 'NF && !seen[$0]++')"
-  [[ -n "$rollback_volumes" ]] || fail 'Rollback named volumes are missing'
+  rollback_volumes="$(printf '%s\n' "$rollback_volumes" | sorted_lines)"
+  expected_rollback_volumes=$'legendhub_database\nlegendhub_database-logs\nlegendhub_python-logs'
+  require_exact_set 'Rollback named volumes' \
+    "$rollback_volumes" "$expected_rollback_volumes"
   while IFS= read -r rollback_volume; do
-    [[ "$rollback_volume" == legendhub_* ]] ||
-      fail "Unexpected rollback volume $rollback_volume"
     docker volume inspect "$rollback_volume" >/dev/null ||
       fail "Rollback volume $rollback_volume is missing"
     pass "Rollback volume $rollback_volume is present"
-  done <<< "$rollback_volumes"
+  done <<< "$expected_rollback_volumes"
 
   pass 'Rollback files, containers, images, and volumes are present'
 
