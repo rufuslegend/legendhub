@@ -35,7 +35,7 @@ printf 'docker-compose %s\n' "${dollar}*" >> "${dollar}FAKE_COMMAND_LOG"
 case "${dollar}*" in
   *"config --services")
     if [[ "${dollar}PWD" == "${dollar}FAKE_ROLLBACK_ROOT" ]]; then
-      printf '%s\n' mysql python www
+      printf '%s\n' mysql mysql-backup python www
       [[ -z "${dollar}{FAKE_EXTRA_ROLLBACK_SERVICE:-}" ]] ||
         printf '%s\n' "${dollar}FAKE_EXTRA_ROLLBACK_SERVICE"
     else

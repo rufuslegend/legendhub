@@ -170,7 +170,7 @@ run_remote() {
   rollback_services="$(cd "$rollback_root" && docker-compose config --services)" ||
     fail 'Rollback Compose services could not be listed'
   require_exact_set 'Rollback Compose services' \
-    "$rollback_services" $'mysql\npython\nwww'
+    "$rollback_services" $'mysql\nmysql-backup\npython\nwww'
 
   rollback_project_containers="$(docker ps -a \
     --filter label=com.docker.compose.project=legendhub \
