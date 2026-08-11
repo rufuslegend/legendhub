@@ -242,7 +242,7 @@ run_remote() {
   done
 
   rollback_volumes="$(printf '%s\n' "$rollback_volumes" | sorted_lines)"
-  expected_rollback_volumes=$'legendhub_database\nlegendhub_database-logs\nlegendhub_python-logs'
+  expected_rollback_volumes=$'legendhub_database\nlegendhub_database-backups\nlegendhub_database-logs\nlegendhub_python-logs'
   require_exact_set 'Rollback named volumes' \
     "$rollback_volumes" "$expected_rollback_volumes"
   while IFS= read -r rollback_volume; do

@@ -144,7 +144,7 @@ if [[ "${dollar}{1:-}" == inspect && "${dollar}{2:-}" == --format ]]; then
     *Mounts*)
       case "${dollar}container" in
         legendhub_mysql_1)
-          printf '%s\n' legendhub_database legendhub_database-logs
+          printf '%s\n' legendhub_database-backups legendhub_database legendhub_database-logs
           [[ -z "${dollar}{FAKE_EXTRA_ROLLBACK_VOLUME:-}" ]] ||
             printf '%s\n' "${dollar}FAKE_EXTRA_ROLLBACK_VOLUME"
           ;;
