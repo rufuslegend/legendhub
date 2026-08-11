@@ -1,0 +1,38 @@
+#!/bin/bash
+set -euo pipefail
+
+required_variables=(
+  MYSQL_PORT
+  MYSQL_USER
+  MYSQL_PASSWORD
+  MYSQL_DATABASE
+)
+
+for variable_name in "${required_variables[@]}"; do
+  if [[ -z "${!variable_name:-}" ]]; then
+    printf 'backup-entrypoint: required variable %s is missing\n' \
+      "$variable_name" >&2
+    exit 1
+  fi
+done
+
+[[ "$#" -gt 0 ]] || {
+  printf 'backup-entrypoint: command is required\n' >&2
+  exit 64
+}
+
+umask 077
+runtime_file=/run/legendhub-backup.env
+temporary_file="$(mktemp /run/legendhub-backup.env.XXXXXX)"
+trap 'rm -f -- "$temporary_file"' EXIT
+
+for variable_name in "${required_variables[@]}"; do
+  printf 'export %s=%q\n' "$variable_name" "${!variable_name}" \
+    >> "$temporary_file"
+done
+
+chmod 0600 "$temporary_file"
+mv -f -- "$temporary_file" "$runtime_file"
+trap - EXIT
+
+exec "$@"
