@@ -88,3 +88,31 @@ test("entrypoint rejects an absent command", () => {
     assert.equal(result.status, 64);
     assert.match(result.stderr, /command is required/);
 });
+
+function runBackup(fakeDumpBody) {
+    const command = [
+        "fake_bin=$(mktemp -d)",
+        "trap 'rm -rf -- \"$fake_bin\"' EXIT",
+        "printf '%s\\n' '#!/bin/sh' " +
+            `'${fakeDumpBody.replaceAll("'", "'\\''")}' > \"$fake_bin/mysqldump\"`,
+        "chmod +x \"$fake_bin/mysqldump\"",
+        "PATH=\"$fake_bin:$PATH\" /usr/local/bin/backup-mysql",
+    ].join("; ");
+    return docker(["run", "--rm", ...environmentArguments(),
+        image, "bash", "-c", command]);
+}
+
+test("backup command reports two nonempty artifacts without leaking secrets", () => {
+    const result = runBackup("printf 'CREATE TABLE backup_test (id int);\\n'");
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout,
+        /backup-mysql: success timestamp=\S+ private=\/backups\/private\/database_\d{2}-\d{2}-\d{4}\.sql\.gz private-bytes=[1-9]\d* public=\/backups\/public\/database\.sql public-bytes=[1-9]\d*/);
+    assert.doesNotMatch(result.stdout + result.stderr,
+        new RegExp(requiredEnvironment.MYSQL_PASSWORD.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+});
+
+test("backup command does not report success after a dump failure", () => {
+    const result = runBackup("exit 17");
+    assert.notEqual(result.status, 0);
+    assert.doesNotMatch(result.stdout, /backup-mysql: success/);
+});

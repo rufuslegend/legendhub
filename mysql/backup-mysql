@@ -51,3 +51,18 @@ mysqldump \
     --ignore-table="${MYSQL_DATABASE}.Permissions" \
     --ignore-table="${MYSQL_DATABASE}.PersistentLogins" \
     "${MYSQL_DATABASE}" >> "${public_backup}"
+
+[[ -s "$private_backup" ]] || {
+  printf 'backup-mysql: private backup is missing or empty\n' >&2
+  exit 1
+}
+
+[[ -s "$public_backup" ]] || {
+  printf 'backup-mysql: public backup is missing or empty\n' >&2
+  exit 1
+}
+
+printf 'backup-mysql: success timestamp=%s private=%s private-bytes=%s public=%s public-bytes=%s\n' \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  "$private_backup" "$(stat -c %s "$private_backup")" \
+  "$public_backup" "$(stat -c %s "$public_backup")"
