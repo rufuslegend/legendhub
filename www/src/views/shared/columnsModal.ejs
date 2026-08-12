@@ -8,13 +8,12 @@
                 </button>
             </div>
             <div class="modal-body">
-                <div class="row">
-                    <p class="col-12 text-info">Use these to hide columns from the search result grid.</p>
+                <div class="columns-picker-toolbar">
+                    <p class="columns-picker-toolbar-copy text-info">
+                        Select columns to show and hide from the following:
+                    </p>
+                    <button type="button" class="columns-picker-reset btn btn-primary btn-sm" ng-click="resetColumns()">Reset to defaults</button>
                 </div>
-                <div class="row">
-                    <button class="col-12 btn btn-primary btn-block" ng-click="resetColumns()">Reset to defaults</button>
-                </div>
-                <br />
                 <div class="columns-picker-grid">
                 <%
                 const knownStackNames = [

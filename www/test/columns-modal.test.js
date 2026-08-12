@@ -61,6 +61,23 @@ test("shared Columns modal renders in an extra-wide dialog", function() {
     assert.match(rendered, /class="columns-picker-grid"/);
 });
 
+test("shared Columns modal renders a compact right-aligned reset toolbar", function() {
+    const toolbar = rendered.match(
+        /<div class="columns-picker-toolbar">([\s\S]*?)<\/div>/);
+
+    assert.ok(toolbar, "missing Columns picker toolbar");
+    assert.match(toolbar[1],
+        /<p class="columns-picker-toolbar-copy text-info">\s*Select columns to show and hide from the following:\s*<\/p>/);
+
+    const reset = toolbar[1].match(/<button\b[^>]*>Reset to defaults<\/button>/);
+    assert.ok(reset, "missing compact reset button");
+    assert.match(reset[0], /\btype="button"/);
+    assert.match(reset[0], /\bclass="[^"]*\bcolumns-picker-reset\b[^"]*\bbtn-sm\b[^"]*"/);
+    assert.match(reset[0], /\bng-click="resetColumns\(\)"/);
+    assert.doesNotMatch(reset[0], /\bcol-12\b/);
+    assert.doesNotMatch(reset[0], /\bbtn-block\b/);
+});
+
 test("shared Columns modal renders ordered compact category cards", function() {
     assert.equal((rendered.match(
         /class="columns-picker-category list-group-item"/g) || []).length, 2);
