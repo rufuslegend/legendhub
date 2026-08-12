@@ -14,6 +14,13 @@ info() {
   printf 'INFO: %s\n' "$1"
 }
 
+validate_expected_sha() {
+  local expected_sha="${1:-}"
+
+  [[ "$expected_sha" =~ ^[a-f0-9]{12}$ ]] ||
+    fail 'Expected image tag must be a 12-character lowercase Git SHA'
+}
+
 sorted_lines() {
   awk 'NF && !seen[$0]++' | LC_ALL=C sort
 }
@@ -43,9 +50,12 @@ check_route() {
 }
 
 run_remote() {
-  local deploy_root="$1"
-  local cutover_dump="$2"
-  local rollback_root="$3"
+  local expected_sha="$1"
+  local deploy_root="$2"
+  local cutover_dump="$3"
+  local rollback_root="$4"
+
+  validate_expected_sha "$expected_sha"
 
   cd "$deploy_root"
   compose=(docker-compose -p legendhub260 -f docker-compose.yaml)
@@ -88,9 +98,9 @@ run_remote() {
 
   expected_entries=(
     'mysql|legendhub260_mysql_1|mysql:5.7.44'
-    'mysql-backup|legendhub260_mysql-backup_1|tmckimmey/legendhub-mysql-backup:6ddaeab948a1'
-    'python|legendhub260_python_1|tmckimmey/legendhub-python:6ddaeab948a1'
-    'www|legendhub260_www_1|tmckimmey/legendhub-www:4bb661fd5dd7'
+    "mysql-backup|legendhub260_mysql-backup_1|tmckimmey/legendhub-mysql-backup:${expected_sha}"
+    "python|legendhub260_python_1|tmckimmey/legendhub-python:${expected_sha}"
+    "www|legendhub260_www_1|tmckimmey/legendhub-www:${expected_sha}"
   )
 
   for entry in "${expected_entries[@]}"; do
@@ -277,15 +287,19 @@ run_remote() {
 }
 
 if [[ "${1:-}" == --remote ]]; then
-  [[ "$#" -eq 4 ]] || fail 'Invalid remote preflight invocation'
-  run_remote "$2" "$3" "$4"
+  [[ "$#" -eq 5 ]] || fail 'Invalid remote preflight invocation'
+  run_remote "$2" "$3" "$4" "$5"
   exit
 fi
 
-[[ "$#" -eq 0 ]] || fail 'This script does not accept arguments'
+[[ "$#" -eq 1 ]] ||
+  fail 'Expected image tag must be a 12-character lowercase Git SHA'
+expected_sha="$1"
+validate_expected_sha "$expected_sha"
 
 ssh -A legend bash -s -- \
   --remote \
+  "$expected_sha" \
   /home/rufus/legendhub \
   /home/rufus/legendhub-cutover-backups/legendhub-pre-2.6.0.sql.gz \
   /legend/LegendHubOriginal < "${BASH_SOURCE[0]}"

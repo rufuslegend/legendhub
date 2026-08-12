@@ -9,6 +9,7 @@ const {spawnSync} = require("node:child_process");
 const {afterEach, beforeEach, test} = require("node:test");
 
 const preflight = path.resolve(__dirname, "../preflight-production.sh");
+const expectedReleaseSha = "abcdef123456";
 const dollar = "$";
 const expectedBackupPayload = [
     "",
@@ -54,11 +55,11 @@ case "${dollar}*" in
       '      SECRET_VALUE: do-not-print' \
       '    image: mysql:5.7.44' \
       '  mysql-backup:' \
-      '    image: tmckimmey/legendhub-mysql-backup:6ddaeab948a1' \
+      "    image: tmckimmey/legendhub-mysql-backup:${dollar}{FAKE_EXPECTED_RELEASE_SHA:-abcdef123456}" \
       '  python:' \
-      '    image: tmckimmey/legendhub-python:6ddaeab948a1' \
+      "    image: tmckimmey/legendhub-python:${dollar}{FAKE_EXPECTED_RELEASE_SHA:-abcdef123456}" \
       '  www:' \
-      "    image: ${dollar}{FAKE_COMPOSE_WWW_IMAGE:-tmckimmey/legendhub-www:4bb661fd5dd7}"
+      "    image: ${dollar}{FAKE_COMPOSE_WWW_IMAGE:-tmckimmey/legendhub-www:${dollar}{FAKE_EXPECTED_RELEASE_SHA:-abcdef123456}}"
     exit 0
     ;;
 esac
@@ -70,6 +71,7 @@ exit 64
 const dockerFake = String.raw`#!/usr/bin/env bash
 set -euo pipefail
 printf 'docker %s\n' "${dollar}*" >> "${dollar}FAKE_COMMAND_LOG"
+expected_release_sha="${dollar}{FAKE_EXPECTED_RELEASE_SHA:-abcdef123456}"
 
 if [[ "${dollar}{1:-}" == inspect && "${dollar}{2:-}" == --format ]]; then
   template="${dollar}3"
@@ -100,9 +102,9 @@ if [[ "${dollar}{1:-}" == inspect && "${dollar}{2:-}" == --format ]]; then
     *Config.Image*)
       case "${dollar}container" in
         legendhub260_mysql_1) printf '%s\n' mysql:5.7.44 ;;
-        legendhub260_mysql-backup_1) printf '%s\n' tmckimmey/legendhub-mysql-backup:6ddaeab948a1 ;;
-        legendhub260_python_1) printf '%s\n' tmckimmey/legendhub-python:6ddaeab948a1 ;;
-        legendhub260_www_1) printf '%s\n' "${dollar}{FAKE_WWW_CONTAINER_IMAGE:-tmckimmey/legendhub-www:4bb661fd5dd7}" ;;
+        legendhub260_mysql-backup_1) printf '%s\n' "tmckimmey/legendhub-mysql-backup:${dollar}expected_release_sha" ;;
+        legendhub260_python_1) printf '%s\n' "tmckimmey/legendhub-python:${dollar}expected_release_sha" ;;
+        legendhub260_www_1) printf '%s\n' "${dollar}{FAKE_WWW_CONTAINER_IMAGE:-tmckimmey/legendhub-www:${dollar}expected_release_sha}" ;;
         legendhub_mysql_1) printf '%s\n' legendhub_mysql ;;
         legendhub_python_1) printf '%s\n' "${dollar}{FAKE_ROLLBACK_PYTHON_IMAGE:-legendhub_python}" ;;
         legendhub_www_1) printf '%s\n' legendhub_www ;;
@@ -168,9 +170,9 @@ if [[ "${dollar}{1:-}" == image && "${dollar}{2:-}" == inspect ]]; then
   if [[ "${dollar}template" == '{{.Id}}' ]]; then
     case "${dollar}image" in
       mysql:5.7.44) printf '%s\n' sha256:mysql-image-id ;;
-      tmckimmey/legendhub-mysql-backup:6ddaeab948a1) printf '%s\n' sha256:backup-image-id ;;
-      tmckimmey/legendhub-python:6ddaeab948a1) printf '%s\n' sha256:python-image-id ;;
-      tmckimmey/legendhub-www:4bb661fd5dd7) printf '%s\n' sha256:www-image-id ;;
+      tmckimmey/legendhub-mysql-backup:${dollar}expected_release_sha) printf '%s\n' sha256:backup-image-id ;;
+      tmckimmey/legendhub-python:${dollar}expected_release_sha) printf '%s\n' sha256:python-image-id ;;
+      tmckimmey/legendhub-www:${dollar}expected_release_sha) printf '%s\n' sha256:www-image-id ;;
       legendhub_mysql) printf '%s\n' sha256:rollback-mysql-image-id ;;
       legendhub_python) printf '%s\n' sha256:rollback-python-image-id ;;
       legendhub_www) printf '%s\n' sha256:rollback-www-image-id ;;
@@ -306,8 +308,8 @@ beforeEach(() => {
 
 afterEach(() => fs.rmSync(workspace, {recursive: true, force: true}));
 
-function runPreflight(extraEnvironment = {}) {
-    return spawnSync("bash", [preflight], {
+function runPreflight(args = [expectedReleaseSha], extraEnvironment = {}) {
+    return spawnSync("bash", [preflight, ...args], {
         encoding: "utf8",
         env: {
             ...process.env,
@@ -320,10 +322,12 @@ function runPreflight(extraEnvironment = {}) {
     });
 }
 
-function runRemote(extraEnvironment = {}, targetScript = preflight) {
+function runRemote(extraEnvironment = {}, targetScript = preflight,
+    expectedSha = expectedReleaseSha) {
     return spawnSync("bash", [
         targetScript,
         "--remote",
+        expectedSha,
         remoteRoot,
         cutoverDump,
         rollbackRoot,
@@ -335,6 +339,7 @@ function runRemote(extraEnvironment = {}, targetScript = preflight) {
             FAKE_COMMAND_LOG: commandLog,
             FAKE_DOCKER_EXEC_PAYLOAD: dockerExecPayload,
             FAKE_EXPECTED_DOCKER_EXEC_PAYLOAD: expectedBackupPayload,
+            FAKE_EXPECTED_RELEASE_SHA: expectedSha,
             FAKE_HTTP_CODE: "200",
             FAKE_ROLLBACK_ROOT: rollbackRoot,
             ...extraEnvironment,
@@ -348,12 +353,55 @@ test("sends fixed production paths through agent-forwarded SSH", () => {
     assert.equal(result.status, 0, result.stderr);
     assert.equal(fs.readFileSync(sshArgs, "utf8"), [
         "-A legend bash -s -- --remote",
+        expectedReleaseSha,
         "/home/rufus/legendhub",
         "/home/rufus/legendhub-cutover-backups/legendhub-pre-2.6.0.sql.gz",
         "/legend/LegendHubOriginal",
         "",
     ].join(" ").trimEnd() + "\n");
     assert.notEqual(fs.readFileSync(sshPayload, "utf8"), "");
+});
+
+test("rejects missing or malformed expected SHAs before SSH", async (t) => {
+    const cases = [
+        {name: "missing", args: []},
+        {name: "short", args: ["abcdef12345"]},
+        {name: "long", args: ["abcdef1234567"]},
+        {name: "uppercase", args: ["ABCDEF123456"]},
+        {name: "non-hex", args: ["ghijkl123456"]},
+    ];
+
+    for (const candidate of cases) {
+        await t.test(candidate.name, () => {
+            const result = runPreflight(candidate.args);
+            assert.notEqual(result.status, 0);
+            assert.match(result.stderr, /12-character lowercase Git SHA/i);
+            assert.equal(fs.existsSync(sshArgs), false);
+        });
+    }
+});
+
+test("rejects malformed remote invocation", () => {
+    const result = spawnSync("bash", [
+        preflight,
+        "--remote",
+        expectedReleaseSha,
+        remoteRoot,
+        cutoverDump,
+    ], {encoding: "utf8"});
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Invalid remote preflight invocation/);
+});
+
+test("uses the supplied SHA for all current application images", () => {
+    const result = runRemote({}, preflight, "123456abcdef");
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout,
+        /tmckimmey\/legendhub-mysql-backup:123456abcdef/);
+    assert.match(result.stdout, /tmckimmey\/legendhub-python:123456abcdef/);
+    assert.match(result.stdout, /tmckimmey\/legendhub-www:123456abcdef/);
 });
 
 test("runs read-only production checks without exposing secrets", () => {
