@@ -104,10 +104,9 @@ test("shared Columns modal renders the approved category stacks", function() {
 
     assert.deepEqual(renderedStackNames(html), [
         ["Basic"],
-        ["Main", "Limits"],
-        ["Regen", "Melee"],
-        ["Tank", "Mage", "Ranged"],
-        ["Weapon"]
+        ["Main", "Limits", "Ranged"],
+        ["Regen", "Tank", "Melee"],
+        ["Mage", "Weapon"]
     ]);
 });
 
@@ -125,17 +124,26 @@ test("shared Columns modal omits missing known categories and empty stacks", fun
     ]);
 });
 
-test("shared Columns modal appends unknown categories in independent stacks", function() {
+test("shared Columns modal appends unknown categories after configured stacks", function() {
     const html = renderCategories([
         category("Future Two"),
+        category("Weapon"),
         category("Tank"),
+        category("Basic"),
+        category("Ranged"),
+        category("Main"),
         category("Future One"),
-        category("Basic")
+        category("Melee"),
+        category("Limits"),
+        category("Mage"),
+        category("Regen")
     ]);
 
     assert.deepEqual(renderedStackNames(html), [
         ["Basic"],
-        ["Tank"],
+        ["Main", "Limits", "Ranged"],
+        ["Regen", "Tank", "Melee"],
+        ["Mage", "Weapon"],
         ["Future Two"],
         ["Future One"]
     ]);
