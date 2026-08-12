@@ -63,7 +63,7 @@ as an empty category card, matching the current server-driven behavior.
 - Rebuild the generated theme CSS and public minified assets through the
   repository's CSS build command rather than editing generated files manually.
 - Add focused regression coverage for the shared template and styling.
-- Record the user-visible picker improvement under version `2.6.0-beta` in
+- Record the user-visible picker improvement under version `2.6.1-beta` in
   root `CHANGELOG.md`.
 
 ## Verification
