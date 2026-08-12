@@ -73,7 +73,8 @@ test("shared Columns modal renders a compact right-aligned reset toolbar", funct
 
     assert.ok(toolbar, "missing Columns picker toolbar");
     assert.match(toolbar[1],
-        /<p class="columns-picker-toolbar-copy text-info">\s*Select columns to show and hide from the following:\s*<\/p>/);
+        /<p class="columns-picker-toolbar-copy text-body">\s*Select columns to show and hide from the following:\s*<\/p>/);
+    assert.doesNotMatch(toolbar[1], /\btext-info\b/);
 
     const reset = toolbar[1].match(/<button\b[^>]*>Reset to defaults<\/button>/);
     assert.ok(reset, "missing compact reset button");
