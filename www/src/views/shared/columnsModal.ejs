@@ -16,14 +16,42 @@
                 </div>
                 <br />
                 <div class="columns-picker-grid">
-                <% for (let i = 0; i < vm.itemStatCategories.length; ++i) { %>
+                <%
+                const knownStackNames = [
+                    ["Basic"],
+                    ["Main", "Limits"],
+                    ["Regen", "Melee"],
+                    ["Tank", "Mage", "Ranged"],
+                    ["Weapon"]
+                ];
+                const knownNames = new Set(knownStackNames.flat());
+                const categoriesByName = new Map();
+
+                for (const category of vm.itemStatCategories) {
+                    if (knownNames.has(category.name) && !categoriesByName.has(category.name)) {
+                        categoriesByName.set(category.name, category);
+                    }
+                }
+
+                const categoryStacks = knownStackNames
+                    .map(names => names
+                        .map(name => categoriesByName.get(name))
+                        .filter(Boolean))
+                    .filter(stack => stack.length > 0);
+
+                for (const category of vm.itemStatCategories) {
+                    if (!knownNames.has(category.name)) {
+                        categoryStacks.push([category]);
+                    }
+                }
+                %>
+                <% for (const categoryStack of categoryStacks) { %>
+                    <div class="columns-picker-stack">
+                    <% for (const category of categoryStack) { %>
                     <section class="columns-picker-category list-group-item">
-                        <h6 class="columns-picker-category-title"><%= vm.itemStatCategories[i].name _%></h6>
+                        <h6 class="columns-picker-category-title"><%= category.name _%></h6>
                         <div class="list-group list-group-flush">
-                        <%
-                        for (let j = 0; j < vm.itemStatCategories[i].getItemStatInfo.length; ++j) {
-                            let stat = vm.itemStatCategories[i].getItemStatInfo[j];
-                        %>
+                        <% for (const stat of category.getItemStatInfo) { %>
                             <button ng-click="toggleColumn('<%- stat.short _%>')" type="button" class="columns-picker-option list-group-item list-group-item-action list-group-item-light">
                                 <span class="d-flex align-items-center justify-content-between">
                                     <span><%= stat.display _%></span>
@@ -33,6 +61,8 @@
                         <% } %>
                         </div>
                     </section>
+                    <% } %>
+                    </div>
                 <% } %>
                 </div>
             </div>

@@ -9,25 +9,45 @@ const ejs = require("ejs");
 const root = path.join(__dirname, "../..");
 const templatePath = path.join(root, "www/src/views/shared/columnsModal.ejs");
 const themes = ["light", "dark", "solarized-dark", "glass-blue"];
-const rendered = ejs.render(
-    fs.readFileSync(templatePath, "utf8"),
-    {
-        vm: {
-            itemStatCategories: [
-                {
-                    name: "Basic",
-                    getItemStatInfo: [{display: "Strength", short: "Str"}]
-                },
-                {
-                    name: "Tank",
-                    getItemStatInfo: [{display: "Hit Points", short: "HP"}]
-                }
-            ],
-            selectedColumns: ["Str"]
-        }
-    },
-    {filename: templatePath}
-);
+
+function category(name, short = name, display = `${name} Stat`) {
+    return {
+        name,
+        getItemStatInfo: [{display, short}]
+    };
+}
+
+function renderCategories(categories, selectedColumns = []) {
+    return ejs.render(
+        fs.readFileSync(templatePath, "utf8"),
+        {
+            vm: {
+                itemStatCategories: categories,
+                selectedColumns
+            }
+        },
+        {filename: templatePath}
+    );
+}
+
+function renderedStackNames(html) {
+    const starts = Array.from(html.matchAll(
+        /<div class="columns-picker-stack">/g), match => match.index);
+
+    return starts.map((start, index) => {
+        const end = starts[index + 1] ?? html.length;
+        return Array.from(
+            html.slice(start, end).matchAll(
+                /<h6 class="columns-picker-category-title">([^<]+)<\/h6>/g),
+            match => match[1]
+        );
+    });
+}
+
+const rendered = renderCategories([
+    category("Basic", "Str", "Strength"),
+    category("Tank", "HP", "Hit Points")
+], ["Str"]);
 
 function getPickerRule(css, selector) {
     const modal = String.raw`\.modal\[aria-labelledby=(?:"columnsModalLabel"|columnsModalLabel)\]`;
@@ -50,6 +70,51 @@ test("shared Columns modal renders ordered compact category cards", function() {
         /class="columns-picker-option list-group-item list-group-item-action list-group-item-light"/);
     assert.match(rendered, />Strength<\/span>/);
     assert.match(rendered, />Hit Points<\/span>/);
+});
+
+test("shared Columns modal renders the approved category stacks", function() {
+    const html = renderCategories([
+        "Basic", "Main", "Limits", "Regen", "Melee", "Mage", "Tank",
+        "Ranged", "Weapon"
+    ].map(name => category(name)));
+
+    assert.deepEqual(renderedStackNames(html), [
+        ["Basic"],
+        ["Main", "Limits"],
+        ["Regen", "Melee"],
+        ["Tank", "Mage", "Ranged"],
+        ["Weapon"]
+    ]);
+});
+
+test("shared Columns modal omits missing known categories and empty stacks", function() {
+    const html = renderCategories([
+        category("Basic"),
+        category("Limits"),
+        category("Weapon")
+    ]);
+
+    assert.deepEqual(renderedStackNames(html), [
+        ["Basic"],
+        ["Limits"],
+        ["Weapon"]
+    ]);
+});
+
+test("shared Columns modal appends unknown categories in independent stacks", function() {
+    const html = renderCategories([
+        category("Future Two"),
+        category("Tank"),
+        category("Future One"),
+        category("Basic")
+    ]);
+
+    assert.deepEqual(renderedStackNames(html), [
+        ["Basic"],
+        ["Tank"],
+        ["Future Two"],
+        ["Future One"]
+    ]);
 });
 
 test("shared Columns modal exposes picker choices as native buttons", function() {
