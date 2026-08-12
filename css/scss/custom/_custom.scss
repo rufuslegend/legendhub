@@ -39,6 +39,29 @@ body {
   border-top: $border-color;
 }
 
+.modal[aria-labelledby="columnsModalLabel"] {
+  .columns-picker-grid {
+    display: grid;
+    align-items: start;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    gap: 1rem;
+  }
+
+  .columns-picker-category {
+    padding: .75rem;
+  }
+
+  .columns-picker-category-title {
+    margin-bottom: .5rem;
+    font-size: 1rem;
+  }
+
+  .columns-picker-option {
+    padding: .5rem .75rem;
+    font-size: .875rem;
+  }
+}
+
 .breadcrumbList {
   padding: 5px 15px;
   list-style: none;

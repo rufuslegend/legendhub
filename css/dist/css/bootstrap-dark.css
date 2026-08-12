@@ -9001,6 +9001,24 @@ body > .container-fluid {
   border-top: #6c757d;
 }
 
+.modal[aria-labelledby=columnsModalLabel] .columns-picker-grid {
+  display: grid;
+  align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 1rem;
+}
+.modal[aria-labelledby=columnsModalLabel] .columns-picker-category {
+  padding: 0.75rem;
+}
+.modal[aria-labelledby=columnsModalLabel] .columns-picker-category-title {
+  margin-bottom: 0.5rem;
+  font-size: 1rem;
+}
+.modal[aria-labelledby=columnsModalLabel] .columns-picker-option {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+}
+
 .breadcrumbList {
   padding: 5px 15px;
   list-style: none;
