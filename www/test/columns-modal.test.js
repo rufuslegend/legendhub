@@ -67,7 +67,7 @@ function getDesktopPickerDialogRules(css) {
     const match = css.match(new RegExp(
         String.raw`@media \(min-width: 768px\) \{\s*` +
         String.raw`\.modal-xl\s*\{([^}]*)\}\s*` +
-        `${modal} \.modal-dialog\\s*\\{([^}]*)\\}\\s*\\}`
+        `${modal} \\.modal-dialog\\s*\\{([^}]*)\\}\\s*\\}`
     ));
     assert.ok(match, "missing desktop Columns picker dialog rule");
     return {general: match[1], picker: match[2]};
