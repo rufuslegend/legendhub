@@ -9,6 +9,12 @@ const ejs = require("ejs");
 const root = path.join(__dirname, "../..");
 const templatePath = path.join(root, "www/src/views/shared/columnsModal.ejs");
 const themes = ["light", "dark", "solarized-dark", "glass-blue"];
+const pickerSurfaces = {
+    light: {modal: "#f8f9fa", category: "#fff"},
+    dark: {modal: "#212529", category: "#343a40"},
+    "solarized-dark": {modal: "#002b36", category: "#073642"},
+    "glass-blue": {modal: "#060b12", category: "#0a1522"}
+};
 
 function category(name, short = name, display = `${name} Stat`) {
     return {
@@ -155,12 +161,31 @@ test("compiled themes expose the responsive compact picker", function() {
     for (const theme of themes) {
         const css = fs.readFileSync(path.join(
             root, `css/dist/css/bootstrap-${theme}.css`), "utf8");
+        const toolbar = getPickerRule(css,
+            String.raw`\.columns-picker-toolbar`);
+        const toolbarCopy = getPickerRule(css,
+            String.raw`\.columns-picker-toolbar-copy`);
+        const reset = getPickerRule(css,
+            String.raw`\.columns-picker-reset`);
+        const modalBody = getPickerRule(css, String.raw`\.modal-body`);
         const grid = getPickerRule(css, String.raw`\.columns-picker-grid`);
         const stack = getPickerRule(css, String.raw`\.columns-picker-stack`);
+        const category = getPickerRule(css,
+            String.raw`\.columns-picker-category`);
         const title = getPickerRule(css,
             String.raw`\.columns-picker-category-title`);
         const option = getPickerRule(css, String.raw`\.columns-picker-option`);
 
+        assert.match(toolbar, /display:\s*flex;/);
+        assert.match(toolbar, /align-items:\s*center;/);
+        assert.match(toolbar, /gap:\s*1rem;/);
+        assert.match(toolbar, /margin-bottom:\s*1rem;/);
+        assert.match(toolbarCopy, /flex:\s*1 1 auto;/);
+        assert.match(toolbarCopy, /min-width:\s*0;/);
+        assert.match(toolbarCopy, /margin-bottom:\s*0;/);
+        assert.match(reset, /flex:\s*0 0 auto;/);
+        assert.match(modalBody, new RegExp(
+            `background-color:\\s*${pickerSurfaces[theme].modal};`));
         assert.match(grid, /display:\s*grid;/);
         assert.match(grid, /align-items:\s*start;/);
         assert.match(grid,
@@ -168,7 +193,9 @@ test("compiled themes expose the responsive compact picker", function() {
         assert.match(stack, /display:\s*flex;/);
         assert.match(stack, /flex-direction:\s*column;/);
         assert.match(stack, /gap:\s*1rem;/);
-        assert.match(title, /font-size:\s*1rem;/);
+        assert.match(category, new RegExp(
+            `background-color:\\s*${pickerSurfaces[theme].category};`));
+        assert.match(title, /font-size:\s*1\.2rem;/);
         assert.match(option, /padding:\s*0\.5rem 0\.75rem;/);
         assert.match(option, /font-size:\s*0\.875rem;/);
     }

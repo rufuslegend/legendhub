@@ -1,3 +1,6 @@
+$columns-picker-modal-bg: $gray-100 !default;
+$columns-picker-category-bg: $white !default;
+
 html {
   position: relative;
   min-height: 100%;
@@ -40,6 +43,27 @@ body {
 }
 
 .modal[aria-labelledby="columnsModalLabel"] {
+  .modal-body {
+    background-color: $columns-picker-modal-bg;
+  }
+
+  .columns-picker-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .columns-picker-toolbar-copy {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-bottom: 0;
+  }
+
+  .columns-picker-reset {
+    flex: 0 0 auto;
+  }
+
   .columns-picker-grid {
     display: grid;
     align-items: start;
@@ -55,11 +79,12 @@ body {
 
   .columns-picker-category {
     padding: .75rem;
+    background-color: $columns-picker-category-bg;
   }
 
   .columns-picker-category-title {
     margin-bottom: .5rem;
-    font-size: 1rem;
+    font-size: 1.2rem;
   }
 
   .columns-picker-option {
