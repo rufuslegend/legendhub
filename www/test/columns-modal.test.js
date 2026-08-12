@@ -52,6 +52,17 @@ test("shared Columns modal renders ordered compact category cards", function() {
     assert.match(rendered, />Hit Points<\/span>/);
 });
 
+test("shared Columns modal exposes picker choices as native buttons", function() {
+    const pickerOptions = rendered.match(
+        /<[^>]*class="[^"]*\bcolumns-picker-option\b[^"]*"[^>]*>/g) || [];
+
+    assert.equal(pickerOptions.length, 2);
+    for (const pickerOption of pickerOptions) {
+        assert.match(pickerOption, /^<button\b/);
+        assert.match(pickerOption, /\btype="button"/);
+    }
+});
+
 test("shared Columns modal preserves column selection bindings", function() {
     assert.match(rendered, /ng-click="toggleColumn\('Str'\)"/);
     assert.match(rendered, /showColumn\('Str', true\)/);
