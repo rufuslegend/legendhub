@@ -1,6 +1,6 @@
 {
     "name": "legendhub",
-    "version": "2.6.1-beta",
+    "version": "2.7.0",
     "description": "A resource hub for LegendMUD",
     "scripts": {
         "test": "node --test",

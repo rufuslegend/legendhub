@@ -1,7 +1,7 @@
 # [LegendHUB](https://www.legendhub.org)
 > A resource hub for [LegendMUD](www.legendmud.org).
 
-[![Version v=2.6.1-beta](https://img.shields.io/badge/version-v=2.6.1--beta-brightgreen.svg?style=flat-square)](https://www.legendhub.org) [![License](https://img.shields.io/:license-mit-blue.svg?style=flat-square)](https://badges.mit-license.org)
+[![Version v=2.7.0](https://img.shields.io/badge/version-v=2.7.0-brightgreen.svg?style=flat-square)](https://www.legendhub.org) [![License](https://img.shields.io/:license-mit-blue.svg?style=flat-square)](https://badges.mit-license.org)
 
 ## Table of Contents
 * [Prerequisites](#prerequisites)
@@ -131,8 +131,8 @@ The current application version is stored in `www/package.json`. Root
 The package lock and README badge must carry the same version. Run
 `node scripts/verify-release-version.js` before committing release metadata.
 
-During the 2.6 beta, add public-facing changes under `2.6.0-beta`. Do not change
-that version to `2.6.0` until the maintainer explicitly declares the release.
+`2.7.0` is the current production release. Begin a new prerelease section only
+after the maintainer explicitly starts the next development cycle.
 
 ### Updating CSS
 LegendHUB uses [https://getbootstrap.com/docs/4.5/getting-started/introduction/ Bootstrap 4.x] to provide an easy-to-use UI framework.
