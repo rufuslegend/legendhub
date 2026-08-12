@@ -12,7 +12,7 @@ with version 2.6.0.
 ### Changed
 
 - Allowed approved LegendMUD proxy and development sites to embed LegendHUB while continuing to block other framing origins.
-- Reorganized the shared column picker into compact, responsive category columns for easier scanning.
+- Reorganized the shared column picker into compact, responsive columns, stacking related stat categories together for easier scanning.
 
 ### Fixed
 
