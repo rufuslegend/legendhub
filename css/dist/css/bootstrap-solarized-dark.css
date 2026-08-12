@@ -9006,6 +9006,11 @@ body > .container-fluid {
   grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
   gap: 1rem;
 }
+.modal[aria-labelledby=columnsModalLabel] .columns-picker-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
 .modal[aria-labelledby=columnsModalLabel] .columns-picker-category {
   padding: 0.75rem;
 }

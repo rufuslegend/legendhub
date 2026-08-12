@@ -139,6 +139,7 @@ test("compiled themes expose the responsive compact picker", function() {
         const css = fs.readFileSync(path.join(
             root, `css/dist/css/bootstrap-${theme}.css`), "utf8");
         const grid = getPickerRule(css, String.raw`\.columns-picker-grid`);
+        const stack = getPickerRule(css, String.raw`\.columns-picker-stack`);
         const title = getPickerRule(css,
             String.raw`\.columns-picker-category-title`);
         const option = getPickerRule(css, String.raw`\.columns-picker-option`);
@@ -147,6 +148,9 @@ test("compiled themes expose the responsive compact picker", function() {
         assert.match(grid, /align-items:\s*start;/);
         assert.match(grid,
             /grid-template-columns:\s*repeat\(auto-fit, minmax\(12rem, 1fr\)\);/);
+        assert.match(stack, /display:\s*flex;/);
+        assert.match(stack, /flex-direction:\s*column;/);
+        assert.match(stack, /gap:\s*1rem;/);
         assert.match(title, /font-size:\s*1rem;/);
         assert.match(option, /padding:\s*0\.5rem 0\.75rem;/);
         assert.match(option, /font-size:\s*0\.875rem;/);

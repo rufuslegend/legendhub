@@ -47,6 +47,12 @@ body {
     gap: 1rem;
   }
 
+  .columns-picker-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
   .columns-picker-category {
     padding: .75rem;
   }
