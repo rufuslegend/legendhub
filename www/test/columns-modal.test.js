@@ -62,6 +62,17 @@ function getPickerRule(css, selector) {
     return match[1];
 }
 
+function getDesktopPickerDialogRules(css) {
+    const modal = String.raw`\.modal\[aria-labelledby=(?:"columnsModalLabel"|columnsModalLabel)\]`;
+    const match = css.match(new RegExp(
+        String.raw`@media \(min-width: 768px\) \{\s*` +
+        String.raw`\.modal-xl\s*\{([^}]*)\}\s*` +
+        `${modal} \.modal-dialog\\s*\\{([^}]*)\\}\\s*\\}`
+    ));
+    assert.ok(match, "missing desktop Columns picker dialog rule");
+    return {general: match[1], picker: match[2]};
+}
+
 test("shared Columns modal renders in an extra-wide dialog", function() {
     assert.match(rendered, /class="modal-dialog modal-xl"/);
     assert.match(rendered, /class="columns-picker-grid"/);
@@ -170,6 +181,11 @@ test("compiled themes expose the responsive compact picker", function() {
     for (const theme of themes) {
         const css = fs.readFileSync(path.join(
             root, `css/dist/css/bootstrap-${theme}.css`), "utf8");
+        const desktopDialog = getDesktopPickerDialogRules(css);
+        assert.match(desktopDialog.general, /width:\s*90%;/);
+        assert.match(desktopDialog.general, /max-width:\s*1800px;/);
+        assert.match(desktopDialog.picker, /width:\s*50%;/);
+        assert.match(desktopDialog.picker, /max-width:\s*none;/);
         const toolbar = getPickerRule(css,
             String.raw`\.columns-picker-toolbar`);
         const toolbarCopy = getPickerRule(css,

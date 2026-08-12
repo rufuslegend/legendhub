@@ -212,6 +212,11 @@ blockquote {
     width: 90%;
     max-width: 1800px;
   }
+
+  .modal[aria-labelledby="columnsModalLabel"] .modal-dialog {
+    width: 50%;
+    max-width: none;
+  }
 }
 
 @media (max-width: 767px) {
