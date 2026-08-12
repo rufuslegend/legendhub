@@ -4,7 +4,7 @@
 
 **Goal:** Turn the shared visible-columns modal into a compact responsive grid of category columns on both the builder and item-search pages.
 
-**Architecture:** Keep the server-provided category order and all existing AngularJS selection bindings in the shared EJS template. Add Columns-modal-scoped CSS Grid and density rules to the shared SCSS, then regenerate every theme artifact through the existing CSS build. Add source-level regressions for the template and SCSS and retain the Glass Blue artifact tests for theme integration.
+**Architecture:** Keep the server-provided category order and all existing AngularJS selection bindings in the shared EJS template. Add Columns-modal-scoped CSS Grid and density rules to the shared SCSS, then regenerate every theme artifact through the existing CSS build. Render the template with representative data and verify the compiled, deployable CSS rather than asserting against raw source text.
 
 **Tech Stack:** EJS, AngularJS template bindings, Bootstrap 4 modal/list-group classes, SCSS and CSS Grid, Node.js `node:test`, Stylelint, Sass, PostCSS, Lightning CSS.
 
@@ -22,12 +22,11 @@
 
 ## File Structure
 
-- `www/test/columns-modal.test.js`: source-level regression contract for shared-picker markup, bindings, responsive grid SCSS, and Filters-modal isolation.
+- `www/test/columns-modal.test.js`: rendered-template and generated-artifact regression contract for shared-picker markup, bindings, responsive grid behavior, density, and copied public CSS.
 - `www/src/views/shared/columnsModal.ejs`: shared semantic markup for the extra-wide modal, category grid, compact headings, choices, and existing AngularJS bindings.
 - `css/scss/custom/_custom.scss`: theme-independent, Columns-modal-scoped responsive grid and density rules.
 - `css/dist/css/bootstrap-{light,dark,solarized-dark,glass-blue}.{css,css.map,min.css,min.css.map}`: generated theme artifacts produced by the CSS build.
 - `www/src/public/css/bootstrap-{light,dark,solarized-dark,glass-blue}.min.{css,css.map}`: generated deployable theme artifacts copied by the CSS build.
-- `www/test/changelog.test.js`: regression that the tracked changelog includes this user-facing improvement.
 - `CHANGELOG.md`: user-facing description under `2.6.1-beta`.
 
 ---
@@ -78,47 +77,88 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+const ejs = require("ejs");
 
 const root = path.join(__dirname, "../..");
-const columnsTemplate = fs.readFileSync(path.join(
-    root, "www/src/views/shared/columnsModal.ejs"), "utf8");
-const filtersTemplate = fs.readFileSync(path.join(
-    root, "www/src/views/shared/filtersModal.ejs"), "utf8");
-const customScss = fs.readFileSync(path.join(
-    root, "css/scss/custom/_custom.scss"), "utf8");
+const templatePath = path.join(root, "www/src/views/shared/columnsModal.ejs");
+const themes = ["light", "dark", "solarized-dark", "glass-blue"];
+const rendered = ejs.render(
+    fs.readFileSync(templatePath, "utf8"),
+    {
+        vm: {
+            itemStatCategories: [
+                {
+                    name: "Basic",
+                    getItemStatInfo: [{display: "Strength", short: "Str"}]
+                },
+                {
+                    name: "Tank",
+                    getItemStatInfo: [{display: "Hit Points", short: "HP"}]
+                }
+            ],
+            selectedColumns: ["Str"]
+        }
+    },
+    {filename: templatePath}
+);
 
-test("shared Columns modal renders compact categories in a wide grid", function() {
-    assert.match(columnsTemplate, /class="modal-dialog modal-xl"/);
-    assert.match(columnsTemplate, /class="columns-picker-grid"/);
-    assert.match(columnsTemplate,
-        /class="columns-picker-category list-group-item/);
-    assert.match(columnsTemplate,
-        /<h6 class="columns-picker-category-title">/);
-    assert.match(columnsTemplate,
+function getPickerRule(css, selector) {
+    const modal = String.raw`\.modal\[aria-labelledby=(?:"columnsModalLabel"|columnsModalLabel)\]`;
+    const match = css.match(new RegExp(`${modal} ${selector}\\s*\\{([^}]*)\\}`));
+    assert.ok(match, `missing generated rule for ${selector}`);
+    return match[1];
+}
+
+test("shared Columns modal renders in an extra-wide dialog", function() {
+    assert.match(rendered, /class="modal-dialog modal-xl"/);
+    assert.match(rendered, /class="columns-picker-grid"/);
+});
+
+test("shared Columns modal renders ordered compact category cards", function() {
+    assert.equal((rendered.match(
+        /class="columns-picker-category list-group-item"/g) || []).length, 2);
+    assert.ok(rendered.indexOf("Basic") < rendered.indexOf("Tank"));
+    assert.match(rendered, /<h6 class="columns-picker-category-title">Basic<\/h6>/);
+    assert.match(rendered,
         /class="columns-picker-option list-group-item list-group-item-action list-group-item-light"/);
+    assert.match(rendered, />Strength<\/span>/);
+    assert.match(rendered, />Hit Points<\/span>/);
 });
 
 test("shared Columns modal preserves column selection bindings", function() {
-    assert.match(columnsTemplate,
-        /ng-click="toggleColumn\('<%- stat\.short _%>'\)"/);
-    assert.match(columnsTemplate,
-        /showColumn\('<%- stat\.short _%>', <%- vm\.selectedColumns\.includes\(stat\.short\) _%>\)/);
-    assert.match(columnsTemplate, /ng-click="resetColumns\(\)"/);
+    assert.match(rendered, /ng-click="toggleColumn\('Str'\)"/);
+    assert.match(rendered, /showColumn\('Str', true\)/);
+    assert.match(rendered, /ng-click="resetColumns\(\)"/);
 });
 
-test("Columns modal grid wraps category cards and uses compact type", function() {
-    assert.match(customScss,
-        /\.modal\[aria-labelledby="columnsModalLabel"\]\s*\{/);
-    assert.match(customScss, /\.columns-picker-grid\s*\{[\s\S]*display:\s*grid;/);
-    assert.match(customScss,
-        /grid-template-columns:\s*repeat\(auto-fit, minmax\(12rem, 1fr\)\);/);
-    assert.match(customScss, /\.columns-picker-category-title\s*\{[\s\S]*font-size:\s*1rem;/);
-    assert.match(customScss,
-        /\.columns-picker-option\s*\{[\s\S]*padding:\s*\.5rem \.75rem;[\s\S]*font-size:\s*\.875rem;/);
+test("compiled themes expose the responsive compact picker", function() {
+    for (const theme of themes) {
+        const css = fs.readFileSync(path.join(
+            root, `css/dist/css/bootstrap-${theme}.css`), "utf8");
+        const grid = getPickerRule(css, String.raw`\.columns-picker-grid`);
+        const title = getPickerRule(css,
+            String.raw`\.columns-picker-category-title`);
+        const option = getPickerRule(css, String.raw`\.columns-picker-option`);
+
+        assert.match(grid, /display:\s*grid;/);
+        assert.match(grid, /align-items:\s*start;/);
+        assert.match(grid,
+            /grid-template-columns:\s*repeat\(auto-fit, minmax\(12rem, 1fr\)\);/);
+        assert.match(title, /font-size:\s*1rem;/);
+        assert.match(option, /padding:\s*0\.5rem 0\.75rem;/);
+        assert.match(option, /font-size:\s*0\.875rem;/);
+    }
 });
 
-test("compact picker classes remain isolated from the Filters modal", function() {
-    assert.doesNotMatch(filtersTemplate, /columns-picker-/);
+test("every minified theme is copied into the web app", function() {
+    for (const theme of themes) {
+        assert.equal(
+            fs.readFileSync(path.join(
+                root, `css/dist/css/bootstrap-${theme}.min.css`), "utf8"),
+            fs.readFileSync(path.join(
+                root, `www/src/public/css/bootstrap-${theme}.min.css`), "utf8")
+        );
+    }
 });
 ```
 
@@ -131,7 +171,7 @@ cd www
 node --test test/columns-modal.test.js
 ```
 
-Expected: FAIL because the shared template lacks `modal-xl` and the `columns-picker-*` contracts, and the SCSS lacks the grid and density rules. The existing binding assertions pass.
+Expected: FAIL because the rendered shared template lacks `modal-xl` and the `columns-picker-*` contracts, and the generated theme CSS lacks the responsive grid and density rules. The existing binding assertion passes.
 
 - [ ] **Step 3: Replace the vertical picker markup with the approved semantic grid**
 
@@ -202,18 +242,16 @@ Insert this block in `css/scss/custom/_custom.scss` after `.breadcrumbNav` and b
 
 Keep the selector anchored to the Columns modal. Do not change the existing Glass Blue selectors; the choice buttons retain the classes they target.
 
-- [ ] **Step 5: Run the focused test and CSS lint**
+- [ ] **Step 5: Run CSS lint before regenerating assets**
 
 Run:
 
 ```bash
-cd www
-node --test test/columns-modal.test.js
-cd ../css
+cd css
 npm run build:lint
 ```
 
-Expected: 4 focused tests PASS and Stylelint exits 0.
+Expected: Stylelint exits 0.
 
 - [ ] **Step 6: Rebuild every theme and copied public asset**
 
@@ -235,7 +273,7 @@ cd www
 node --test test/columns-modal.test.js test/glass-blue-theme.test.js
 ```
 
-Expected: all tests PASS, including the existing Glass Blue Columns-modal normal, hover/focus, and active material rules and artifact-copy equality checks.
+Expected: all tests PASS, including five new rendered-output/generated-artifact tests and the existing Glass Blue Columns-modal normal, hover/focus, and active material rules.
 
 - [ ] **Step 8: Review the change and commit the picker unit**
 
@@ -268,38 +306,13 @@ Expected: the path-scoped whitespace check is clean, only the approved picker so
 ### Task 2: Document and fully verify the shared UI change
 
 **Files:**
-- Modify: `www/test/changelog.test.js:65-72`
 - Modify: `CHANGELOG.md:8-14`
 
 **Interfaces:**
 - Consumes: the Task 1 shared picker behavior and the existing `2.6.1-beta` changelog section.
-- Produces: public release-note text covered by the existing Node changelog test suite; no runtime API.
+- Produces: public release-note text for human readers; no runtime API.
 
-- [ ] **Step 1: Add a failing changelog regression**
-
-Add this test after `tracked changelog records the builder regeneration fix` in `www/test/changelog.test.js`:
-
-```js
-test("tracked changelog records the compact shared column picker", () => {
-    const tracked = fs.readFileSync(path.join(__dirname, "../../CHANGELOG.md"), "utf8");
-
-    assert.match(tracked,
-        /Reorganized the shared column picker into compact, responsive category columns/);
-});
-```
-
-- [ ] **Step 2: Run the changelog test and verify RED**
-
-Run:
-
-```bash
-cd www
-node --test test/changelog.test.js
-```
-
-Expected: FAIL only for the new release-note assertion because `CHANGELOG.md` does not yet contain the sentence.
-
-- [ ] **Step 3: Add the public-facing changelog entry**
+- [ ] **Step 1: Add the public-facing changelog entry**
 
 Under `## [2.6.1-beta] - 2026-08-07` → `### Changed` in root `CHANGELOG.md`, add:
 
@@ -309,19 +322,18 @@ Under `## [2.6.1-beta] - 2026-08-07` → `### Changed` in root `CHANGELOG.md`, a
 
 Do not change the heading version/date or package versions.
 
-- [ ] **Step 4: Run the focused changelog test and complete web suite**
+- [ ] **Step 2: Run the complete web suite**
 
 Run:
 
 ```bash
 cd www
-node --test test/changelog.test.js
 npm test
 ```
 
-Expected: the focused changelog tests PASS, then the complete web suite passes with only any already-documented expected skip.
+Expected: the complete web suite passes with only any already-documented expected skip.
 
-- [ ] **Step 5: Run final CSS and diff verification**
+- [ ] **Step 3: Run final CSS and diff verification**
 
 Run:
 
@@ -331,7 +343,6 @@ npm run build:lint
 cd ..
 git diff --check HEAD -- \
   CHANGELOG.md \
-  www/test/changelog.test.js \
   www/test/columns-modal.test.js \
   www/src/views/shared/columnsModal.ejs \
   css/scss/custom/_custom.scss \
@@ -340,17 +351,17 @@ git diff --check HEAD -- \
 git status --short
 ```
 
-Expected: Stylelint exits 0; the path-scoped whitespace check reports nothing; status contains only this task's two uncommitted files plus the known unrelated pre-existing changes and untracked files.
+Expected: Stylelint exits 0; the path-scoped whitespace check reports nothing; status contains only this task's uncommitted changelog plus any known unrelated pre-existing changes and untracked files.
 
-If the app can be started against a local database without changing configuration, also open both `/builder/` and `/items/`, open Columns, and confirm at a wide viewport that categories share a row and at a narrow viewport that whole cards wrap without horizontal page scrolling. If no configured local database is available, record that visual verification was unavailable and rely on the grid/source/artifact regressions; do not inspect or print `.env`.
+If the app can be started against a local database without changing configuration, also open both `/builder/` and `/items/`, open Columns, and confirm at a wide viewport that categories share a row and at a narrow viewport that whole cards wrap without horizontal page scrolling. If no configured local database is available, record that visual verification was unavailable and rely on the rendered-output/generated-artifact regressions; do not inspect or print `.env`.
 
-- [ ] **Step 6: Commit the changelog unit**
+- [ ] **Step 4: Commit the changelog unit**
 
 Run:
 
 ```bash
-git add CHANGELOG.md www/test/changelog.test.js
+git add CHANGELOG.md
 git commit -m "docs: record compact column picker"
 ```
 
-Expected: only the changelog and its regression are committed. No deployment, publication, tag, push, or release-version change follows.
+Expected: only the changelog is committed. No deployment, publication, tag, push, or release-version change follows.
