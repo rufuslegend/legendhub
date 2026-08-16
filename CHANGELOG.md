@@ -5,6 +5,10 @@ with version 2.6.0.
 
 ## [2.8.0-beta] - 2026-08-12
 
+### Changed
+
+- Enlarged the shared column picker's visibility icons for easier scanning.
+
 ## [2.7.0] - 2026-08-12
 
 ### Added

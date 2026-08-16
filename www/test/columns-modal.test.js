@@ -249,8 +249,8 @@ test("compiled themes expose the responsive compact picker", function() {
         assert.match(option, /padding:\s*0\.5rem 0\.75rem;/);
         assert.match(option, /font-size:\s*0\.875rem;/);
         assert.match(visibilityIcon, /flex:\s*0 0 auto;/);
-        assert.match(visibilityIcon, /width:\s*1em;/);
-        assert.match(visibilityIcon, /height:\s*1em;/);
+        assert.match(visibilityIcon, /width:\s*1\.5em;/);
+        assert.match(visibilityIcon, /height:\s*1\.5em;/);
     }
 });
 
