@@ -143,17 +143,52 @@ test("natural melee damage cap adds the two-handed Wield bonus once", function()
     ]), 191);
 });
 
-test("defensive formulas retain their current behavior", function() {
+test("natural armor class depends only on dexterity", function() {
+    assert.deepEqual(gameStats.getNaturalStatDependencies("ac"), [
+        "dexterity"
+    ]);
+});
+
+test("natural armor class mirrors Legend's C-style dexterity rule", function() {
+    const cases = [
+        {dexterity: 20, expected: 105},
+        {dexterity: 29, expected: 100},
+        {dexterity: 30, expected: 100},
+        {dexterity: 31, expected: 100},
+        {dexterity: 32, expected: 99},
+        {dexterity: 40, expected: 95},
+        {dexterity: 100, expected: 65}
+    ];
+
+    for (const entry of cases) {
+        assert.equal(
+            calculate("ac", {dexterity: entry.dexterity}),
+            entry.expected,
+            `dexterity ${entry.dexterity}`
+        );
+    }
+});
+
+test("natural armor class ignores non-dexterity stats", function() {
+    assert.equal(calculate("ac", {
+        strength: 20,
+        dexterity: 80,
+        constitution: 20,
+        perception: 20
+    }), 75);
+    assert.equal(calculate("ac", {
+        strength: 120,
+        dexterity: 80,
+        constitution: 120,
+        perception: 120
+    }), 75);
+});
+
+test("natural mitigation retains its Battle Training behavior", function() {
     const items = Array(26).fill(null);
     items[25] = {id: 1144};
 
     assert.equal(calculate("mitigation", {constitution: 80}, items), 1);
-    assert.equal(calculate("ac", {
-        strength: 40,
-        dexterity: 40,
-        constitution: 40,
-        perception: 40
-    }), 72);
 });
 
 test("natural regeneration mirrors Legend stat formulas", function() {

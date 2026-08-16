@@ -94,6 +94,7 @@ function createBuilderScope() {
         "hit",
         "dam",
         "meleedamcap",
+        "ac",
         "hpr",
         "mar",
         "mvr"
@@ -418,6 +419,29 @@ test("builder movement uses capped dexterity and keeps faux-item bonuses additiv
         limit: 104
     }]);
     assert.equal(scope.getStatTotal("mv"), 926);
+});
+
+test("builder AC uses capped dexterity and keeps faux-object bonuses additive", function() {
+    const scope = createBuilderScope();
+    equipStats(scope, {
+        strength: 100,
+        dexterity: 90,
+        constitution: 100,
+        equipment: {
+            dexterity: 20,
+            dexterityCap: 4,
+            ac: -12
+        },
+        other: {ac: -25}
+    });
+
+    assert.equal(scope.getStatTotal("dexterity"), 104);
+    assert.deepEqual(getRestrictions(scope, "dexterity"), [{
+        restriction: "fromTotalMax",
+        amount: 110,
+        limit: 104
+    }]);
+    assert.equal(scope.getStatTotal("ac"), 26);
 });
 
 test("builder matches Hakim's corrected 766 mana profile", function() {

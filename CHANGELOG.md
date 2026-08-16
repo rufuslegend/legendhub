@@ -9,6 +9,10 @@ with version 2.6.0.
 
 - Enlarged the shared column picker's visibility icons for easier scanning.
 
+### Fixed
+
+- Corrected the Builder's natural armor class calculation to use LegendMUD's current dexterity-based rule while keeping skill, era, and buff bonuses as explicit faux objects.
+
 ## [2.7.0] - 2026-08-12
 
 ### Added

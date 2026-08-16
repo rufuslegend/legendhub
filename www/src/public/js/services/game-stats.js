@@ -27,7 +27,7 @@
         dam: ["strength"],
         meleedamcap: ["strength"],
         mitigation: ["constitution"],
-        ac: ["strength", "dexterity", "constitution", "perception"],
+        ac: ["dexterity"],
         hpr: ["constitution"],
         mar: ["mind"],
         mvr: ["dexterity"]
@@ -274,18 +274,13 @@
             case "mitigation":
                 return hasBattleTraining(items) ?
                     parseInt(Math.max(stats.constitution - 75, 0) / 5) : 0;
-            case "ac": {
-                let total = 83;
-                total += parseInt(Math.max(stats.dexterity - 40, 0) * -0.5);
-                total += parseInt(Math.max(stats.perception - 30, 0) / -6);
-                if (stats.strength >= 20 && stats.dexterity >= 20 && stats.constitution >= 20) {
-                    total -= 5;
-                    if (stats.dexterity >= 40 && stats.constitution >= 40) {
-                        total -= 5;
-                    }
-                }
-                return total;
-            }
+            case "ac":
+                /*
+                 * The Builder models a standing, neutral-wary, non-vehicle character.
+                 * Mirror get_naked_ac() and get_stat_ac(); skills, era abilities,
+                 * spells, buffs, and other conditional modifiers remain faux objects.
+                 */
+                return 100 - Math.trunc((stats.dexterity - 30) / 2);
             /*
              * These natural terms mirror get_hp_regen_con_bonus_internal(),
              * get_mana_regen_mind_bonus(), and get_move_regen_wsp(). Innate
