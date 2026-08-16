@@ -177,6 +177,29 @@ test("shared Columns modal preserves column selection bindings", function() {
     assert.match(rendered, /ng-click="resetColumns\(\)"/);
 });
 
+test("shared Columns modal uses colored eye icons for column visibility", function() {
+    const html = renderCategories([
+        category("Basic", "Str", "Strength")
+    ], ["Str"]);
+    const option = html.match(
+        /<button\b[^>]*\bcolumns-picker-option\b[^>]*>([\s\S]*?)<\/button>/);
+
+    assert.ok(option, "missing rendered Columns picker option");
+    assert.match(option[1],
+        /<svg\b[^>]*ng-if="showColumn\('Str', true\)"[^>]*class="columns-picker-visibility-icon text-success ml-2"[^>]*aria-hidden="true"[^>]*focusable="false"[^>]*>/);
+    assert.match(option[1],
+        /<path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0-4 0"\s*\/>/);
+    assert.match(option[1],
+        /<path d="M21 12q-3\.6 6-9 6t-9-6q3\.6-6 9-6t9 6"\s*\/>/);
+    assert.match(option[1],
+        /<svg\b[^>]*ng-if="!showColumn\('Str', true\)"[^>]*class="columns-picker-visibility-icon text-danger ml-2"[^>]*aria-hidden="true"[^>]*focusable="false"[^>]*>/);
+    assert.match(option[1],
+        /<path[^>]*d="M21 9q-3\.6 4-9 4T3 9m0 6l2\.5-3\.8M21 14\.976L18\.508 11\.2M9 17l\.5-4m5\.5 4l-\.5-4"\s*\/>/);
+    assert.equal((option[1].match(/viewBox="0 0 24 24"/g) || []).length, 2);
+    assert.equal((option[1].match(/stroke="currentColor"/g) || []).length, 2);
+    assert.doesNotMatch(option[1], /\b(?:fas|fa-check|fa-times)\b/);
+});
+
 test("compiled themes expose the responsive compact picker", function() {
     for (const theme of themes) {
         const css = fs.readFileSync(path.join(
@@ -200,6 +223,8 @@ test("compiled themes expose the responsive compact picker", function() {
         const title = getPickerRule(css,
             String.raw`\.columns-picker-category-title`);
         const option = getPickerRule(css, String.raw`\.columns-picker-option`);
+        const visibilityIcon = getPickerRule(css,
+            String.raw`\.columns-picker-visibility-icon`);
 
         assert.match(toolbar, /display:\s*flex;/);
         assert.match(toolbar, /align-items:\s*center;/);
@@ -223,6 +248,9 @@ test("compiled themes expose the responsive compact picker", function() {
         assert.match(title, /font-size:\s*1\.2rem;/);
         assert.match(option, /padding:\s*0\.5rem 0\.75rem;/);
         assert.match(option, /font-size:\s*0\.875rem;/);
+        assert.match(visibilityIcon, /flex:\s*0 0 auto;/);
+        assert.match(visibilityIcon, /width:\s*1em;/);
+        assert.match(visibilityIcon, /height:\s*1em;/);
     }
 });
 

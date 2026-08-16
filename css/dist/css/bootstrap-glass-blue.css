@@ -9038,6 +9038,11 @@ body > .container-fluid {
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
 }
+.modal[aria-labelledby=columnsModalLabel] .columns-picker-visibility-icon {
+  flex: 0 0 auto;
+  width: 1em;
+  height: 1em;
+}
 
 .breadcrumbList {
   padding: 5px 15px;
