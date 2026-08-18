@@ -51,7 +51,8 @@ class RecordingDatabase:
     def __init__(self, *, columns=None, target_schema=SCHEMA_DIGEST,
                  staging_schema=SCHEMA_DIGEST, staging_counts=None,
                  applied_counts=None, staging_content=CONTENT_DIGEST,
-                 engines=None, import_failure=None, execute_failure=None):
+                 engines=None, import_failure=None, execute_failure=None,
+                 commit_failure=None):
         self.connection_id = "target-connection"
         self.events = []
         self.validation_events = []
@@ -74,6 +75,7 @@ class RecordingDatabase:
         }
         self._import_failure = import_failure
         self._execute_failure = execute_failure
+        self._commit_failure = commit_failure
 
     def schema_digest(self, database):
         self.validation_events.append(("SCHEMA", database))
@@ -123,6 +125,8 @@ class RecordingDatabase:
 
     def commit(self):
         self.events.append(("COMMIT", self.connection_id))
+        if self._commit_failure is not None:
+            raise self._commit_failure
 
     def rollback(self):
         self.events.append(("ROLLBACK", self.connection_id))
@@ -307,6 +311,18 @@ class TargetTests(unittest.TestCase):
         self.assertEqual(database.events[-2][0], "ROLLBACK")
         self.assertEqual(database.events[-1][0], "CLOSE")
         self.assertNotIn("COMMIT", [event[0] for event in database.events])
+
+    def test_commit_failure_rolls_back_then_closes(self):
+        database = RecordingDatabase(
+            commit_failure=RuntimeError("forced commit failure"))
+
+        with self.assertRaisesRegex(RuntimeError, "forced commit failure"):
+            apply_staging(test_config(), manifest_with_counts(), database=database)
+
+        self.assertEqual(
+            [event[0] for event in database.events[-3:]],
+            ["COMMIT", "ROLLBACK", "CLOSE"],
+        )
 
     def test_notification_suppression_and_copy_share_one_connection(self):
         database = RecordingDatabase()
