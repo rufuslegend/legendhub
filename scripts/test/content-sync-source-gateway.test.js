@@ -13,7 +13,7 @@ const dollar = "$";
 const dockerFake = String.raw`#!/usr/bin/env bash
 set -euo pipefail
 
-printf '%s\n' "${dollar}*" >> "${dollar}FAKE_DOCKER_LOG"
+printf '%s\0' "${dollar}@" >> "${dollar}FAKE_DOCKER_LOG"
 
 if [[ "${dollar}1" == "ps" && -n "${dollar}{FAKE_DOCKER_IDS:-}" ]]; then
   printf '%s\n' "${dollar}FAKE_DOCKER_IDS"
@@ -30,6 +30,12 @@ function writeExecutable(file, content) {
 
 function readDockerLog() {
     return fs.existsSync(dockerLog) ? fs.readFileSync(dockerLog, "utf8") : "";
+}
+
+function readDockerArguments() {
+    const log = readDockerLog();
+
+    return log === "" ? [] : log.split("\0").slice(0, -1);
 }
 
 beforeEach(() => {
@@ -59,12 +65,18 @@ test("serves only the exact manifest command", () => {
     const result = runGateway("manifest", ["backup-container-id"]);
 
     assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(readDockerLog(), [
-        "ps --quiet --filter label=com.docker.compose.project=legendhub260 " +
-            "--filter label=com.docker.compose.service=mysql-backup",
-        "exec backup-container-id /usr/local/bin/export-public-content manifest",
-        "",
-    ].join("\n"));
+    assert.deepEqual(readDockerArguments(), [
+        "ps",
+        "--quiet",
+        "--filter",
+        "label=com.docker.compose.project=legendhub260",
+        "--filter",
+        "label=com.docker.compose.service=mysql-backup",
+        "exec",
+        "backup-container-id",
+        "/usr/local/bin/export-public-content",
+        "manifest",
+    ]);
 });
 
 test("passes a validated digest as one Docker argument", () => {
@@ -72,7 +84,7 @@ test("passes a validated digest as one Docker argument", () => {
     const result = runGateway(`snapshot ${digest}`, ["backup-container-id"]);
 
     assert.equal(result.status, 0, result.stderr);
-    assert.match(readDockerLog(), new RegExp(`snapshot ${digest}$`, "m"));
+    assert.deepEqual(readDockerArguments().slice(-2), ["snapshot", digest]);
 });
 
 for (const command of ["", "bash", "manifest extra", "snapshot ../x",
