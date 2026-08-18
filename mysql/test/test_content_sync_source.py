@@ -61,7 +61,8 @@ class RecordingCursor:
         return False
 
     def execute(self, query, parameters=()):
-        self.connection.events.append(("sql", query, parameters))
+        self.connection.events.append(
+            ("sql", self.connection.name, query, parameters))
         if self.connection.fail_metadata and "INFORMATION_SCHEMA.COLUMNS" in query:
             raise RuntimeError("metadata failed")
         if "INFORMATION_SCHEMA.TABLES" in query:
@@ -88,15 +89,16 @@ class RecordingCursor:
 
 
 class RecordingConnection:
-    def __init__(self, fail_metadata=False):
-        self.events = []
+    def __init__(self, name="connection", events=None, fail_metadata=False):
+        self.name = name
+        self.events = events if events is not None else []
         self.fail_metadata = fail_metadata
 
     def cursor(self):
         return RecordingCursor(self)
 
     def close(self):
-        self.events.append(("close",))
+        self.events.append(("close", self.name))
 
 
 def test_config(directory):
@@ -132,18 +134,20 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(config.snapshot_dir,
                          pathlib.Path("/backups/content-sync"))
 
-    def test_consistent_dump_locks_exact_allowlist_on_one_control_connection(self):
-        connection = RecordingConnection()
+    def test_consistent_dump_keeps_metadata_off_lock_holder(self):
+        events = []
+        holder = RecordingConnection("holder", events)
+        metadata = RecordingConnection("metadata", events)
         mysql = MySqlConfig("mysql", 3306, "exporter", "secret")
         with tempfile.TemporaryDirectory() as directory:
             raw_path = pathlib.Path(directory) / "snapshot.sql"
 
             def write_dump(_mysql, _database, path):
-                connection.events.append(("dump",))
+                events.append(("dump",))
                 path.write_bytes(b"INSERT INTO `Areas` VALUES (1);\n")
 
             with mock.patch("content_sync.source.open_database_connection",
-                            return_value=connection) as connect, \
+                            side_effect=[holder, metadata]) as connect, \
                     mock.patch("content_sync.source.dump_to_path",
                                side_effect=write_dump):
                 schema, counts = capture_consistent_dump(
@@ -151,49 +155,78 @@ class SourceTests(unittest.TestCase):
 
         self.assertRegex(schema, r"^[0-9a-f]{64}$")
         self.assertEqual(counts, {table: 1 for table in PUBLIC_TABLES})
-        connect.assert_called_once_with(mysql, "legendhub")
-        statements = [event[1] for event in connection.events
-                      if event[0] == "sql"]
-        self.assertIn("INFORMATION_SCHEMA.TABLES", statements[0])
-        self.assertEqual(statements[1], EXPECTED_LOCK_SQL)
-        self.assertIn("INFORMATION_SCHEMA.TABLES", statements[2])
-        self.assertIn("INFORMATION_SCHEMA.COLUMNS", statements[3])
-        self.assertEqual(statements[-1], "UNLOCK TABLES")
-        self.assertLess(connection.events.index(("dump",)),
-                        connection.events.index(("sql", "UNLOCK TABLES", ())))
-        self.assertEqual(connection.events[-1], ("close",))
+        self.assertEqual(connect.call_args_list, [
+            mock.call(mysql, "legendhub"), mock.call(mysql, "legendhub"),
+        ])
+        holder_sql = [event[2] for event in events
+                      if event[:2] == ("sql", "holder")]
+        metadata_sql = [event[2] for event in events
+                        if event[:2] == ("sql", "metadata")]
+        self.assertEqual(holder_sql, [EXPECTED_LOCK_SQL, "UNLOCK TABLES"])
+        self.assertIn("INFORMATION_SCHEMA.TABLES", metadata_sql[0])
+        self.assertIn("INFORMATION_SCHEMA.COLUMNS", metadata_sql[1])
+        self.assertEqual(len(metadata_sql), 2 + len(PUBLIC_TABLES))
+        self.assertLess(events.index(("sql", "holder", EXPECTED_LOCK_SQL, ())),
+                        events.index(("sql", "metadata", metadata_sql[0],
+                                      ("legendhub",) + PUBLIC_TABLES)))
+        self.assertLess(events.index(("dump",)),
+                        events.index(("close", "metadata")))
+        self.assertLess(events.index(("close", "metadata")),
+                        events.index(("sql", "holder", "UNLOCK TABLES", ())))
+        self.assertEqual(events[-1], ("close", "holder"))
 
     def test_consistent_dump_unlocks_when_metadata_fails(self):
-        connection = RecordingConnection(fail_metadata=True)
+        events = []
+        holder = RecordingConnection("holder", events)
+        metadata = RecordingConnection("metadata", events, fail_metadata=True)
         mysql = MySqlConfig("mysql", 3306, "exporter", "secret")
         with tempfile.TemporaryDirectory() as directory, \
                 mock.patch("content_sync.source.open_database_connection",
-                           return_value=connection), \
+                           side_effect=[holder, metadata]), \
                 mock.patch("content_sync.source.dump_to_path") as dump:
             with self.assertRaisesRegex(RuntimeError, "metadata failed"):
                 capture_consistent_dump(mysql, "legendhub",
                                         pathlib.Path(directory) / "snapshot.sql")
-        statements = [event[1] for event in connection.events
-                      if event[0] == "sql"]
-        self.assertEqual(statements[-1], "UNLOCK TABLES")
-        self.assertEqual(connection.events[-1], ("close",))
+        self.assertIn(("close", "metadata"), events)
+        self.assertIn(("sql", "holder", "UNLOCK TABLES", ()), events)
+        self.assertEqual(events[-1], ("close", "holder"))
         dump.assert_not_called()
 
     def test_consistent_dump_unlocks_when_dump_fails(self):
-        connection = RecordingConnection()
+        events = []
+        holder = RecordingConnection("holder", events)
+        metadata = RecordingConnection("metadata", events)
         mysql = MySqlConfig("mysql", 3306, "exporter", "secret")
         with tempfile.TemporaryDirectory() as directory, \
                 mock.patch("content_sync.source.open_database_connection",
-                           return_value=connection), \
+                           side_effect=[holder, metadata]), \
                 mock.patch("content_sync.source.dump_to_path",
                            side_effect=RuntimeError("dump failed")):
             with self.assertRaisesRegex(RuntimeError, "dump failed"):
                 capture_consistent_dump(mysql, "legendhub",
                                         pathlib.Path(directory) / "snapshot.sql")
-        statements = [event[1] for event in connection.events
-                      if event[0] == "sql"]
-        self.assertEqual(statements[-1], "UNLOCK TABLES")
-        self.assertEqual(connection.events[-1], ("close",))
+        self.assertIn(("close", "metadata"), events)
+        self.assertIn(("sql", "holder", "UNLOCK TABLES", ()), events)
+        self.assertEqual(events[-1], ("close", "holder"))
+
+    def test_consistent_dump_unlocks_holder_when_metadata_connection_fails(self):
+        events = []
+        holder = RecordingConnection("holder", events)
+        mysql = MySqlConfig("mysql", 3306, "exporter", "secret")
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch("content_sync.source.open_database_connection",
+                           side_effect=[holder,
+                                        RuntimeError("metadata open failed")]), \
+                mock.patch("content_sync.source.dump_to_path") as dump:
+            with self.assertRaisesRegex(RuntimeError, "metadata open failed"):
+                capture_consistent_dump(mysql, "legendhub",
+                                        pathlib.Path(directory) / "snapshot.sql")
+        self.assertEqual(events, [
+            ("sql", "holder", EXPECTED_LOCK_SQL, ()),
+            ("sql", "holder", "UNLOCK TABLES", ()),
+            ("close", "holder"),
+        ])
+        dump.assert_not_called()
 
     def test_same_content_produces_same_content_and_artifact_digests(self):
         with tempfile.TemporaryDirectory() as directory, \
