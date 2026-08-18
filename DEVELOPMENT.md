@@ -1,11 +1,13 @@
 # Local development
 
-LegendHUB runs as four Docker Compose services:
+LegendHUB runs as four core Docker Compose services and one opt-in test service:
 
 - `mysql`: MySQL 5.7 database
 - `www`: Node/Express website and GraphQL API
 - `python`: notification and authentication-token maintenance jobs
 - `mysql-backup`: daily private and sanitized public database backups
+- `content-sync`: profile-gated production-content synchronization for
+  Dunwichmass only
 
 ## First-time setup
 
@@ -86,6 +88,23 @@ Validate the registry publishing and Compose tooling from the repository root:
 ```sh
 node --test scripts/test/*.test.js
 ```
+
+Run the focused production-content synchronization tests from the repository
+root with:
+
+```sh
+python3 -m unittest discover -s mysql/test -p 'test_content_sync*.py' -v
+node --test scripts/test/content-sync-*.test.js \
+  scripts/test/deploy-test.test.js scripts/test/mysql-backup-cron.test.js
+```
+
+The `content-sync` service is not part of ordinary local startup. Its SSH,
+staging, profile, manual-run, health, revocation, and recovery procedures are
+documented in the
+[production-to-test content sync operations guide](docs/operations/production-to-test-content-sync.md).
+The runtime transfer is directly from LegendMUD production to the Dunwichmass
+container and then Dunwichmass MySQL; a local Mac is only an operator and
+verification endpoint.
 
 Run only the fast characterization checks or HTTP smoke test with:
 
@@ -243,7 +262,7 @@ reuse, or delete either tag.
 Authenticate the server once for private pulls:
 
 ```sh
-ssh -A dunwichmass
+ssh -a dunwichmass
 docker login --username tmckimmey
 ```
 
@@ -251,7 +270,8 @@ From a local LegendHUB repository checkout, deploy the immutable release SHA
 with the checked entry point:
 
 ```sh
-./scripts/deploy-test.sh <12-character-release-sha>
+release_sha='REPLACE-WITH-12-CHARACTER-RELEASE-SHA'
+./scripts/deploy-test.sh "$release_sha"
 ```
 
 The script rejects anything except exactly 12 lowercase hexadecimal characters
@@ -260,16 +280,31 @@ before invoking SSH. On `dunwichmass` it operates only in
 `docker-compose.test.yaml` files exist, fetches Git, expands the requested SHA
 to a full commit, checks out that exact commit detached, and confirms the
 checkout's 12-character SHA still matches the requested image tag. It checks
-the ignored files again, requires the checked-out
-`docker-compose.registry.yaml`, validates the merged Compose configuration,
-pulls `www`, `python`, and `mysql-backup`, and runs `up -d --no-build`. The
-checks never print `.env` values.
+the ignored files again, requires exactly one literal
+`COMPOSE_PROJECT_NAME=legendhub` definition, clears any ambient project
+override, exports that fixed project identity, requires the checked-out
+`docker-compose.registry.yaml`, and inspects the target Git tree. A current
+tree must also contain `docker-compose.content-sync.yaml`; the script validates
+all four overlays, pulls `www`, `python`, `mysql-backup`, and `content-sync`,
+and runs `up -d --no-build`. The ignored
+`COMPOSE_PROFILES=content-sync` setting alone controls automatic sync startup.
+The checks never print `.env` values.
+
+A genuine legacy target whose Git tree predates the content-sync overlay uses
+the original three overlays and pulls the original three application images.
+Before startup, the script finds at most one stale content-sync container by
+the exact `legendhub` project and `content-sync` service labels and removes
+only that container. It does not remove the private sync volume or database
+data. A current target with a missing tracked overlay fails instead of being
+treated as legacy.
 
 Check `docker compose ... ps`, recent logs, `http://127.0.0.1:7001`, and
 `https://legendhub.dunwichmass.com/`. Roll back through the same checked path:
 
 ```sh
-./scripts/deploy-test.sh <previous-12-character-release-sha>
+previous_release_sha='REPLACE-WITH-12-CHARACTER-ROLLBACK-SHA'
+[[ "$previous_release_sha" =~ ^[abcdef0123456789]{12}$ ]]
+./scripts/deploy-test.sh "$previous_release_sha"
 ```
 
 Release and rollback both check out the commit matching the image tag before

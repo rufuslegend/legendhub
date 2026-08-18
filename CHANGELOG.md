@@ -5,6 +5,10 @@ with version 2.6.0.
 
 ## [2.8.0-beta] - 2026-08-12
 
+### Added
+
+- Added guarded hourly and on-demand synchronization so Dunwichmass public content and history can mirror production without replacing test accounts or operational data.
+
 ### Changed
 
 - Enlarged the shared column picker's visibility icons for easier scanning.
