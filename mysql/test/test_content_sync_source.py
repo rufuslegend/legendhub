@@ -134,10 +134,9 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(config.snapshot_dir,
                          pathlib.Path("/backups/content-sync"))
 
-    def test_consistent_dump_keeps_metadata_off_lock_holder(self):
+    def test_consistent_dump_uses_one_lock_holder_in_metadata_order(self):
         events = []
         holder = RecordingConnection("holder", events)
-        metadata = RecordingConnection("metadata", events)
         mysql = MySqlConfig("mysql", 3306, "exporter", "secret")
         with tempfile.TemporaryDirectory() as directory:
             raw_path = pathlib.Path(directory) / "snapshot.sql"
@@ -147,7 +146,7 @@ class SourceTests(unittest.TestCase):
                 path.write_bytes(b"INSERT INTO `Areas` VALUES (1);\n")
 
             with mock.patch("content_sync.source.open_database_connection",
-                            side_effect=[holder, metadata]) as connect, \
+                            return_value=holder) as connect, \
                     mock.patch("content_sync.source.dump_to_path",
                                side_effect=write_dump):
                 schema, counts = capture_consistent_dump(
@@ -155,39 +154,32 @@ class SourceTests(unittest.TestCase):
 
         self.assertRegex(schema, r"^[0-9a-f]{64}$")
         self.assertEqual(counts, {table: 1 for table in PUBLIC_TABLES})
-        self.assertEqual(connect.call_args_list, [
-            mock.call(mysql, "legendhub"), mock.call(mysql, "legendhub"),
-        ])
+        connect.assert_called_once_with(mysql, "legendhub")
         holder_sql = [event[2] for event in events
                       if event[:2] == ("sql", "holder")]
-        metadata_sql = [event[2] for event in events
-                        if event[:2] == ("sql", "metadata")]
-        self.assertEqual(holder_sql, [EXPECTED_LOCK_SQL, "UNLOCK TABLES"])
-        self.assertIn("INFORMATION_SCHEMA.TABLES", metadata_sql[0])
-        self.assertIn("INFORMATION_SCHEMA.COLUMNS", metadata_sql[1])
-        self.assertEqual(len(metadata_sql), 2 + len(PUBLIC_TABLES))
-        self.assertLess(events.index(("sql", "holder", EXPECTED_LOCK_SQL, ())),
-                        events.index(("sql", "metadata", metadata_sql[0],
-                                      ("legendhub",) + PUBLIC_TABLES)))
+        self.assertEqual(holder_sql[0], EXPECTED_LOCK_SQL)
+        self.assertIn("INFORMATION_SCHEMA.TABLES", holder_sql[1])
+        self.assertIn("INFORMATION_SCHEMA.COLUMNS", holder_sql[2])
+        self.assertEqual(len(holder_sql), 4 + len(PUBLIC_TABLES))
+        self.assertEqual(holder_sql[-1], "UNLOCK TABLES")
+        self.assertLess(events.index(("sql", "holder", holder_sql[-2], ())),
+                        events.index(("dump",)))
         self.assertLess(events.index(("dump",)),
-                        events.index(("close", "metadata")))
-        self.assertLess(events.index(("close", "metadata")),
                         events.index(("sql", "holder", "UNLOCK TABLES", ())))
         self.assertEqual(events[-1], ("close", "holder"))
 
     def test_consistent_dump_unlocks_when_metadata_fails(self):
         events = []
         holder = RecordingConnection("holder", events)
-        metadata = RecordingConnection("metadata", events, fail_metadata=True)
+        holder.fail_metadata = True
         mysql = MySqlConfig("mysql", 3306, "exporter", "secret")
         with tempfile.TemporaryDirectory() as directory, \
                 mock.patch("content_sync.source.open_database_connection",
-                           side_effect=[holder, metadata]), \
+                           return_value=holder), \
                 mock.patch("content_sync.source.dump_to_path") as dump:
             with self.assertRaisesRegex(RuntimeError, "metadata failed"):
                 capture_consistent_dump(mysql, "legendhub",
                                         pathlib.Path(directory) / "snapshot.sql")
-        self.assertIn(("close", "metadata"), events)
         self.assertIn(("sql", "holder", "UNLOCK TABLES", ()), events)
         self.assertEqual(events[-1], ("close", "holder"))
         dump.assert_not_called()
@@ -195,38 +187,17 @@ class SourceTests(unittest.TestCase):
     def test_consistent_dump_unlocks_when_dump_fails(self):
         events = []
         holder = RecordingConnection("holder", events)
-        metadata = RecordingConnection("metadata", events)
         mysql = MySqlConfig("mysql", 3306, "exporter", "secret")
         with tempfile.TemporaryDirectory() as directory, \
                 mock.patch("content_sync.source.open_database_connection",
-                           side_effect=[holder, metadata]), \
+                           return_value=holder), \
                 mock.patch("content_sync.source.dump_to_path",
                            side_effect=RuntimeError("dump failed")):
             with self.assertRaisesRegex(RuntimeError, "dump failed"):
                 capture_consistent_dump(mysql, "legendhub",
                                         pathlib.Path(directory) / "snapshot.sql")
-        self.assertIn(("close", "metadata"), events)
         self.assertIn(("sql", "holder", "UNLOCK TABLES", ()), events)
         self.assertEqual(events[-1], ("close", "holder"))
-
-    def test_consistent_dump_unlocks_holder_when_metadata_connection_fails(self):
-        events = []
-        holder = RecordingConnection("holder", events)
-        mysql = MySqlConfig("mysql", 3306, "exporter", "secret")
-        with tempfile.TemporaryDirectory() as directory, \
-                mock.patch("content_sync.source.open_database_connection",
-                           side_effect=[holder,
-                                        RuntimeError("metadata open failed")]), \
-                mock.patch("content_sync.source.dump_to_path") as dump:
-            with self.assertRaisesRegex(RuntimeError, "metadata open failed"):
-                capture_consistent_dump(mysql, "legendhub",
-                                        pathlib.Path(directory) / "snapshot.sql")
-        self.assertEqual(events, [
-            ("sql", "holder", EXPECTED_LOCK_SQL, ()),
-            ("sql", "holder", "UNLOCK TABLES", ()),
-            ("close", "holder"),
-        ])
-        dump.assert_not_called()
 
     def test_same_content_produces_same_content_and_artifact_digests(self):
         with tempfile.TemporaryDirectory() as directory, \

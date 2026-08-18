@@ -256,30 +256,24 @@ def unlock_tables(connection):
 
 
 def capture_consistent_dump(mysql, database, path):
-    """Capture metadata and dump while a dedicated connection holds read locks."""
+    """Capture metadata and dump while one connection holds read locks."""
     lock_holder = open_database_connection(mysql, database)
-    metadata_connection = None
     locked = False
     try:
         lock_tables(lock_holder, database)
         locked = True
-        metadata_connection = open_database_connection(mysql, database)
         validate_table_engines(
-            table_engines(mysql, database, metadata_connection))
-        schema = schema_digest(mysql, database, metadata_connection)
-        counts = row_counts(mysql, database, metadata_connection)
+            table_engines(mysql, database, lock_holder))
+        schema = schema_digest(mysql, database, lock_holder)
+        counts = row_counts(mysql, database, lock_holder)
         dump_to_path(mysql, database, path)
         return schema, counts
     finally:
         try:
-            if metadata_connection is not None:
-                metadata_connection.close()
+            if locked:
+                unlock_tables(lock_holder)
         finally:
-            try:
-                if locked:
-                    unlock_tables(lock_holder)
-            finally:
-                lock_holder.close()
+            lock_holder.close()
 
 
 def prune_expired_snapshots(config, keep):
