@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export PYTHONPATH=/usr/local/lib
+exec python3 -m content_sync.sync "$@"
