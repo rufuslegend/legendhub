@@ -125,11 +125,11 @@ def run_checked(arguments, stdout, environment=None):
         subprocess.run(arguments, check=True, stdout=output, env=environment)
 
 
-def query_rows(mysql, database, query, parameters):
-    """Run one read-only query with PyMySQL imported only when needed."""
+def open_database_connection(mysql, database):
+    """Open the read-only control connection lazily."""
     import pymysql
 
-    connection = pymysql.connect(
+    return pymysql.connect(
         host=mysql.host,
         port=mysql.port,
         user=mysql.user,
@@ -138,25 +138,36 @@ def query_rows(mysql, database, query, parameters):
         cursorclass=pymysql.cursors.DictCursor,
         autocommit=True,
     )
+
+
+def query_connection_rows(connection, query, parameters):
+    with connection.cursor() as cursor:
+        cursor.execute(query, parameters)
+        return cursor.fetchall()
+
+
+def query_rows(mysql, database, query, parameters):
+    """Run one read-only query with PyMySQL imported only when needed."""
+    connection = open_database_connection(mysql, database)
     try:
-        with connection.cursor() as cursor:
-            cursor.execute(query, parameters)
-            return cursor.fetchall()
+        return query_connection_rows(connection, query, parameters)
     finally:
         connection.close()
 
 
-def table_engines(mysql, database):
+def table_engines(mysql, database, connection=None):
     placeholders = ", ".join(["%s"] * len(PUBLIC_TABLES))
-    rows = query_rows(
-        mysql,
-        database,
+    query = (
         "SELECT TABLE_NAME, ENGINE "
         "FROM INFORMATION_SCHEMA.TABLES "
         "WHERE TABLE_SCHEMA = %s AND TABLE_NAME IN (" + placeholders + ") "
-        "ORDER BY TABLE_NAME",
-        (database,) + PUBLIC_TABLES,
+        "ORDER BY TABLE_NAME"
     )
+    parameters = (database,) + PUBLIC_TABLES
+    if connection is None:
+        rows = query_rows(mysql, database, query, parameters)
+    else:
+        rows = query_connection_rows(connection, query, parameters)
     engines = {}
     for row in rows:
         table = row["TABLE_NAME"]
@@ -177,7 +188,6 @@ def validate_table_engines(engines):
 
 
 def dump_to_path(mysql, database, path):
-    validate_table_engines(table_engines(mysql, database))
     run_checked(
         canonical_dump_args(mysql, database),
         stdout=path,
@@ -185,18 +195,20 @@ def dump_to_path(mysql, database, path):
     )
 
 
-def schema_digest(mysql, database):
+def schema_digest(mysql, database, connection=None):
     placeholders = ", ".join(["%s"] * len(PUBLIC_TABLES))
-    rows = query_rows(
-        mysql,
-        database,
+    query = (
         "SELECT TABLE_NAME, ORDINAL_POSITION, COLUMN_NAME, COLUMN_TYPE, "
         "IS_NULLABLE, COLUMN_DEFAULT "
         "FROM INFORMATION_SCHEMA.COLUMNS "
         "WHERE TABLE_SCHEMA = %s AND TABLE_NAME IN (" + placeholders + ") "
-        "ORDER BY TABLE_NAME, ORDINAL_POSITION",
-        (database,) + PUBLIC_TABLES,
+        "ORDER BY TABLE_NAME, ORDINAL_POSITION"
     )
+    parameters = (database,) + PUBLIC_TABLES
+    if connection is None:
+        rows = query_rows(mysql, database, query, parameters)
+    else:
+        rows = query_connection_rows(connection, query, parameters)
     columns = [
         {
             "TABLE_NAME": row["TABLE_NAME"],
@@ -213,19 +225,55 @@ def schema_digest(mysql, database):
     ).encode("utf-8")).hexdigest()
 
 
-def row_counts(mysql, database):
+def row_counts(mysql, database, connection=None):
     counts = {}
     for table in PUBLIC_TABLES:
-        rows = query_rows(
-            mysql,
-            database,
-            "SELECT COUNT(*) AS content_count FROM `" + table + "`",
-            (),
-        )
+        query = "SELECT COUNT(*) AS content_count FROM `" + table + "`"
+        if connection is None:
+            rows = query_rows(mysql, database, query, ())
+        else:
+            rows = query_connection_rows(connection, query, ())
         if len(rows) != 1 or "content_count" not in rows[0]:
             raise SyncValidationError("row count query failed for " + table)
         counts[table] = int(rows[0]["content_count"])
     return counts
+
+
+def quote_identifier(identifier):
+    return "`" + identifier.replace("`", "``") + "`"
+
+
+def lock_tables(connection, database):
+    statement = "LOCK TABLES " + ", ".join(
+        quote_identifier(database) + "." + quote_identifier(table) + " READ"
+        for table in PUBLIC_TABLES
+    )
+    query_connection_rows(connection, statement, ())
+
+
+def unlock_tables(connection):
+    query_connection_rows(connection, "UNLOCK TABLES", ())
+
+
+def capture_consistent_dump(mysql, database, path):
+    """Capture metadata and dump while one control connection holds read locks."""
+    connection = open_database_connection(mysql, database)
+    locked = False
+    try:
+        validate_table_engines(table_engines(mysql, database, connection))
+        lock_tables(connection, database)
+        locked = True
+        validate_table_engines(table_engines(mysql, database, connection))
+        schema = schema_digest(mysql, database, connection)
+        counts = row_counts(mysql, database, connection)
+        dump_to_path(mysql, database, path)
+        return schema, counts
+    finally:
+        try:
+            if locked:
+                unlock_tables(connection)
+        finally:
+            connection.close()
 
 
 def prune_expired_snapshots(config, keep):
@@ -245,7 +293,8 @@ def create_snapshot(config, created_at):
         raw_path = private_temporary(config.snapshot_dir, ".sql")
         gzip_path = private_temporary(config.snapshot_dir, ".sql.gz")
         try:
-            dump_to_path(config.mysql, config.database, raw_path)
+            schema, counts = capture_consistent_dump(
+                config.mysql, config.database, raw_path)
             content_digest = sha256_file(raw_path)
             run_checked(["gzip", "-n", "-c", str(raw_path)], stdout=gzip_path)
             artifact_digest = sha256_file(gzip_path)
@@ -254,9 +303,9 @@ def create_snapshot(config, created_at):
                 content_sha256=content_digest,
                 artifact_sha256=artifact_digest,
                 artifact_bytes=gzip_path.stat().st_size,
-                schema_sha256=schema_digest(config.mysql, config.database),
+                schema_sha256=schema,
                 created_at=created_at,
-                row_counts=row_counts(config.mysql, config.database),
+                row_counts=counts,
             )
             manifest.validate()
             promote_digest_named(gzip_path, config.snapshot_path(content_digest))

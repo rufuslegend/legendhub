@@ -17,6 +17,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).parents[1]))
 from content_sync.contract import Manifest, MySqlConfig, PUBLIC_TABLES, SyncValidationError
 from content_sync.source import (
     SourceConfig,
+    capture_consistent_dump,
     create_snapshot,
     exclusive_lock,
     prune_expired_snapshots,
@@ -27,6 +28,75 @@ from content_sync.source import (
 
 PASSWORD_ENVIRONMENT = {"MYSQL_PASSWORD": "never-log-this"}
 FIXED_TIME = 1_700_000_000
+EXPECTED_LOCK_SQL = (
+    "LOCK TABLES `legendhub`.`Areas` READ, "
+    "`legendhub`.`Categories` READ, "
+    "`legendhub`.`ChangelogVersions` READ, "
+    "`legendhub`.`ChangelogVersions_AuditTrail` READ, "
+    "`legendhub`.`Eras` READ, "
+    "`legendhub`.`ItemMobMap` READ, "
+    "`legendhub`.`ItemStatCategories` READ, "
+    "`legendhub`.`ItemStatInfo` READ, "
+    "`legendhub`.`Items` READ, "
+    "`legendhub`.`Items_AuditTrail` READ, "
+    "`legendhub`.`Mobs` READ, "
+    "`legendhub`.`Mobs_AuditTrail` READ, "
+    "`legendhub`.`Quests` READ, "
+    "`legendhub`.`Quests_AuditTrail` READ, "
+    "`legendhub`.`SubCategories` READ, "
+    "`legendhub`.`WikiPages` READ, "
+    "`legendhub`.`WikiPages_AuditTrail` READ"
+)
+
+
+class RecordingCursor:
+    def __init__(self, connection):
+        self.connection = connection
+        self.rows = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, _type, _value, _traceback):
+        return False
+
+    def execute(self, query, parameters=()):
+        self.connection.events.append(("sql", query, parameters))
+        if self.connection.fail_metadata and "INFORMATION_SCHEMA.COLUMNS" in query:
+            raise RuntimeError("metadata failed")
+        if "INFORMATION_SCHEMA.TABLES" in query:
+            self.rows = [
+                {"TABLE_NAME": table, "ENGINE": "InnoDB"}
+                for table in PUBLIC_TABLES
+            ]
+        elif "INFORMATION_SCHEMA.COLUMNS" in query:
+            self.rows = [{
+                "TABLE_NAME": "Areas",
+                "ORDINAL_POSITION": 1,
+                "COLUMN_NAME": "Id",
+                "COLUMN_TYPE": "int(11)",
+                "IS_NULLABLE": "NO",
+                "COLUMN_DEFAULT": None,
+            }]
+        elif query.startswith("SELECT COUNT(*)"):
+            self.rows = [{"content_count": 1}]
+        else:
+            self.rows = []
+
+    def fetchall(self):
+        return self.rows
+
+
+class RecordingConnection:
+    def __init__(self, fail_metadata=False):
+        self.events = []
+        self.fail_metadata = fail_metadata
+
+    def cursor(self):
+        return RecordingCursor(self)
+
+    def close(self):
+        self.events.append(("close",))
 
 
 def test_config(directory):
@@ -40,14 +110,11 @@ def write_dump(contents):
 
 
 def snapshot_dependencies(contents=b"INSERT INTO `Areas` VALUES (1,'one');\n"):
-    return (
-        mock.patch("content_sync.source.dump_to_path", side_effect=write_dump(contents)),
-        mock.patch("content_sync.source.schema_digest", return_value="c" * 64),
-        mock.patch(
-            "content_sync.source.row_counts",
-            return_value={table: 0 for table in PUBLIC_TABLES},
-        ),
-    )
+    def capture(_mysql, _database, path):
+        path.write_bytes(contents)
+        return "c" * 64, {table: 0 for table in PUBLIC_TABLES}
+    return mock.patch("content_sync.source.capture_consistent_dump",
+                      side_effect=capture)
 
 
 class SourceTests(unittest.TestCase):
@@ -65,13 +132,75 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(config.snapshot_dir,
                          pathlib.Path("/backups/content-sync"))
 
+    def test_consistent_dump_locks_exact_allowlist_on_one_control_connection(self):
+        connection = RecordingConnection()
+        mysql = MySqlConfig("mysql", 3306, "exporter", "secret")
+        with tempfile.TemporaryDirectory() as directory:
+            raw_path = pathlib.Path(directory) / "snapshot.sql"
+
+            def write_dump(_mysql, _database, path):
+                connection.events.append(("dump",))
+                path.write_bytes(b"INSERT INTO `Areas` VALUES (1);\n")
+
+            with mock.patch("content_sync.source.open_database_connection",
+                            return_value=connection) as connect, \
+                    mock.patch("content_sync.source.dump_to_path",
+                               side_effect=write_dump):
+                schema, counts = capture_consistent_dump(
+                    mysql, "legendhub", raw_path)
+
+        self.assertRegex(schema, r"^[0-9a-f]{64}$")
+        self.assertEqual(counts, {table: 1 for table in PUBLIC_TABLES})
+        connect.assert_called_once_with(mysql, "legendhub")
+        statements = [event[1] for event in connection.events
+                      if event[0] == "sql"]
+        self.assertIn("INFORMATION_SCHEMA.TABLES", statements[0])
+        self.assertEqual(statements[1], EXPECTED_LOCK_SQL)
+        self.assertIn("INFORMATION_SCHEMA.TABLES", statements[2])
+        self.assertIn("INFORMATION_SCHEMA.COLUMNS", statements[3])
+        self.assertEqual(statements[-1], "UNLOCK TABLES")
+        self.assertLess(connection.events.index(("dump",)),
+                        connection.events.index(("sql", "UNLOCK TABLES", ())))
+        self.assertEqual(connection.events[-1], ("close",))
+
+    def test_consistent_dump_unlocks_when_metadata_fails(self):
+        connection = RecordingConnection(fail_metadata=True)
+        mysql = MySqlConfig("mysql", 3306, "exporter", "secret")
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch("content_sync.source.open_database_connection",
+                           return_value=connection), \
+                mock.patch("content_sync.source.dump_to_path") as dump:
+            with self.assertRaisesRegex(RuntimeError, "metadata failed"):
+                capture_consistent_dump(mysql, "legendhub",
+                                        pathlib.Path(directory) / "snapshot.sql")
+        statements = [event[1] for event in connection.events
+                      if event[0] == "sql"]
+        self.assertEqual(statements[-1], "UNLOCK TABLES")
+        self.assertEqual(connection.events[-1], ("close",))
+        dump.assert_not_called()
+
+    def test_consistent_dump_unlocks_when_dump_fails(self):
+        connection = RecordingConnection()
+        mysql = MySqlConfig("mysql", 3306, "exporter", "secret")
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch("content_sync.source.open_database_connection",
+                           return_value=connection), \
+                mock.patch("content_sync.source.dump_to_path",
+                           side_effect=RuntimeError("dump failed")):
+            with self.assertRaisesRegex(RuntimeError, "dump failed"):
+                capture_consistent_dump(mysql, "legendhub",
+                                        pathlib.Path(directory) / "snapshot.sql")
+        statements = [event[1] for event in connection.events
+                      if event[0] == "sql"]
+        self.assertEqual(statements[-1], "UNLOCK TABLES")
+        self.assertEqual(connection.events[-1], ("close",))
+
     def test_same_content_produces_same_content_and_artifact_digests(self):
         with tempfile.TemporaryDirectory() as directory, \
                 mock.patch.dict(os.environ, PASSWORD_ENVIRONMENT):
             config = test_config(directory)
             dump = b"INSERT INTO `Areas` VALUES (1,'one');\n"
-            patches = snapshot_dependencies(dump)
-            with patches[0], patches[1], patches[2]:
+            with snapshot_dependencies(dump):
                 first = create_snapshot(config, "2026-08-17T14:00:00Z")
                 second = create_snapshot(config, "2026-08-17T15:00:00Z")
             self.assertEqual(first.content_sha256, second.content_sha256)
@@ -102,7 +231,7 @@ class SourceTests(unittest.TestCase):
             manifest_path = config.snapshot_dir / "current.manifest"
             manifest_path.write_bytes(old_manifest)
             os.utime(manifest_path, (FIXED_TIME, FIXED_TIME))
-            with mock.patch("content_sync.source.dump_to_path",
+            with mock.patch("content_sync.source.capture_consistent_dump",
                             side_effect=RuntimeError("dump failed")):
                 with self.assertRaisesRegex(RuntimeError, "dump failed"):
                     create_snapshot(config, "2026-08-17T14:00:00Z")
@@ -156,8 +285,7 @@ class SourceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, \
                 mock.patch.dict(os.environ, PASSWORD_ENVIRONMENT):
             config = test_config(directory)
-            patches = snapshot_dependencies()
-            with patches[0], patches[1], patches[2]:
+            with snapshot_dependencies():
                 manifest = create_snapshot(config, "2026-08-17T14:00:00Z")
             paths = (config.snapshot_path(manifest.content_sha256),
                      config.snapshot_dir / "current.manifest")
@@ -243,8 +371,11 @@ class SourceTests(unittest.TestCase):
             config = test_config(directory)
             engines = {table: "InnoDB" for table in PUBLIC_TABLES}
             engines["Items"] = "MyISAM"
+            connection = RecordingConnection()
             with mock.patch("content_sync.source.table_engines",
                             return_value=engines), \
+                    mock.patch("content_sync.source.open_database_connection",
+                               return_value=connection), \
                     mock.patch("content_sync.source.run_checked") as run:
                 with self.assertRaisesRegex(SyncValidationError,
                                             r"Items") as error:
