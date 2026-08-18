@@ -42,12 +42,29 @@ test("backup image wires the entrypoint to foreground cron", () => {
     const config = JSON.parse(result.stdout);
     assert.deepEqual(config.Entrypoint, ["/usr/local/bin/backup-entrypoint"]);
     assert.deepEqual(config.Cmd, ["cron", "-f", "-L", "15"]);
+    assert.equal(config.User || "", "");
 
     const cron = fs.readFileSync(path.join(root, "mysql/cron-mysql"), "utf8");
     assert.match(cron, /^SHELL=\/bin\/bash$/m);
     assert.match(cron,
         /^11 6 \* \* \* root \{ source \/run\/legendhub-backup\.env && exec \/usr\/local\/bin\/backup-mysql; \} >> \/proc\/1\/fd\/1 2>> \/proc\/1\/fd\/2$/m);
     assert.doesNotMatch(cron, /MYSQL_PASSWORD|\$\{MYSQL_/);
+});
+
+test("backup image packages the content sync runtime and entry points", () => {
+    const checks = [
+        "command -v ssh >/dev/null",
+        "test -x /usr/local/bin/export-public-content",
+        "test -x /usr/local/bin/sync-public-content",
+        "test -x /usr/local/bin/content-sync-health",
+        "PYTHONPATH=/usr/local/lib python3 -c 'import pymysql, " +
+            "content_sync.contract, " +
+            "content_sync.source, content_sync.target, content_sync.sync, " +
+            "content_sync.health'",
+    ].join(" && ");
+    const result = docker(["run", "--rm", ...environmentArguments(),
+        image, "bash", "-c", checks]);
+    assert.equal(result.status, 0, result.stderr);
 });
 
 test("cron sends environment source failures to container stderr", () => {
