@@ -42,13 +42,38 @@ if [[ "${dollar}*" == "rev-parse --short=12 HEAD" ]]; then
   exit 0
 fi
 
+if [[ "${dollar}*" == "ls-tree --name-only ${dollar}FAKE_FULL_SHA -- docker-compose.content-sync.yaml" ]]; then
+  if [[ "${dollar}{FAKE_GIT_TREE_EXIT_STATUS:-0}" != 0 ]]; then
+    exit "${dollar}FAKE_GIT_TREE_EXIT_STATUS"
+  fi
+  if [[ "${dollar}{FAKE_TRACKS_CONTENT_SYNC:-1}" == 1 ]]; then
+    printf '%s\n' docker-compose.content-sync.yaml
+  fi
+  exit 0
+fi
+
 printf 'unexpected git command: %s\n' "${dollar}*" >&2
 exit 64
 `;
 
 const dockerFake = String.raw`#!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' "${dollar}*" >> "${dollar}FAKE_DOCKER_LOG"
+printf '%s\0' "${dollar}@" >> "${dollar}FAKE_DOCKER_LOG"
+printf '\036' >> "${dollar}FAKE_DOCKER_LOG"
+
+if [[ "${dollar}1" == ps ]]; then
+  [[ -z "${dollar}{FAKE_CONTENT_SYNC_IDS:-}" ]] ||
+    printf '%s\n' "${dollar}FAKE_CONTENT_SYNC_IDS"
+fi
+
+if [[ "${dollar}1" == rm && "${dollar}{FAKE_REMOVE_EXIT_STATUS:-0}" != 0 ]]; then
+  exit "${dollar}FAKE_REMOVE_EXIT_STATUS"
+fi
+
+if [[ -n "${dollar}{FAKE_FAIL_DOCKER_CALL:-}" &&
+      "${dollar}*" == "${dollar}FAKE_FAIL_DOCKER_CALL" ]]; then
+  exit "${dollar}{FAKE_DOCKER_EXIT_STATUS:-1}"
+fi
 `;
 
 let workspace;
@@ -66,6 +91,13 @@ function writeExecutable(file, content) {
 
 function readIfPresent(file) {
     return fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+}
+
+function readDockerCalls() {
+    const log = readIfPresent(dockerLog);
+
+    return log === "" ? [] : log.split("\x1e").filter(Boolean).map(
+        (record) => record.split("\0").slice(0, -1));
 }
 
 beforeEach(() => {
@@ -86,17 +118,19 @@ beforeEach(() => {
 
 afterEach(() => fs.rmSync(workspace, {recursive: true, force: true}));
 
-function environment() {
+function environment(overrides = {}) {
     return {
         ...process.env,
         PATH: `${fakeBin}:${process.env.PATH}`,
         FAKE_CHECKED_OUT_STATE: checkedOutState,
+        FAKE_CONTENT_SYNC_IDS: "",
         FAKE_DOCKER_LOG: dockerLog,
         FAKE_FULL_SHA: fullSha,
         FAKE_GIT_LOG: gitLog,
         FAKE_RELEASE_SHA: releaseSha,
         FAKE_SSH_LOG: sshLog,
         FAKE_SSH_PAYLOAD: sshPayload,
+        ...overrides,
     };
 }
 
@@ -141,6 +175,8 @@ test("checks out the expanded commit before validating and deploying Compose", (
     fs.writeFileSync(path.join(remoteRoot, ".env"), "SECRET_VALUE=do-not-print\n");
     fs.writeFileSync(path.join(remoteRoot, "docker-compose.test.yaml"), "services: {}\n");
     fs.writeFileSync(path.join(remoteRoot, "docker-compose.registry.yaml"), "services: {}\n");
+    fs.writeFileSync(path.join(remoteRoot, "docker-compose.content-sync.yaml"),
+        "services: {}\n");
 
     const result = runRemote();
 
@@ -152,14 +188,21 @@ test("checks out the expanded commit before validating and deploying Compose", (
         `rev-parse --verify ${releaseSha}^{commit}`,
         `checkout --detach ${fullSha}`,
         "rev-parse --short=12 HEAD",
+        `ls-tree --name-only ${fullSha} -- docker-compose.content-sync.yaml`,
         "",
     ].join("\n"));
-    assert.equal(readIfPresent(dockerLog), [
-        "compose -f docker-compose.yaml -f docker-compose.test.yaml -f docker-compose.registry.yaml config --quiet",
-        "compose -f docker-compose.yaml -f docker-compose.test.yaml -f docker-compose.registry.yaml pull www python mysql-backup",
-        "compose -f docker-compose.yaml -f docker-compose.test.yaml -f docker-compose.registry.yaml up -d --no-build",
-        "",
-    ].join("\n"));
+    assert.deepEqual(readDockerCalls(), [
+        ["compose", "-f", "docker-compose.yaml", "-f", "docker-compose.test.yaml",
+            "-f", "docker-compose.registry.yaml", "-f",
+            "docker-compose.content-sync.yaml", "config", "--quiet"],
+        ["compose", "-f", "docker-compose.yaml", "-f", "docker-compose.test.yaml",
+            "-f", "docker-compose.registry.yaml", "-f",
+            "docker-compose.content-sync.yaml", "pull", "www", "python",
+            "mysql-backup", "content-sync"],
+        ["compose", "-f", "docker-compose.yaml", "-f", "docker-compose.test.yaml",
+            "-f", "docker-compose.registry.yaml", "-f",
+            "docker-compose.content-sync.yaml", "up", "-d", "--no-build"],
+    ]);
 });
 
 test("stops before Compose when the registry override is absent", () => {
@@ -170,5 +213,150 @@ test("stops before Compose when the registry override is absent", () => {
 
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /docker-compose\.registry\.yaml/);
-    assert.equal(readIfPresent(dockerLog), "");
+    assert.deepEqual(readDockerCalls(), []);
+});
+
+test("stops before Compose when the content sync overlay is absent", () => {
+    fs.writeFileSync(path.join(remoteRoot, ".env"), "SECRET_VALUE=do-not-print\n");
+    fs.writeFileSync(path.join(remoteRoot, "docker-compose.test.yaml"), "services: {}\n");
+    fs.writeFileSync(path.join(remoteRoot, "docker-compose.registry.yaml"), "services: {}\n");
+
+    const result = runRemote();
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr,
+        /Required deployment file is missing: docker-compose\.content-sync\.yaml/);
+    assert.deepEqual(readDockerCalls(), []);
+});
+
+function writeLegacyRemoteFiles() {
+    fs.writeFileSync(path.join(remoteRoot, ".env"), "SECRET_VALUE=do-not-print\n");
+    fs.writeFileSync(path.join(remoteRoot, "docker-compose.test.yaml"), "services: {}\n");
+    fs.writeFileSync(path.join(remoteRoot, "docker-compose.registry.yaml"),
+        "services: {}\n");
+}
+
+const legacyCompose = [
+    "compose", "-f", "docker-compose.yaml", "-f", "docker-compose.test.yaml",
+    "-f", "docker-compose.registry.yaml",
+];
+const legacyDiscovery = [
+    "ps", "--all", "--quiet", "--no-trunc",
+    "--filter", "label=com.docker.compose.project=legendhub",
+    "--filter", "label=com.docker.compose.service=content-sync",
+];
+
+test("a legacy target uses three overlays when its Git tree predates content sync", () => {
+    writeLegacyRemoteFiles();
+
+    const result = spawnSync("bash", [deployer, "--remote", releaseSha, remoteRoot], {
+        env: environment({FAKE_TRACKS_CONTENT_SYNC: "0"}),
+        encoding: "utf8",
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(readDockerCalls(), [
+        [...legacyCompose, "config", "--quiet"],
+        legacyDiscovery,
+        [...legacyCompose, "pull", "www", "python", "mysql-backup"],
+        [...legacyCompose, "up", "-d", "--no-build"],
+    ]);
+});
+
+test("legacy rollback removes exactly one content-sync container by exact labels", () => {
+    writeLegacyRemoteFiles();
+    const containerId = "a".repeat(64);
+
+    const result = spawnSync("bash", [deployer, "--remote", releaseSha, remoteRoot], {
+        env: environment({
+            FAKE_CONTENT_SYNC_IDS: containerId,
+            FAKE_TRACKS_CONTENT_SYNC: "0",
+        }),
+        encoding: "utf8",
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(readDockerCalls(), [
+        [...legacyCompose, "config", "--quiet"],
+        legacyDiscovery,
+        [...legacyCompose, "pull", "www", "python", "mysql-backup"],
+        ["rm", "--force", "--", containerId],
+        [...legacyCompose, "up", "-d", "--no-build"],
+    ]);
+});
+
+test("legacy rollback rejects unexpected content-sync cardinality before mutation", () => {
+    writeLegacyRemoteFiles();
+
+    const result = spawnSync("bash", [deployer, "--remote", releaseSha, remoteRoot], {
+        env: environment({
+            FAKE_CONTENT_SYNC_IDS: `${"a".repeat(64)}\n${"b".repeat(64)}`,
+            FAKE_TRACKS_CONTENT_SYNC: "0",
+        }),
+        encoding: "utf8",
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /expected at most one legacy content-sync container/);
+    assert.deepEqual(readDockerCalls(), [
+        [...legacyCompose, "config", "--quiet"],
+        legacyDiscovery,
+    ]);
+});
+
+test("legacy rollback stops before startup when stale-service removal fails", () => {
+    writeLegacyRemoteFiles();
+    const containerId = "a".repeat(64);
+
+    const result = spawnSync("bash", [deployer, "--remote", releaseSha, remoteRoot], {
+        env: environment({
+            FAKE_CONTENT_SYNC_IDS: containerId,
+            FAKE_REMOVE_EXIT_STATUS: "41",
+            FAKE_TRACKS_CONTENT_SYNC: "0",
+        }),
+        encoding: "utf8",
+    });
+
+    assert.equal(result.status, 41);
+    assert.deepEqual(readDockerCalls(), [
+        [...legacyCompose, "config", "--quiet"],
+        legacyDiscovery,
+        [...legacyCompose, "pull", "www", "python", "mysql-backup"],
+        ["rm", "--force", "--", containerId],
+    ]);
+});
+
+test("legacy startup failure cannot resurrect the removed content-sync service", () => {
+    writeLegacyRemoteFiles();
+    const containerId = "a".repeat(64);
+    const failedCall = [...legacyCompose, "up", "-d", "--no-build"].join(" ");
+
+    const result = spawnSync("bash", [deployer, "--remote", releaseSha, remoteRoot], {
+        env: environment({
+            FAKE_CONTENT_SYNC_IDS: containerId,
+            FAKE_DOCKER_EXIT_STATUS: "42",
+            FAKE_FAIL_DOCKER_CALL: failedCall,
+            FAKE_TRACKS_CONTENT_SYNC: "0",
+        }),
+        encoding: "utf8",
+    });
+
+    assert.equal(result.status, 42);
+    assert.deepEqual(readDockerCalls().slice(-2), [
+        ["rm", "--force", "--", containerId],
+        [...legacyCompose, "up", "-d", "--no-build"],
+    ]);
+});
+
+test("Git tree inspection failure stops before Docker", () => {
+    writeLegacyRemoteFiles();
+
+    const result = spawnSync("bash", [deployer, "--remote", releaseSha, remoteRoot], {
+        env: environment({FAKE_GIT_TREE_EXIT_STATUS: "43"}),
+        encoding: "utf8",
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /target Compose tree/);
+    assert.deepEqual(readDockerCalls(), []);
 });

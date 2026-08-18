@@ -24,6 +24,8 @@ deploy_remote() {
   local deploy_root="$2"
   local full_sha
   local checked_out_sha
+  local tracked_content_sync
+  local content_sync_containers
 
   validate_release_sha "$release_sha"
   cd "$deploy_root"
@@ -49,6 +51,20 @@ deploy_remote() {
   require_file docker-compose.test.yaml
   require_file docker-compose.registry.yaml
 
+  if ! tracked_content_sync="$(git ls-tree --name-only "$full_sha" -- \
+      docker-compose.content-sync.yaml)"; then
+    printf 'Could not inspect target Compose tree.\n' >&2
+    exit 1
+  fi
+  case "$tracked_content_sync" in
+    docker-compose.content-sync.yaml) ;;
+    '') ;;
+    *)
+      printf 'Target Compose tree returned an unexpected overlay path.\n' >&2
+      exit 1
+      ;;
+  esac
+
   export LEGENDHUB_IMAGE_TAG="$release_sha"
   compose=(
     docker compose
@@ -56,8 +72,34 @@ deploy_remote() {
     -f docker-compose.test.yaml
     -f docker-compose.registry.yaml
   )
+
+  if [[ "$tracked_content_sync" == docker-compose.content-sync.yaml ]]; then
+    require_file docker-compose.content-sync.yaml
+    compose+=(-f docker-compose.content-sync.yaml)
+    "${compose[@]}" config --quiet
+    "${compose[@]}" pull www python mysql-backup content-sync
+    "${compose[@]}" up -d --no-build
+    return
+  fi
+
   "${compose[@]}" config --quiet
+  content_sync_containers="$(docker ps --all --quiet --no-trunc \
+    --filter label=com.docker.compose.project=legendhub \
+    --filter label=com.docker.compose.service=content-sync)"
+  if [[ "$content_sync_containers" == *$'\n'* ]]; then
+    printf 'Legacy rollback expected at most one legacy content-sync container.\n' >&2
+    exit 1
+  fi
+  if [[ -n "$content_sync_containers" &&
+        ! "$content_sync_containers" =~ ^[abcdef0123456789]{64}$ ]]; then
+    printf 'Legacy rollback found an invalid content-sync container identity.\n' >&2
+    exit 1
+  fi
+
   "${compose[@]}" pull www python mysql-backup
+  if [[ -n "$content_sync_containers" ]]; then
+    docker rm --force -- "$content_sync_containers" >/dev/null
+  fi
   "${compose[@]}" up -d --no-build
 }
 
