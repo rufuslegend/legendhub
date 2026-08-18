@@ -147,11 +147,15 @@ non-secret verification variables, then use `vi` to add exactly one verified
 record to the still-empty known-hosts file:
 
 ```bash
-production_host='REPLACE-WITH-VERIFIED-PRODUCTION-HOST'
+production_host='legendmud.org'
+production_port='7822'
 approved_host_fingerprint='SHA256:REPLACE-WITH-OOB-VERIFIED-FINGERPRINT'
-[[ "$production_host" != REPLACE-* ]]
 [[ "$production_host" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]
+[[ "$production_port" =~ ^[0-9]+$ ]]
+test "$production_port" -ge 1
+test "$production_port" -le 65535
 [[ "$approved_host_fingerprint" =~ ^SHA256:[A-Za-z0-9+/]{43}$ ]]
+known_hosts_token="[$production_host]:$production_port"
 vi "$known_hosts_file"
 chmod 600 "$known_hosts_file"
 host_record_count="$(awk '
@@ -160,7 +164,7 @@ host_record_count="$(awk '
 ' "$known_hosts_file")"
 test "$host_record_count" -eq 1
 test "$(awk 'NF && $1 !~ /^#/ { print $1 }' "$known_hosts_file")" = \
-  "$production_host"
+  "$known_hosts_token"
 known_host_details="$(ssh-keygen -lf "$known_hosts_file")"
 test "${known_host_details#*$'\n'}" = "$known_host_details"
 actual_host_fingerprint="$(printf '%s\n' "$known_host_details" | \
@@ -168,8 +172,10 @@ actual_host_fingerprint="$(printf '%s\n' "$known_host_details" | \
 test "$actual_host_fingerprint" = "$approved_host_fingerprint"
 ```
 
-All checks must exit zero. The host token in this single record must be the
-same token used by `CONTENT_SYNC_SOURCE`. Never use
+All checks must exit zero. Because production SSH listens on a non-default
+port, the single known-hosts record must use the bracketed token
+`[legendmud.org]:7822`, while `CONTENT_SYNC_SOURCE` uses the unbracketed host
+name and `CONTENT_SYNC_SSH_PORT` carries the port separately. Never use
 `StrictHostKeyChecking=no`, and do not treat an unverified network scan as
 proof of the host key.
 
@@ -182,7 +188,8 @@ vi .env
 ```
 
 ```dotenv
-CONTENT_SYNC_SOURCE=rufus@<verified-production-host>
+CONTENT_SYNC_SOURCE=rufus@legendmud.org
+CONTENT_SYNC_SSH_PORT=7822
 CONTENT_SYNC_STAGING_DATABASE=legendhub_content_sync
 CONTENT_SYNC_INTERVAL_SECONDS=3600
 CONTENT_SYNC_MAX_AGE_SECONDS=7200
@@ -191,10 +198,10 @@ CONTENT_SYNC_KNOWN_HOSTS_FILE=/home/rufus/.ssh/legendhub-content-sync/known_host
 ```
 
 The one-hour interval and independent two-hour maximum age are the production
-defaults. Do not leave the bracketed host placeholder in `.env` or substitute
-a different SSH account: the restricted key is installed for production user
-`rufus`. Do not display or commit `.env`, the private key, or the private key's
-contents. Do not copy the private key to production or to the local Mac.
+defaults. Port `7822` is required for LegendMUD SSH. Do not substitute a
+different SSH account: the restricted key is installed for production user
+`rufus`. Do not display or commit `.env`, the private key, or the private
+key's contents. Do not copy the private key to production or to the local Mac.
 
 Open the newly created public `${private_key}.pub` file with `vi` and transfer
 only that public line through the approved administrative channel:

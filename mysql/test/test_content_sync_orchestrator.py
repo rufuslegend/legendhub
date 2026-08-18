@@ -302,6 +302,7 @@ class OrchestratorTests(unittest.TestCase):
                 "MYSQL_PORT": "3306", "MYSQL_USER": "sync",
                 "MYSQL_PASSWORD": "password", "MYSQL_DATABASE": "legendhub",
                 "CONTENT_SYNC_SOURCE": "sync@source",
+                "CONTENT_SYNC_SSH_PORT": "7822",
                 "CONTENT_SYNC_SSH_KEY": str(key),
                 "CONTENT_SYNC_KNOWN_HOSTS": str(hosts),
                 "CONTENT_SYNC_STATE_DIR": str(root / "state"),
@@ -309,8 +310,15 @@ class OrchestratorTests(unittest.TestCase):
             }
             config = SyncConfig.from_environment(environment)
             self.assertEqual(config.interval_seconds, 17)
-            self.assertEqual(ssh_command(config, "snapshot", "a" * 64)[-2:],
-                             ["sync@source", "snapshot " + "a" * 64])
+            self.assertEqual(config.ssh_port, 7822)
+            self.assertEqual(ssh_command(config, "snapshot", "a" * 64), [
+                "ssh", "-T", "-p", "7822", "-i", str(key),
+                "-o", "BatchMode=yes",
+                "-o", "IdentitiesOnly=yes",
+                "-o", "UserKnownHostsFile=" + str(hosts),
+                "-o", "StrictHostKeyChecking=yes",
+                "sync@source", "snapshot " + "a" * 64,
+            ])
             environment["CONTENT_SYNC_INTERVAL_SECONDS"] = "0"
             with self.assertRaisesRegex(ValueError, "CONTENT_SYNC_INTERVAL_SECONDS"):
                 SyncConfig.from_environment(environment)
@@ -318,6 +326,30 @@ class OrchestratorTests(unittest.TestCase):
             key.chmod(0o622)
             with self.assertRaisesRegex(ValueError, "private"):
                 SyncConfig.from_environment(environment)
+
+    def test_environment_requires_a_valid_ssh_port(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            key = root / "key"
+            hosts = root / "known_hosts"
+            key.write_text("key")
+            hosts.write_text("host")
+            key.chmod(0o600)
+            hosts.chmod(0o600)
+            environment = {
+                "MYSQL_PORT": "3306", "MYSQL_USER": "sync",
+                "MYSQL_PASSWORD": "password", "MYSQL_DATABASE": "legendhub",
+                "CONTENT_SYNC_SOURCE": "sync@source",
+                "CONTENT_SYNC_SSH_KEY": str(key),
+                "CONTENT_SYNC_KNOWN_HOSTS": str(hosts),
+            }
+            for port in (None, "", "0", "65536", "-1", "22.5", "port"):
+                candidate = dict(environment)
+                if port is not None:
+                    candidate["CONTENT_SYNC_SSH_PORT"] = port
+                with self.subTest(port=port), self.assertRaisesRegex(
+                        ValueError, "CONTENT_SYNC_SSH_PORT"):
+                    SyncConfig.from_environment(candidate)
 
     def test_environment_rejects_ssh_option_injection_and_mismatched_owners(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -332,6 +364,7 @@ class OrchestratorTests(unittest.TestCase):
                 "MYSQL_PORT": "3306", "MYSQL_USER": "sync",
                 "MYSQL_PASSWORD": "password", "MYSQL_DATABASE": "legendhub",
                 "CONTENT_SYNC_SOURCE": "sync@source",
+                "CONTENT_SYNC_SSH_PORT": "7822",
                 "CONTENT_SYNC_SSH_KEY": str(key),
                 "CONTENT_SYNC_KNOWN_HOSTS": str(hosts),
             }

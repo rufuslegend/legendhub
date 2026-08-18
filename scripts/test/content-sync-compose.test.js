@@ -11,6 +11,7 @@ const baseEnvironment = {
     ...process.env,
     CONTENT_SYNC_KNOWN_HOSTS_FILE: "/example/content-sync-known-hosts",
     CONTENT_SYNC_SOURCE: "content-sync@example.invalid",
+    CONTENT_SYNC_SSH_PORT: "7822",
     CONTENT_SYNC_SSH_KEY_FILE: "/example/content-sync-key",
     EXTERNAL_PORT: "127.0.0.1:7001",
     GITHUB_REPOSITORY: "rufuslegend/legendhub",
@@ -76,6 +77,7 @@ test("content sync is opt-in, hourly, private, and reuses the backup image", () 
         ["/usr/local/bin/sync-public-content", "--loop"]);
     assert.equal(service.environment.CONTENT_SYNC_INTERVAL_SECONDS, "3600");
     assert.equal(service.environment.CONTENT_SYNC_MAX_AGE_SECONDS, "7200");
+    assert.equal(service.environment.CONTENT_SYNC_SSH_PORT, "7822");
     assert.equal(service.healthcheck.start_period, "2h0m0s");
     assert.equal(service.volumes.find((volume) =>
         volume.target === "/run/secrets/content_sync_key").read_only, true);
@@ -97,6 +99,7 @@ test("content sync is opt-in, hourly, private, and reuses the backup image", () 
 test("content sync requires explicit source and private-file paths", () => {
     for (const variable of [
         "CONTENT_SYNC_SOURCE",
+        "CONTENT_SYNC_SSH_PORT",
         "CONTENT_SYNC_SSH_KEY_FILE",
         "CONTENT_SYNC_KNOWN_HOSTS_FILE",
     ]) {

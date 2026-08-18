@@ -45,6 +45,7 @@ class SyncState:
 class SyncConfig:
     target: TargetConfig
     source: str
+    ssh_port: int
     state_dir: Path
     ssh_key: Path
     known_hosts: Path
@@ -53,7 +54,8 @@ class SyncConfig:
     @classmethod
     def from_environment(cls, environment):
         values = required_environment(
-            ("CONTENT_SYNC_SOURCE", "CONTENT_SYNC_SSH_KEY",
+            ("CONTENT_SYNC_SOURCE", "CONTENT_SYNC_SSH_PORT",
+             "CONTENT_SYNC_SSH_KEY",
              "CONTENT_SYNC_KNOWN_HOSTS"), environment)
         try:
             interval = int(environment.get("CONTENT_SYNC_INTERVAL_SECONDS", "3600"))
@@ -61,6 +63,12 @@ class SyncConfig:
             raise ValueError("invalid CONTENT_SYNC_INTERVAL_SECONDS")
         if interval <= 0:
             raise ValueError("invalid CONTENT_SYNC_INTERVAL_SECONDS")
+        port_value = values["CONTENT_SYNC_SSH_PORT"]
+        if not re.fullmatch(r"[0-9]{1,5}", port_value):
+            raise ValueError("invalid CONTENT_SYNC_SSH_PORT")
+        ssh_port = int(port_value)
+        if not 1 <= ssh_port <= 65535:
+            raise ValueError("invalid CONTENT_SYNC_SSH_PORT")
         key = Path(values["CONTENT_SYNC_SSH_KEY"])
         hosts = Path(values["CONTENT_SYNC_KNOWN_HOSTS"])
         key_owner = _validate_private_file(key, "SSH key")
@@ -72,6 +80,7 @@ class SyncConfig:
         return cls(
             target=TargetConfig.from_environment(environment),
             source=values["CONTENT_SYNC_SOURCE"],
+            ssh_port=ssh_port,
             state_dir=Path(environment.get(
                 "CONTENT_SYNC_STATE_DIR", "/var/lib/legendhub-content-sync")),
             ssh_key=key,
@@ -89,6 +98,7 @@ class SyncConfig:
                 staging_database="legendhub_content_sync",
             ),
             source="sync@source",
+            ssh_port=22,
             state_dir=directory / "state",
             ssh_key=directory / "key",
             known_hosts=directory / "known_hosts",
@@ -96,8 +106,15 @@ class SyncConfig:
         )
 
     def with_state_dir(self, state_dir):
-        return SyncConfig(self.target, self.source, Path(state_dir), self.ssh_key,
-                          self.known_hosts, self.interval_seconds)
+        return SyncConfig(
+            target=self.target,
+            source=self.source,
+            ssh_port=self.ssh_port,
+            state_dir=Path(state_dir),
+            ssh_key=self.ssh_key,
+            known_hosts=self.known_hosts,
+            interval_seconds=self.interval_seconds,
+        )
 
 
 def _validate_private_file(path, label):
@@ -112,7 +129,7 @@ def _validate_private_file(path, label):
 
 def ssh_command(config, *remote_arguments):
     return [
-        "ssh", "-T", "-i", str(config.ssh_key),
+        "ssh", "-T", "-p", str(config.ssh_port), "-i", str(config.ssh_key),
         "-o", "BatchMode=yes",
         "-o", "IdentitiesOnly=yes",
         "-o", "UserKnownHostsFile=" + str(config.known_hosts),
