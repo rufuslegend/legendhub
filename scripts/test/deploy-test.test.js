@@ -159,7 +159,7 @@ function runRemote(overrides = {}) {
 }
 
 function writeProjectEnvironment(
-    projectDefinitions = ["COMPOSE_PROJECT_NAME=legendhub"],
+    projectDefinitions = ["COMPOSE_PROJECT_NAME=legendhub-test"],
 ) {
     fs.writeFileSync(path.join(remoteRoot, ".env"), [
         ...projectDefinitions,
@@ -203,7 +203,7 @@ test("checks out the expanded commit before validating and deploying Compose", (
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout.includes("do-not-print"), false);
     assert.equal(result.stderr.includes("do-not-print"), false);
-    assert.equal(readIfPresent(projectNameLog), "legendhub\n".repeat(3));
+    assert.equal(readIfPresent(projectNameLog), "legendhub-test\n".repeat(3));
     assert.equal(readIfPresent(gitLog), [
         "fetch origin",
         `rev-parse --verify ${releaseSha}^{commit}`,
@@ -229,12 +229,12 @@ test("checks out the expanded commit before validating and deploying Compose", (
 const invalidProjectDefinitions = [
     {name: "a missing project definition", lines: []},
     {name: "duplicate project definitions", lines: [
-        "COMPOSE_PROJECT_NAME=legendhub",
-        "COMPOSE_PROJECT_NAME=legendhub",
+        "COMPOSE_PROJECT_NAME=legendhub-test",
+        "COMPOSE_PROJECT_NAME=legendhub-test",
     ]},
     {name: "the wrong project", lines: ["COMPOSE_PROJECT_NAME=other"]},
     {name: "a malformed project definition", lines: [
-        "export COMPOSE_PROJECT_NAME = legendhub",
+        "export COMPOSE_PROJECT_NAME = legendhub-test",
     ]},
 ];
 
@@ -309,7 +309,7 @@ const legacyCompose = [
 ];
 const legacyDiscovery = [
     "ps", "--all", "--quiet", "--no-trunc",
-    "--filter", "label=com.docker.compose.project=legendhub",
+    "--filter", "label=com.docker.compose.project=legendhub-test",
     "--filter", "label=com.docker.compose.service=content-sync",
 ];
 
@@ -325,7 +325,7 @@ test("a legacy target uses three overlays when its Git tree predates content syn
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(readIfPresent(projectNameLog), "legendhub\n".repeat(4));
+    assert.equal(readIfPresent(projectNameLog), "legendhub-test\n".repeat(4));
     assert.deepEqual(readDockerCalls(), [
         [...legacyCompose, "config", "--quiet"],
         legacyDiscovery,

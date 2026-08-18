@@ -56,7 +56,7 @@ project_definitions="$(awk '
   END { print count + 0 }
 ' .env)"
 project_literal_lines="$(awk '
-  $0 == "COMPOSE_PROJECT_NAME=legendhub" { count += 1 }
+  $0 == "COMPOSE_PROJECT_NAME=legendhub-test" { count += 1 }
   END { print count + 0 }
 ' .env)"
 test "$project_definitions" -eq 1
@@ -466,7 +466,7 @@ project_definitions="$(awk '
   END { print count + 0 }
 ' .env)"
 project_literal_lines="$(awk '
-  $0 == "COMPOSE_PROJECT_NAME=legendhub" { count += 1 }
+  $0 == "COMPOSE_PROJECT_NAME=legendhub-test" { count += 1 }
   END { print count + 0 }
 ' .env)"
 test "$profile_lines" -eq 0
@@ -474,7 +474,7 @@ test "$project_definitions" -eq 1
 test "$project_literal_lines" -eq 1
 unset COMPOSE_PROFILES COMPOSE_PROJECT_NAME
 running_sync_containers="$(docker ps --quiet --no-trunc \
-  --filter label=com.docker.compose.project=legendhub \
+  --filter label=com.docker.compose.project=legendhub-test \
   --filter label=com.docker.compose.service=content-sync)"
 test -z "$running_sync_containers"
 REMOTE
@@ -491,7 +491,7 @@ release_sha='REPLACE-WITH-12-CHARACTER-IMMUTABLE-SHA'
 
 The deployment, provisioning, and remote manual-sync wrappers independently
 repeat the project-identity check in their own SSH processes: each requires
-exactly one literal `COMPOSE_PROJECT_NAME=legendhub` line, clears any ambient
+exactly one literal `COMPOSE_PROJECT_NAME=legendhub-test` line, clears any ambient
 override, and exports the fixed project before Compose. The operator preflight
 above additionally proves profile and running-container state before either
 authorized mutation.
@@ -529,7 +529,7 @@ project_definitions="$(awk '
   END { print count + 0 }
 ' .env)"
 project_literal_lines="$(awk '
-  $0 == "COMPOSE_PROJECT_NAME=legendhub" { count += 1 }
+  $0 == "COMPOSE_PROJECT_NAME=legendhub-test" { count += 1 }
   END { print count + 0 }
 ' .env)"
 test "$project_definitions" -eq 1
@@ -589,7 +589,7 @@ if [[ $'\n'"$effective_services"$'\n' == *$'\ncontent-sync\n'* ]]; then
   exit 1
 fi
 running_sync_containers="$(docker ps --quiet --no-trunc \
-  --filter label=com.docker.compose.project=legendhub \
+  --filter label=com.docker.compose.project=legendhub-test \
   --filter label=com.docker.compose.service=content-sync)"
 test -z "$running_sync_containers"
 
@@ -831,7 +831,7 @@ if [[ $'\n'"$effective_services"$'\n' == *$'\ncontent-sync\n'* ]]; then
   exit 1
 fi
 running_sync_containers="$(docker ps --quiet --no-trunc \
-  --filter label=com.docker.compose.project=legendhub \
+  --filter label=com.docker.compose.project=legendhub-test \
   --filter label=com.docker.compose.service=content-sync)"
 test -z "$running_sync_containers"
 restart_remote_writers() {
@@ -859,7 +859,7 @@ if ! "${compose[@]}" stop www python; then
 fi
 capture_target_reference "$pre_dry_reference"
 running_sync_containers="$(docker ps --quiet --no-trunc \
-  --filter label=com.docker.compose.project=legendhub \
+  --filter label=com.docker.compose.project=legendhub-test \
   --filter label=com.docker.compose.service=content-sync)"
 if [[ -n "$running_sync_containers" ]]; then
   restart_remote_writers || true
@@ -893,7 +893,7 @@ project_definitions="$(awk '
   END { print count + 0 }
 ' .env)"
 project_literal_lines="$(awk '
-  $0 == "COMPOSE_PROJECT_NAME=legendhub" { count += 1 }
+  $0 == "COMPOSE_PROJECT_NAME=legendhub-test" { count += 1 }
   END { print count + 0 }
 ' .env)"
 test "$profile_lines" -eq 0
@@ -1019,7 +1019,7 @@ project_definitions="$(awk '
   END { print count + 0 }
 ' .env)"
 project_literal_lines="$(awk '
-  $0 == "COMPOSE_PROJECT_NAME=legendhub" { count += 1 }
+  $0 == "COMPOSE_PROJECT_NAME=legendhub-test" { count += 1 }
   END { print count + 0 }
 ' .env)"
 test "$project_definitions" -eq 1
@@ -1051,7 +1051,7 @@ declare -F capture_restore_reference >/dev/null
 declare -F restart_remote_writers >/dev/null
 declare -F recover_remote_shell_exit >/dev/null
 running_sync_containers="$(docker ps --quiet --no-trunc \
-  --filter label=com.docker.compose.project=legendhub \
+  --filter label=com.docker.compose.project=legendhub-test \
   --filter label=com.docker.compose.service=content-sync)"
 test -z "$running_sync_containers"
 mutation_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -1073,7 +1073,7 @@ if ! "${compose[@]}" stop www python; then
   exit 1
 fi
 running_sync_containers="$(docker ps --quiet --no-trunc \
-  --filter label=com.docker.compose.project=legendhub \
+  --filter label=com.docker.compose.project=legendhub-test \
   --filter label=com.docker.compose.service=content-sync)"
 if [[ -n "$running_sync_containers" ]]; then
   restart_remote_writers || true
@@ -1088,7 +1088,7 @@ test "$(stat -c '%U' "$restore_reference")" = "$(id -un)"
 sha256sum "$restore_reference"
 stat -c '%n %s bytes mode=%a owner=%U' "$restore_reference"
 running_sync_containers="$(docker ps --quiet --no-trunc \
-  --filter label=com.docker.compose.project=legendhub \
+  --filter label=com.docker.compose.project=legendhub-test \
   --filter label=com.docker.compose.service=content-sync)"
 if [[ -n "$running_sync_containers" ]]; then
   restart_remote_writers || true
@@ -1220,7 +1220,7 @@ project_definitions="$(awk '
   END { print count + 0 }
 ' .env)"
 project_literal_lines="$(awk '
-  $0 == "COMPOSE_PROJECT_NAME=legendhub" { count += 1 }
+  $0 == "COMPOSE_PROJECT_NAME=legendhub-test" { count += 1 }
   END { print count + 0 }
 ' .env)"
 test "$project_definitions" -eq 1
@@ -1244,7 +1244,7 @@ active_sync_count="$(printf '%s\n' "$effective_services" | awk '
 ')"
 test "$active_sync_count" -eq 1
 running_sync_containers="$(docker ps --quiet --no-trunc \
-  --filter label=com.docker.compose.project=legendhub \
+  --filter label=com.docker.compose.project=legendhub-test \
   --filter label=com.docker.compose.service=content-sync)"
 test -z "$running_sync_containers"
 mysql_before="$("${compose[@]}" ps -q mysql)"
@@ -1253,7 +1253,7 @@ test "${mysql_before#*$'\n'}" = "$mysql_before"
 "${compose[@]}" up -d --no-deps --no-build content-sync
 test "$("${compose[@]}" ps -q mysql)" = "$mysql_before"
 running_sync_containers="$(docker ps --quiet --no-trunc \
-  --filter label=com.docker.compose.project=legendhub \
+  --filter label=com.docker.compose.project=legendhub-test \
   --filter label=com.docker.compose.service=content-sync)"
 test -n "$running_sync_containers"
 test "${running_sync_containers#*$'\n'}" = "$running_sync_containers"
@@ -1291,7 +1291,7 @@ project_definitions="$(awk '
   END { print count + 0 }
 ' .env)"
 project_literal_lines="$(awk '
-  $0 == "COMPOSE_PROJECT_NAME=legendhub" { count += 1 }
+  $0 == "COMPOSE_PROJECT_NAME=legendhub-test" { count += 1 }
   END { print count + 0 }
 ' .env)"
 test "$project_definitions" -eq 1
@@ -1316,7 +1316,7 @@ inactive_sync_count="$(printf '%s\n' "$effective_services" | awk '
 test "$inactive_sync_count" -eq 0
 "${compose[@]}" stop content-sync
 running_sync_containers="$(docker ps --quiet --no-trunc \
-  --filter label=com.docker.compose.project=legendhub \
+  --filter label=com.docker.compose.project=legendhub-test \
   --filter label=com.docker.compose.service=content-sync)"
 test -z "$running_sync_containers"
 "${compose[@]}" ps mysql mysql-backup www python
@@ -1346,7 +1346,7 @@ set -euo pipefail
 The first performs comparison-only validation. The second may replace the 17
 allowlisted Dunwichmass tables and therefore requires authorization for that
 mutation. Both wrappers disable SSH agent forwarding, connect only to
-Dunwichmass, independently require and export the fixed `legendhub` Compose
+Dunwichmass, independently require and export the fixed `legendhub-test` Compose
 project, derive its current detached-HEAD image tag, and use all four Compose
 overlays. The snapshot moves directly from production to the Dunwichmass
 container; it does not traverse the local Mac.
@@ -1472,7 +1472,7 @@ project_definitions="$(awk '
 ' .env)"
 test "$project_definitions" -eq 1
 project_literal_lines="$(awk '
-  $0 == "COMPOSE_PROJECT_NAME=legendhub" { count += 1 }
+  $0 == "COMPOSE_PROJECT_NAME=legendhub-test" { count += 1 }
   END { print count + 0 }
 ' .env)"
 test "$project_literal_lines" -eq 1
@@ -1612,7 +1612,7 @@ capture_restore_reference() {
 
 Stop the regular sync service when it exists and stop the application writers,
 but keep MySQL running. Then discover every running container with the exact
-`legendhub` project and `content-sync` service labels; this includes one-off
+`legendhub-test` project and `content-sync` service labels; this includes one-off
 `compose run` containers. Require zero rather than stopping an unknown
 in-flight transaction:
 
@@ -1623,7 +1623,7 @@ else
   "${compose[@]}" stop www python mysql-backup
 fi
 running_sync_containers="$(docker ps --quiet --no-trunc \
-  --filter label=com.docker.compose.project=legendhub \
+  --filter label=com.docker.compose.project=legendhub-test \
   --filter label=com.docker.compose.service=content-sync)"
 test -z "$running_sync_containers"
 mysql_container="$("${compose[@]}" ps -q mysql)"
@@ -1640,7 +1640,7 @@ print only a generic failure plus that private path:
 
 ```bash
 running_sync_containers="$(docker ps --quiet --no-trunc \
-  --filter label=com.docker.compose.project=legendhub \
+  --filter label=com.docker.compose.project=legendhub-test \
   --filter label=com.docker.compose.service=content-sync)"
 test -z "$running_sync_containers"
 restore_diagnostics="$(mktemp \
@@ -1687,7 +1687,7 @@ if ! cmp --silent "$restore_reference" "$post_restore_reference"; then
 fi
 sha256sum "$post_restore_reference"
 running_sync_containers="$(docker ps --quiet --no-trunc \
-  --filter label=com.docker.compose.project=legendhub \
+  --filter label=com.docker.compose.project=legendhub-test \
   --filter label=com.docker.compose.service=content-sync)"
 test -z "$running_sync_containers"
 "${compose[@]}" up -d --no-deps --no-build python www

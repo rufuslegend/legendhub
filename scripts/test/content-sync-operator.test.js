@@ -153,7 +153,7 @@ function run(script, args = [], overrides = {}) {
 }
 
 function writeRemoteFiles(stagingDatabase = "legendhub_content_sync",
-    projectDefinitions = ["COMPOSE_PROJECT_NAME=legendhub"]) {
+    projectDefinitions = ["COMPOSE_PROJECT_NAME=legendhub-test"]) {
     fs.writeFileSync(path.join(remoteRoot, ".env"), [
         ...projectDefinitions,
         `CONTENT_SYNC_STAGING_DATABASE=${stagingDatabase}`,
@@ -245,7 +245,7 @@ test("remote sync runs the profiled service once from the fixed directory", () =
         "rev-parse", "--short=12", "HEAD",
     ]);
     assert.equal(readIfPresent(imageTagLog), "abcdef123456\n");
-    assert.equal(readIfPresent(projectNameLog), "legendhub\n");
+    assert.equal(readIfPresent(projectNameLog), "legendhub-test\n");
     assert.deepEqual(readDockerCalls(), [[
         "compose", "-f", "docker-compose.yaml",
         "-f", "docker-compose.test.yaml",
@@ -259,12 +259,12 @@ test("remote sync runs the profiled service once from the fixed directory", () =
 const invalidProjectDefinitions = [
     {name: "a missing project definition", lines: []},
     {name: "duplicate project definitions", lines: [
-        "COMPOSE_PROJECT_NAME=legendhub",
-        "COMPOSE_PROJECT_NAME=legendhub",
+        "COMPOSE_PROJECT_NAME=legendhub-test",
+        "COMPOSE_PROJECT_NAME=legendhub-test",
     ]},
     {name: "the wrong project", lines: ["COMPOSE_PROJECT_NAME=other"]},
     {name: "a malformed project definition", lines: [
-        "export COMPOSE_PROJECT_NAME = legendhub",
+        "export COMPOSE_PROJECT_NAME = legendhub-test",
     ]},
 ];
 
@@ -364,7 +364,7 @@ test("provision uses the fixed staging database and minimum grant", () => {
         ].join("\n"),
     ]);
     assert.equal(readIfPresent(imageTagLog), "abcdef123456\n".repeat(5));
-    assert.equal(readIfPresent(projectNameLog), "legendhub\n".repeat(5));
+    assert.equal(readIfPresent(projectNameLog), "legendhub-test\n".repeat(5));
     const allOutput = result.stdout + result.stderr + JSON.stringify(calls);
     assert.doesNotMatch(allOutput, /root-password-do-not-print/);
     assert.doesNotMatch(allOutput, /target-password-do-not-print/);

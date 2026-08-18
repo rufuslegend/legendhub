@@ -281,7 +281,7 @@ before invoking SSH. On `dunwichmass` it operates only in
 to a full commit, checks out that exact commit detached, and confirms the
 checkout's 12-character SHA still matches the requested image tag. It checks
 the ignored files again, requires exactly one literal
-`COMPOSE_PROJECT_NAME=legendhub` definition, clears any ambient project
+`COMPOSE_PROJECT_NAME=legendhub-test` definition, clears any ambient project
 override, exports that fixed project identity, requires the checked-out
 `docker-compose.registry.yaml`, and inspects the target Git tree. A current
 tree must also contain `docker-compose.content-sync.yaml`; the script validates
@@ -293,7 +293,7 @@ The checks never print `.env` values.
 A genuine legacy target whose Git tree predates the content-sync overlay uses
 the original three overlays and pulls the original three application images.
 Before startup, the script finds at most one stale content-sync container by
-the exact `legendhub` project and `content-sync` service labels and removes
+the exact `legendhub-test` project and `content-sync` service labels and removes
 only that container. It does not remove the private sync volume or database
 data. A current target with a missing tracked overlay fails instead of being
 treated as legacy.

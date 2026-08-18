@@ -3,7 +3,7 @@
 All notable user-facing changes to LegendHUB are documented here beginning
 with version 2.6.0.
 
-## [2.8.0-beta] - 2026-08-12
+## [2.8.0] - 2026-08-18
 
 ### Added
 
@@ -15,6 +15,7 @@ with version 2.6.0.
 
 ### Fixed
 
+- Corrected test deployment safeguards to preserve Dunwichmass's existing Compose project and database volumes.
 - Corrected the Builder's natural armor class calculation to use LegendMUD's current dexterity-based rule while keeping skill, era, and buff bonuses as explicit faux objects.
 
 ## [2.7.0] - 2026-08-12

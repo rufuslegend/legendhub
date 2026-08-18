@@ -16,17 +16,17 @@ validate_compose_project() {
     if [[ "$line" =~ $project_pattern ]]; then
       project_definitions=$((project_definitions + 1))
     fi
-    if [[ "$line" == COMPOSE_PROJECT_NAME=legendhub ]]; then
+    if [[ "$line" == COMPOSE_PROJECT_NAME=legendhub-test ]]; then
       literal_definitions=$((literal_definitions + 1))
     fi
   done < .env
 
   if [[ "$project_definitions" -ne 1 || "$literal_definitions" -ne 1 ]]; then
     printf '%s\n' \
-      'content-sync: Compose project in .env must be exactly COMPOSE_PROJECT_NAME=legendhub' >&2
+      'content-sync: Compose project in .env must be exactly COMPOSE_PROJECT_NAME=legendhub-test' >&2
     exit 1
   fi
-  export COMPOSE_PROJECT_NAME=legendhub
+  export COMPOSE_PROJECT_NAME=legendhub-test
 }
 
 case "$#:${1:-}" in
