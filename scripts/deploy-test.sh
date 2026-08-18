@@ -19,6 +19,30 @@ require_file() {
   }
 }
 
+validate_compose_project() {
+  local line
+  local project_definitions=0
+  local literal_definitions=0
+  local project_pattern='^[[:space:]]*(export[[:space:]]+)?COMPOSE_PROJECT_NAME'
+
+  unset COMPOSE_PROJECT_NAME
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ $project_pattern ]]; then
+      project_definitions=$((project_definitions + 1))
+    fi
+    if [[ "$line" == COMPOSE_PROJECT_NAME=legendhub ]]; then
+      literal_definitions=$((literal_definitions + 1))
+    fi
+  done < .env
+
+  if [[ "$project_definitions" -ne 1 || "$literal_definitions" -ne 1 ]]; then
+    printf '%s\n' \
+      'Compose project in .env must be exactly COMPOSE_PROJECT_NAME=legendhub.' >&2
+    exit 1
+  fi
+  export COMPOSE_PROJECT_NAME=legendhub
+}
+
 deploy_remote() {
   local release_sha="$1"
   local deploy_root="$2"
@@ -31,6 +55,7 @@ deploy_remote() {
   cd "$deploy_root"
 
   require_file .env
+  validate_compose_project
   require_file docker-compose.test.yaml
 
   git fetch origin
@@ -41,13 +66,14 @@ deploy_remote() {
   }
 
   git checkout --detach "$full_sha"
+  require_file .env
+  validate_compose_project
   checked_out_sha="$(git rev-parse --short=12 HEAD)"
   [[ "$checked_out_sha" == "$release_sha" ]] || {
     printf 'Checked-out commit does not match requested release: %s\n' "$release_sha" >&2
     exit 1
   }
 
-  require_file .env
   require_file docker-compose.test.yaml
   require_file docker-compose.registry.yaml
 

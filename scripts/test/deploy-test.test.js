@@ -33,6 +33,9 @@ fi
 
 if [[ "${dollar}*" == "checkout --detach ${dollar}FAKE_FULL_SHA" ]]; then
   printf '%s\n' "${dollar}FAKE_FULL_SHA" > "${dollar}FAKE_CHECKED_OUT_STATE"
+  if [[ "${dollar}{FAKE_POST_CHECKOUT_ENV+x}" == x ]]; then
+    printf '%s' "${dollar}FAKE_POST_CHECKOUT_ENV" > "${dollar}FAKE_REMOTE_ENV"
+  fi
   exit 0
 fi
 
@@ -60,6 +63,8 @@ const dockerFake = String.raw`#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\0' "${dollar}@" >> "${dollar}FAKE_DOCKER_LOG"
 printf '\036' >> "${dollar}FAKE_DOCKER_LOG"
+printf '%s\n' "${dollar}{COMPOSE_PROJECT_NAME:-<unset>}" >> \
+  "${dollar}FAKE_PROJECT_NAME_LOG"
 
 if [[ "${dollar}1" == ps ]]; then
   [[ -z "${dollar}{FAKE_CONTENT_SYNC_IDS:-}" ]] ||
@@ -83,6 +88,7 @@ let sshLog;
 let sshPayload;
 let gitLog;
 let dockerLog;
+let projectNameLog;
 let checkedOutState;
 
 function writeExecutable(file, content) {
@@ -108,6 +114,7 @@ beforeEach(() => {
     sshPayload = path.join(workspace, "ssh-payload.sh");
     gitLog = path.join(workspace, "git.log");
     dockerLog = path.join(workspace, "docker.log");
+    projectNameLog = path.join(workspace, "project-name.log");
     checkedOutState = path.join(workspace, "checked-out");
     fs.mkdirSync(fakeBin);
     fs.mkdirSync(remoteRoot);
@@ -127,9 +134,12 @@ function environment(overrides = {}) {
         FAKE_DOCKER_LOG: dockerLog,
         FAKE_FULL_SHA: fullSha,
         FAKE_GIT_LOG: gitLog,
+        FAKE_PROJECT_NAME_LOG: projectNameLog,
         FAKE_RELEASE_SHA: releaseSha,
+        FAKE_REMOTE_ENV: path.join(remoteRoot, ".env"),
         FAKE_SSH_LOG: sshLog,
         FAKE_SSH_PAYLOAD: sshPayload,
+        COMPOSE_PROJECT_NAME: "",
         ...overrides,
     };
 }
@@ -141,11 +151,21 @@ function runLocal(args) {
     });
 }
 
-function runRemote(root = remoteRoot) {
-    return spawnSync("bash", [deployer, "--remote", releaseSha, root], {
-        env: environment(),
+function runRemote(overrides = {}) {
+    return spawnSync("bash", [deployer, "--remote", releaseSha, remoteRoot], {
+        env: environment(overrides),
         encoding: "utf8",
     });
+}
+
+function writeProjectEnvironment(
+    projectDefinitions = ["COMPOSE_PROJECT_NAME=legendhub"],
+) {
+    fs.writeFileSync(path.join(remoteRoot, ".env"), [
+        ...projectDefinitions,
+        "SECRET_VALUE=do-not-print",
+        "",
+    ].join("\n"));
 }
 
 test("rejects non-release tags before invoking SSH", async (t) => {
@@ -172,17 +192,18 @@ test("sends a validated release and fixed deployment directory to the server", (
 });
 
 test("checks out the expanded commit before validating and deploying Compose", () => {
-    fs.writeFileSync(path.join(remoteRoot, ".env"), "SECRET_VALUE=do-not-print\n");
+    writeProjectEnvironment();
     fs.writeFileSync(path.join(remoteRoot, "docker-compose.test.yaml"), "services: {}\n");
     fs.writeFileSync(path.join(remoteRoot, "docker-compose.registry.yaml"), "services: {}\n");
     fs.writeFileSync(path.join(remoteRoot, "docker-compose.content-sync.yaml"),
         "services: {}\n");
 
-    const result = runRemote();
+    const result = runRemote({COMPOSE_PROJECT_NAME: "hostile-project"});
 
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout.includes("do-not-print"), false);
     assert.equal(result.stderr.includes("do-not-print"), false);
+    assert.equal(readIfPresent(projectNameLog), "legendhub\n".repeat(3));
     assert.equal(readIfPresent(gitLog), [
         "fetch origin",
         `rev-parse --verify ${releaseSha}^{commit}`,
@@ -205,8 +226,54 @@ test("checks out the expanded commit before validating and deploying Compose", (
     ]);
 });
 
+const invalidProjectDefinitions = [
+    {name: "a missing project definition", lines: []},
+    {name: "duplicate project definitions", lines: [
+        "COMPOSE_PROJECT_NAME=legendhub",
+        "COMPOSE_PROJECT_NAME=legendhub",
+    ]},
+    {name: "the wrong project", lines: ["COMPOSE_PROJECT_NAME=other"]},
+    {name: "a malformed project definition", lines: [
+        "export COMPOSE_PROJECT_NAME = legendhub",
+    ]},
+];
+
+for (const fixture of invalidProjectDefinitions) {
+    test(`rejects ${fixture.name} before Git or Docker`, () => {
+        writeProjectEnvironment(fixture.lines);
+        fs.writeFileSync(path.join(remoteRoot, "docker-compose.test.yaml"),
+            "services: {}\n");
+
+        const result = runRemote();
+
+        assert.notEqual(result.status, 0);
+        assert.match(result.stderr, /Compose project/);
+        assert.equal(readIfPresent(gitLog), "");
+        assert.deepEqual(readDockerCalls(), []);
+    });
+}
+
+test("revalidates the project identity after checkout before Docker", () => {
+    writeProjectEnvironment();
+    fs.writeFileSync(path.join(remoteRoot, "docker-compose.test.yaml"), "services: {}\n");
+
+    const result = runRemote({
+        FAKE_POST_CHECKOUT_ENV: "COMPOSE_PROJECT_NAME=other\n",
+    });
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Compose project/);
+    assert.equal(readIfPresent(gitLog), [
+        "fetch origin",
+        `rev-parse --verify ${releaseSha}^{commit}`,
+        `checkout --detach ${fullSha}`,
+        "",
+    ].join("\n"));
+    assert.deepEqual(readDockerCalls(), []);
+});
+
 test("stops before Compose when the registry override is absent", () => {
-    fs.writeFileSync(path.join(remoteRoot, ".env"), "SECRET_VALUE=do-not-print\n");
+    writeProjectEnvironment();
     fs.writeFileSync(path.join(remoteRoot, "docker-compose.test.yaml"), "services: {}\n");
 
     const result = runRemote();
@@ -217,7 +284,7 @@ test("stops before Compose when the registry override is absent", () => {
 });
 
 test("stops before Compose when the content sync overlay is absent", () => {
-    fs.writeFileSync(path.join(remoteRoot, ".env"), "SECRET_VALUE=do-not-print\n");
+    writeProjectEnvironment();
     fs.writeFileSync(path.join(remoteRoot, "docker-compose.test.yaml"), "services: {}\n");
     fs.writeFileSync(path.join(remoteRoot, "docker-compose.registry.yaml"), "services: {}\n");
 
@@ -230,7 +297,7 @@ test("stops before Compose when the content sync overlay is absent", () => {
 });
 
 function writeLegacyRemoteFiles() {
-    fs.writeFileSync(path.join(remoteRoot, ".env"), "SECRET_VALUE=do-not-print\n");
+    writeProjectEnvironment();
     fs.writeFileSync(path.join(remoteRoot, "docker-compose.test.yaml"), "services: {}\n");
     fs.writeFileSync(path.join(remoteRoot, "docker-compose.registry.yaml"),
         "services: {}\n");
@@ -250,11 +317,15 @@ test("a legacy target uses three overlays when its Git tree predates content syn
     writeLegacyRemoteFiles();
 
     const result = spawnSync("bash", [deployer, "--remote", releaseSha, remoteRoot], {
-        env: environment({FAKE_TRACKS_CONTENT_SYNC: "0"}),
+        env: environment({
+            COMPOSE_PROJECT_NAME: "hostile-project",
+            FAKE_TRACKS_CONTENT_SYNC: "0",
+        }),
         encoding: "utf8",
     });
 
     assert.equal(result.status, 0, result.stderr);
+    assert.equal(readIfPresent(projectNameLog), "legendhub\n".repeat(4));
     assert.deepEqual(readDockerCalls(), [
         [...legacyCompose, "config", "--quiet"],
         legacyDiscovery,

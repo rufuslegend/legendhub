@@ -46,6 +46,8 @@ printf '%s\0' "${dollar}@" >> "${dollar}FAKE_DOCKER_LOG"
 printf '\036' >> "${dollar}FAKE_DOCKER_LOG"
 printf '%s\n' "${dollar}{LEGENDHUB_IMAGE_TAG:-<unset>}" >> \
   "${dollar}FAKE_IMAGE_TAG_LOG"
+printf '%s\n' "${dollar}{COMPOSE_PROJECT_NAME:-<unset>}" >> \
+  "${dollar}FAKE_PROJECT_NAME_LOG"
 
 case "${dollar}*" in
   "compose -f docker-compose.yaml -f docker-compose.test.yaml -f docker-compose.registry.yaml -f docker-compose.content-sync.yaml config --quiet")
@@ -92,6 +94,7 @@ let sshLog;
 let dockerLog;
 let gitLog;
 let imageTagLog;
+let projectNameLog;
 let sqlLog;
 let cdLog;
 let bashEnvironment;
@@ -128,12 +131,14 @@ function environment(overrides = {}) {
         FAKE_IMAGE_TAG_LOG: imageTagLog,
         FAKE_MYSQL_CONTAINER: "mysql-container-id",
         FAKE_MYSQL_IDS: "mysql-container-id",
+        FAKE_PROJECT_NAME_LOG: projectNameLog,
         FAKE_REMOTE_ROOT: remoteRoot,
         FAKE_ROOT_PASSWORD: "root-password-do-not-print",
         FAKE_SQL_LOG: sqlLog,
         FAKE_SSH_LOG: sshLog,
         FAKE_TARGET_PASSWORD: "target-password-do-not-print",
         FAKE_TARGET_USER: "legendhub",
+        COMPOSE_PROJECT_NAME: "",
         LEGENDHUB_IMAGE_TAG: "",
         PATH: `${fakeBin}:${process.env.PATH}`,
         ...overrides,
@@ -147,8 +152,10 @@ function run(script, args = [], overrides = {}) {
     });
 }
 
-function writeRemoteFiles(stagingDatabase = "legendhub_content_sync") {
+function writeRemoteFiles(stagingDatabase = "legendhub_content_sync",
+    projectDefinitions = ["COMPOSE_PROJECT_NAME=legendhub"]) {
     fs.writeFileSync(path.join(remoteRoot, ".env"), [
+        ...projectDefinitions,
         `CONTENT_SYNC_STAGING_DATABASE=${stagingDatabase}`,
         "MYSQL_ROOT_PASSWORD=root-password-do-not-print",
         "MYSQL_PASSWORD=target-password-do-not-print",
@@ -171,6 +178,7 @@ beforeEach(() => {
     dockerLog = path.join(workspace, "docker.log");
     gitLog = path.join(workspace, "git.log");
     imageTagLog = path.join(workspace, "image-tag.log");
+    projectNameLog = path.join(workspace, "project-name.log");
     sqlLog = path.join(workspace, "sql.log");
     cdLog = path.join(workspace, "cd.log");
     bashEnvironment = path.join(workspace, "bash-env");
@@ -184,6 +192,7 @@ beforeEach(() => {
   builtin cd "${dollar}FAKE_REMOTE_ROOT"
 }
 `);
+    writeRemoteFiles();
 });
 
 afterEach(() => fs.rmSync(workspace, {recursive: true, force: true}));
@@ -228,7 +237,7 @@ for (const args of [["--apply"], ["dry-run"], ["--remote"], ["anything"],
 }
 
 test("remote sync runs the profiled service once from the fixed directory", () => {
-    const result = run(remoteSync);
+    const result = run(remoteSync, [], {COMPOSE_PROJECT_NAME: "hostile-project"});
 
     assert.equal(result.status, 0, result.stderr);
     assert.equal(readIfPresent(cdLog), "/home/rufus/legendhub\n");
@@ -236,6 +245,7 @@ test("remote sync runs the profiled service once from the fixed directory", () =
         "rev-parse", "--short=12", "HEAD",
     ]);
     assert.equal(readIfPresent(imageTagLog), "abcdef123456\n");
+    assert.equal(readIfPresent(projectNameLog), "legendhub\n");
     assert.deepEqual(readDockerCalls(), [[
         "compose", "-f", "docker-compose.yaml",
         "-f", "docker-compose.test.yaml",
@@ -245,6 +255,31 @@ test("remote sync runs the profiled service once from the fixed directory", () =
         "/usr/local/bin/sync-public-content", "--once",
     ]]);
 });
+
+const invalidProjectDefinitions = [
+    {name: "a missing project definition", lines: []},
+    {name: "duplicate project definitions", lines: [
+        "COMPOSE_PROJECT_NAME=legendhub",
+        "COMPOSE_PROJECT_NAME=legendhub",
+    ]},
+    {name: "the wrong project", lines: ["COMPOSE_PROJECT_NAME=other"]},
+    {name: "a malformed project definition", lines: [
+        "export COMPOSE_PROJECT_NAME = legendhub",
+    ]},
+];
+
+for (const fixture of invalidProjectDefinitions) {
+    test(`remote sync rejects ${fixture.name} before Git or Docker`, () => {
+        writeRemoteFiles("legendhub_content_sync", fixture.lines);
+
+        const result = run(remoteSync);
+
+        assert.notEqual(result.status, 0);
+        assert.match(result.stderr, /Compose project/);
+        assert.equal(readIfPresent(gitLog), "");
+        assert.equal(readIfPresent(dockerLog), "");
+    });
+}
 
 test("remote dry run remains one explicit container argument", () => {
     const result = run(remoteSync, ["--dry-run"]);
@@ -287,7 +322,10 @@ test("remote sync preserves Docker status and rejects hidden arguments", async (
 test("provision uses the fixed staging database and minimum grant", () => {
     writeRemoteFiles();
 
-    const result = run(provision, [], {FAKE_SSH_EXECUTE: "1"});
+    const result = run(provision, [], {
+        COMPOSE_PROJECT_NAME: "hostile-project",
+        FAKE_SSH_EXECUTE: "1",
+    });
 
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(readArguments(sshLog), [
@@ -326,10 +364,25 @@ test("provision uses the fixed staging database and minimum grant", () => {
         ].join("\n"),
     ]);
     assert.equal(readIfPresent(imageTagLog), "abcdef123456\n".repeat(5));
+    assert.equal(readIfPresent(projectNameLog), "legendhub\n".repeat(5));
     const allOutput = result.stdout + result.stderr + JSON.stringify(calls);
     assert.doesNotMatch(allOutput, /root-password-do-not-print/);
     assert.doesNotMatch(allOutput, /target-password-do-not-print/);
 });
+
+for (const fixture of invalidProjectDefinitions) {
+    test(`provision rejects ${fixture.name} before Git, Docker, or SQL`, () => {
+        writeRemoteFiles("legendhub_content_sync", fixture.lines);
+
+        const result = run(provision, [], {FAKE_SSH_EXECUTE: "1"});
+
+        assert.notEqual(result.status, 0);
+        assert.match(result.stderr, /Compose project/);
+        assert.equal(readIfPresent(gitLog), "");
+        assert.equal(readIfPresent(dockerLog), "");
+        assert.equal(readIfPresent(sqlLog), "");
+    });
+}
 
 for (const failure of [
     {name: "Git failure", environment: {FAKE_GIT_EXIT_STATUS: "19"}},

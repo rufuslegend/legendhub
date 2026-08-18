@@ -15,6 +15,28 @@ require_file() {
   [[ -f "$file" ]] || fail "required file is missing: $file"
 }
 
+validate_compose_project() {
+  local line
+  local project_definitions=0
+  local literal_definitions=0
+  local project_pattern='^[[:space:]]*(export[[:space:]]+)?COMPOSE_PROJECT_NAME'
+
+  unset COMPOSE_PROJECT_NAME
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" =~ $project_pattern ]]; then
+      project_definitions=$((project_definitions + 1))
+    fi
+    if [[ "$line" == COMPOSE_PROJECT_NAME=legendhub ]]; then
+      literal_definitions=$((literal_definitions + 1))
+    fi
+  done < .env
+
+  if [[ "$project_definitions" -ne 1 || "$literal_definitions" -ne 1 ]]; then
+    fail 'Compose project in .env must be exactly COMPOSE_PROJECT_NAME=legendhub'
+  fi
+  export COMPOSE_PROJECT_NAME=legendhub
+}
+
 validate_staging_database() {
   local configured_value
   local line
@@ -65,6 +87,7 @@ provision_remote() {
   cd "$requested_root"
 
   require_file .env
+  validate_compose_project
   require_file docker-compose.yaml
   require_file docker-compose.test.yaml
   require_file docker-compose.registry.yaml
