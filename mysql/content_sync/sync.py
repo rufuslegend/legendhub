@@ -1,7 +1,7 @@
 """Safely retrieve, validate, and apply public-content snapshots."""
 
 import argparse
-from contextlib import suppress
+from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import gzip
@@ -15,11 +15,17 @@ import sys
 import tempfile
 import time
 from typing import NoReturn, Optional
+import re
+import zlib
 
 from content_sync.contract import Manifest, MySqlConfig, SHA256_RE, SyncValidationError
 from content_sync.source import exclusive_lock, gzip_content_digest
 from content_sync.target import TargetConfig, apply_staging, prepare_staging, target_digest
 from content_sync.contract import required_environment, sha256_file
+
+
+SSH_SOURCE_RE = re.compile(
+    r"^(?:[A-Za-z_][A-Za-z0-9_.-]*@)?[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
 
 @dataclass(frozen=True)
@@ -57,8 +63,12 @@ class SyncConfig:
             raise ValueError("invalid CONTENT_SYNC_INTERVAL_SECONDS")
         key = Path(values["CONTENT_SYNC_SSH_KEY"])
         hosts = Path(values["CONTENT_SYNC_KNOWN_HOSTS"])
-        _validate_private_file(key, "SSH key")
-        _validate_private_file(hosts, "known-hosts")
+        key_owner = _validate_private_file(key, "SSH key")
+        hosts_owner = _validate_private_file(hosts, "known-hosts")
+        if key_owner != hosts_owner:
+            raise ValueError("SSH key and known-hosts owners must match")
+        if not SSH_SOURCE_RE.fullmatch(values["CONTENT_SYNC_SOURCE"]):
+            raise ValueError("invalid CONTENT_SYNC_SOURCE")
         return cls(
             target=TargetConfig.from_environment(environment),
             source=values["CONTENT_SYNC_SOURCE"],
@@ -97,6 +107,7 @@ def _validate_private_file(path, label):
         raise ValueError("invalid " + label + " file") from error
     if not stat.S_ISREG(details.st_mode) or details.st_mode & 0o022:
         raise ValueError("invalid private " + label + " file")
+    return details.st_uid
 
 
 def ssh_command(config, *remote_arguments):
@@ -151,10 +162,14 @@ class Dependencies:
         return self.cache_dir / (digest + ".sql.gz")
 
     def try_exclusive_lock(self):
+        stack = ExitStack()
         try:
-            return exclusive_lock(self.config.state_dir / "sync.lock", blocking=False)
+            stack.enter_context(exclusive_lock(
+                self.config.state_dir / "sync.lock", blocking=False))
         except BlockingIOError:
+            stack.close()
             return None
+        return stack
 
     def _run_ssh(self, remote_arguments, output):
         try:
@@ -225,7 +240,7 @@ class Dependencies:
             exact_size = path.stat().st_size == manifest.artifact_bytes
             exact_artifact = sha256_file(path) == manifest.artifact_sha256
             exact_content = gzip_content_digest(path) == manifest.content_sha256
-        except OSError as error:
+        except (OSError, EOFError, zlib.error) as error:
             raise SyncValidationError("snapshot artifact verification failed") from error
         if not (exact_size and exact_artifact and exact_content):
             raise SyncValidationError("snapshot artifact verification failed")
@@ -358,7 +373,7 @@ def run_loop(config, dependencies=None) -> NoReturn:
     deps = dependencies or Dependencies.real(config)
     deadline = deps.monotonic()
     while True:
-        started = deadline
+        started = deps.monotonic()
         try:
             result = run_once(config, dependencies=deps)
             current = deps.monotonic()
@@ -368,12 +383,16 @@ def run_loop(config, dependencies=None) -> NoReturn:
             current = deps.monotonic()
             deps.write_stderr(_failure_line(error))
         deadline += config.interval_seconds
+        while deadline <= current:
+            deadline += config.interval_seconds
         while True:
             remaining = deadline - current
             if remaining <= 0:
                 break
             deps.sleep(remaining)
             current = deps.monotonic()
+            if current >= deadline:
+                break
 
 
 def main(arguments=None):
@@ -387,10 +406,12 @@ def main(arguments=None):
         parser.error("--dry-run requires --once")
     try:
         config = SyncConfig.from_environment(os.environ)
+        deps = Dependencies.real(config)
         if options.loop:
-            run_loop(config)
-        result = run_once(config, dry_run=options.dry_run)
-        Dependencies.real(config).log_success(result, 0.0)
+            run_loop(config, dependencies=deps)
+        started = deps.monotonic()
+        result = run_once(config, dry_run=options.dry_run, dependencies=deps)
+        deps.log_success(result, deps.monotonic() - started)
         return 0
     except Exception as error:
         print(_failure_line(error), file=sys.stderr)

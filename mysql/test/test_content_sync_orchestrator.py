@@ -1,9 +1,12 @@
 import hashlib
 import io
+import gzip
 import pathlib
+import stat
 import tempfile
 import unittest
 from unittest import mock
+from types import SimpleNamespace
 
 import sys
 
@@ -13,6 +16,7 @@ from content_sync.contract import Manifest, PUBLIC_TABLES, SyncValidationError
 from content_sync.sync import (
     SyncConfig,
     SyncResult,
+    Dependencies,
     run_once,
     run_loop,
     run_one_loop_iteration,
@@ -217,11 +221,39 @@ class OrchestratorTests(unittest.TestCase):
         self.assertEqual(result.action, "skipped-overlap")
         self.assertEqual((deps.downloads, deps.applies), (0, 0))
 
+    def test_real_flock_contention_skips_before_any_source_or_target_work(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = test_config().with_state_dir(pathlib.Path(directory))
+            deps = Dependencies.real(config)
+            outer = deps.try_exclusive_lock()
+            self.assertIsNotNone(outer)
+            with outer:
+                result = run_once(config, dependencies=deps)
+            self.assertEqual(result, SyncResult("skipped-overlap", None))
+
     def test_loop_uses_configured_monotonic_deadlines(self):
-        clock = FakeClock(monotonic_values=[0, 15, 3600, 3610])
+        clock = FakeClock(monotonic_values=[0, 0, 15, 3600, 3600, 3610])
         with self.assertRaises(StopLoop):
             run_loop(test_config(interval_seconds=3600), dependencies=clock)
         self.assertEqual(clock.sleep_calls, [3585, 3590])
+
+    def test_loop_skips_missed_boundaries_after_a_long_failure(self):
+        clock = FakeClock(monotonic_values=[0, 0, 7205])
+        clock.fetch_manifest = lambda: (_ for _ in ()).throw(RuntimeError("failed"))
+        clock.sleep = lambda seconds: (
+            clock.sleep_calls.append(seconds), (_ for _ in ()).throw(StopLoop()))[1]
+        with self.assertRaises(StopLoop):
+            run_loop(test_config(interval_seconds=3600), dependencies=clock)
+        self.assertEqual(clock.sleep_calls, [3595])
+
+    def test_loop_success_duration_starts_at_actual_iteration_start(self):
+        clock = FakeClock(monotonic_values=[0, 10, 15])
+        clock.logged_durations = []
+        clock.log_success = lambda _result, duration: clock.logged_durations.append(duration)
+        clock.sleep = lambda _seconds: (_ for _ in ()).throw(StopLoop())
+        with self.assertRaises(StopLoop):
+            run_loop(test_config(interval_seconds=3600), dependencies=clock)
+        self.assertEqual(clock.logged_durations, [5])
 
     def test_logged_failure_omits_credentials_and_sql(self):
         deps = FakeDependencies()
@@ -240,6 +272,22 @@ class OrchestratorTests(unittest.TestCase):
             self.assertEqual(main(["--once"]), 1)
         self.assertNotIn("secret", stderr.getvalue())
         self.assertNotIn("INSERT INTO", stderr.getvalue())
+
+    def test_manual_once_measures_duration_with_the_run_dependencies(self):
+        config = test_config()
+        deps = FakeDependencies()
+        deps.monotonic_values = iter([10, 13])
+        deps.monotonic = lambda: next(deps.monotonic_values)
+        deps.logged_durations = []
+        deps.log_success = lambda _result, duration: deps.logged_durations.append(duration)
+        with mock.patch("content_sync.sync.SyncConfig.from_environment",
+                        return_value=config), \
+                mock.patch("content_sync.sync.Dependencies.real", return_value=deps), \
+                mock.patch("content_sync.sync.run_once",
+                           return_value=SyncResult("noop", "a" * 64)) as run:
+            self.assertEqual(main(["--once"]), 0)
+        run.assert_called_once_with(config, dry_run=False, dependencies=deps)
+        self.assertEqual(deps.logged_durations, [3])
 
     def test_environment_validates_interval_and_ssh_files(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -271,6 +319,36 @@ class OrchestratorTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "private"):
                 SyncConfig.from_environment(environment)
 
+    def test_environment_rejects_ssh_option_injection_and_mismatched_owners(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            key = root / "key"
+            hosts = root / "known_hosts"
+            key.write_text("key")
+            hosts.write_text("host")
+            key.chmod(0o600)
+            hosts.chmod(0o600)
+            environment = {
+                "MYSQL_PORT": "3306", "MYSQL_USER": "sync",
+                "MYSQL_PASSWORD": "password", "MYSQL_DATABASE": "legendhub",
+                "CONTENT_SYNC_SOURCE": "sync@source",
+                "CONTENT_SYNC_SSH_KEY": str(key),
+                "CONTENT_SYNC_KNOWN_HOSTS": str(hosts),
+            }
+            for source in ("-oProxyCommand=x", "sync@source -oProxyCommand=x",
+                           "sync@source\nnext", "sync;command"):
+                environment["CONTENT_SYNC_SOURCE"] = source
+                with self.subTest(source=source), self.assertRaises(ValueError):
+                    SyncConfig.from_environment(environment)
+            environment["CONTENT_SYNC_SOURCE"] = "sync@source"
+            details = [
+                SimpleNamespace(st_mode=stat.S_IFREG | 0o600, st_uid=1000),
+                SimpleNamespace(st_mode=stat.S_IFREG | 0o600, st_uid=2000),
+            ]
+            with mock.patch.object(pathlib.Path, "stat", side_effect=details), \
+                    self.assertRaisesRegex(ValueError, "owner"):
+                SyncConfig.from_environment(environment)
+
     def test_cache_verification_requires_exact_artifact_and_content_hashes(self):
         with tempfile.TemporaryDirectory() as directory:
             config = test_config()
@@ -282,6 +360,28 @@ class OrchestratorTests(unittest.TestCase):
             path.write_bytes(b"not a gzip stream")
             path.chmod(0o600)
             self.assertIsNone(deps.verified_cache(manifest))
+
+    def test_truncated_valid_gzip_cache_is_removed_for_redownload(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = test_config().with_state_dir(pathlib.Path(directory))
+            deps = Dependencies.real(config)
+            truncated = gzip.compress(b"INSERT INTO `Areas` VALUES (1);\n")[:-4]
+            manifest = Manifest(
+                version=1,
+                content_sha256=hashlib.sha256(
+                    b"INSERT INTO `Areas` VALUES (1);\n").hexdigest(),
+                artifact_sha256=hashlib.sha256(truncated).hexdigest(),
+                artifact_bytes=len(truncated),
+                schema_sha256="e" * 64,
+                created_at="2026-08-18T16:00:00Z",
+                row_counts={table: 0 for table in PUBLIC_TABLES},
+            )
+            path = deps.cache_path(manifest.content_sha256)
+            path.parent.mkdir(mode=0o700)
+            path.write_bytes(truncated)
+            path.chmod(0o600)
+            self.assertIsNone(deps.verified_cache(manifest))
+            self.assertFalse(path.exists())
 
 
 if __name__ == "__main__":
