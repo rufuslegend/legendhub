@@ -251,6 +251,17 @@ class TargetTests(unittest.TestCase):
                               "Migrations"):
             self.assertNotIn(private_table, rendered)
 
+    def test_apply_accepts_validated_legacy_zero_dates(self):
+        database = RecordingDatabase()
+
+        apply_staging(test_config(), manifest_with_counts(), database=database)
+
+        self.assertEqual(database.events[1], (
+            "EXECUTE",
+            "SET SESSION SQL_MODE='NO_AUTO_VALUE_ON_ZERO'",
+            database.connection_id,
+        ))
+
     def test_all_preconditions_are_checked_before_target_transaction(self):
         database = RecordingDatabase()
 

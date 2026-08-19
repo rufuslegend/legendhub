@@ -320,6 +320,7 @@ def apply_staging(config, manifest, database=None):
 
         db.begin()
         transaction_started = True
+        db.execute("SET SESSION SQL_MODE='NO_AUTO_VALUE_ON_ZERO'")
         db.execute("SET @DISABLE_NOTIFICATIONS=1")
         for table, delete_sql, insert_sql in statements:
             db.execute(delete_sql)
