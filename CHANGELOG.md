@@ -3,32 +3,15 @@
 All notable user-facing changes to LegendHUB are documented here beginning
 with version 2.6.0.
 
-## [2.8.2] - 2026-08-18
+## [2.8.3] - 2026-08-18
 
 ### Fixed
 
-- Allowed validated legacy zero-date values to copy into Dunwichmass during public-content synchronization.
-
-## [2.8.1] - 2026-08-18
-
-### Fixed
-
-- Fixed production-to-test content synchronization so the restricted manifest response is captured correctly before snapshot validation.
-
-## [2.8.0] - 2026-08-18
-
-### Added
-
-- Added guarded hourly and on-demand synchronization so Dunwichmass public content and history can mirror production without replacing test accounts or operational data.
+- **Armor Class:** Corrected the Builder's natural armor calculation to match LegendMUD's dexterity-based in-game rule. Skill, era-ability, and buff adjustments remain available through faux objects.
 
 ### Changed
 
 - Enlarged the shared column picker's visibility icons for easier scanning.
-
-### Fixed
-
-- Corrected test deployment safeguards to preserve Dunwichmass's existing Compose project and database volumes.
-- Corrected the Builder's natural armor class calculation to use LegendMUD's current dexterity-based rule while keeping skill, era, and buff bonuses as explicit faux objects.
 
 ## [2.7.0] - 2026-08-12
 
