@@ -10,8 +10,8 @@
 
 data/
 
-# notification listener
-python/src/__pycache__/
+# Python
+__pycache__/
 python/**/*.py[cod]
 python/**/*$py.class
 
