@@ -202,14 +202,13 @@ class Dependencies:
             raise SyncValidationError("source retrieval failed") from error
 
     def fetch_manifest(self):
-        from io import BytesIO
-
-        output = BytesIO()
-        self._run_ssh(("manifest",), output)
-        try:
-            return output.getvalue().decode("utf-8")
-        except UnicodeDecodeError as error:
-            raise SyncValidationError("manifest validation failed") from error
+        with tempfile.TemporaryFile() as output:
+            self._run_ssh(("manifest",), output)
+            output.seek(0)
+            try:
+                return output.read().decode("utf-8")
+            except UnicodeDecodeError as error:
+                raise SyncValidationError("manifest validation failed") from error
 
     def target_digest(self):
         return target_digest(self.config.target)

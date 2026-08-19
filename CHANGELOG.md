@@ -3,6 +3,12 @@
 All notable user-facing changes to LegendHUB are documented here beginning
 with version 2.6.0.
 
+## [2.8.1] - 2026-08-18
+
+### Fixed
+
+- Fixed production-to-test content synchronization so the restricted manifest response is captured correctly before snapshot validation.
+
 ## [2.8.0] - 2026-08-18
 
 ### Added

@@ -132,6 +132,18 @@ class FakeClock(FakeDependencies):
 
 
 class OrchestratorTests(unittest.TestCase):
+    def test_manifest_fetch_captures_real_subprocess_output(self):
+        payload = '{"version":1}\n'
+        dependencies = Dependencies.real(test_config())
+        command = [
+            sys.executable,
+            "-c",
+            "import sys; sys.stdout.write('" + payload.strip() + "\\n')",
+        ]
+
+        with mock.patch("content_sync.sync.ssh_command", return_value=command):
+            self.assertEqual(dependencies.fetch_manifest(), payload)
+
     def test_noop_requires_source_applied_and_target_digests_to_match(self):
         dependencies = FakeDependencies(
             source_digest="a" * 64,
