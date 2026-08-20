@@ -699,16 +699,17 @@ test("builder keeps KSM quest mods and era abilities in collapsed sections", asy
     assert.ok(html.indexOf('id="questMoveInput"') < eraPanel);
 });
 
-test("builder aligns every era ability key and rank in one fixed table", async function() {
+test("builder aligns era abilities in three responsive table columns", async function() {
     const html = await renderBuilder();
-    const tableStart = html.indexOf('<table class="table table-sm table-bordered era-abilities-table');
-    const tableEnd = html.indexOf("</table>", tableStart);
-    const table = html.slice(tableStart, tableEnd + "</table>".length);
+    const eraColumn = html.match(
+        /<div class="col-12 col-md-4[^"]*" ng-repeat="era in eraAbilityEras track by era">([\s\S]*?)<table class="table table-sm table-bordered era-abilities-table[^>]*>([\s\S]*?)<\/table>/
+    );
 
-    assert.ok(tableStart >= 0, "missing Era Abilities table");
+    assert.ok(eraColumn, "missing responsive Era Abilities table column");
+    assert.match(eraColumn[1], /<h6[^>]*>\{\{::era\}\}<\/h6>/);
+    const table = eraColumn[2];
     assert.match(table, /<col class="era-ability-key-column">/);
     assert.match(table, /<col class="era-ability-value-column">/);
-    assert.match(table, /ng-repeat="era in eraAbilityEras track by era"/);
     assert.match(
         table,
         /ng-repeat="ability in eraAbilities \| filter:\{era: era\} track by ability\.key"/

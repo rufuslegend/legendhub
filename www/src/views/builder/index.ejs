@@ -229,35 +229,37 @@
 								</button>
 							</h5>
 							<div class="collapse" id="eraAbilities">
-								<div class="table-responsive">
-									<table class="table table-sm table-bordered era-abilities-table mb-0">
-										<colgroup>
-											<col class="era-ability-key-column">
-											<col class="era-ability-value-column">
-										</colgroup>
-										<thead class="sr-only">
-											<tr><th scope="col">Ability</th><th scope="col">Rank</th></tr>
-										</thead>
-										<tbody ng-repeat="era in eraAbilityEras track by era">
-											<tr class="table-active">
-												<th scope="rowgroup" colspan="2">{{::era}}</th>
-											</tr>
-											<tr ng-repeat="ability in eraAbilities | filter:{era: era} track by ability.key">
-												<th scope="row" class="align-middle font-weight-normal py-1">
-													<label class="mb-0" for="eraAbility-{{::ability.key}}">{{::ability.name}}</label>
-												</th>
-												<td class="py-1">
-													<select class="custom-select custom-select-sm w-100"
-														id="eraAbility-{{::ability.key}}"
-														ng-model="selectedList.eraAbilities[ability.key]"
-														ng-change="saveClientSideData()">
-														<option ng-value="0">None</option>
-														<option ng-repeat="rank in ability.ranks track by rank" ng-value="rank">Rank {{::rank}}</option>
-													</select>
-												</td>
-											</tr>
-										</tbody>
-									</table>
+								<div class="row">
+									<div class="col-12 col-md-4 mb-3 mb-md-0" ng-repeat="era in eraAbilityEras track by era">
+										<h6 class="mt-1">{{::era}}</h6>
+										<div class="table-responsive">
+											<table class="table table-sm table-bordered era-abilities-table mb-0">
+												<colgroup>
+													<col class="era-ability-key-column">
+													<col class="era-ability-value-column">
+												</colgroup>
+												<thead class="sr-only">
+													<tr><th scope="col">Ability</th><th scope="col">Rank</th></tr>
+												</thead>
+												<tbody>
+													<tr ng-repeat="ability in eraAbilities | filter:{era: era} track by ability.key">
+														<th scope="row" class="align-middle font-weight-normal py-1">
+															<label class="mb-0" for="eraAbility-{{::ability.key}}">{{::ability.name}}</label>
+														</th>
+														<td class="py-1">
+															<select class="custom-select custom-select-sm w-100"
+																id="eraAbility-{{::ability.key}}"
+																ng-model="selectedList.eraAbilities[ability.key]"
+																ng-change="saveClientSideData()">
+																<option ng-value="0">None</option>
+																<option ng-repeat="rank in ability.ranks track by rank" ng-value="rank">Rank {{::rank}}</option>
+															</select>
+														</td>
+													</tr>
+												</tbody>
+											</table>
+										</div>
+									</div>
 								</div>
 							</div>
 						</div>

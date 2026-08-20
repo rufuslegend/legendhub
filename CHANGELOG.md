@@ -11,7 +11,7 @@ with version 2.6.0.
 
 ### Changed
 
-- Compacted the Builder by making KSM swaps, quest modifiers, and era abilities collapsible, aligning era abilities in a consistent table, and allowing the Character card to size to its contents.
+- Compacted the Builder by making KSM swaps, quest modifiers, and era abilities collapsible, aligning era abilities in three responsive columns, and allowing the Character card to size to its contents.
 
 ## [2.8.3] - 2026-08-18
 
