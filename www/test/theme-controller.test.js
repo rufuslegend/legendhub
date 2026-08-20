@@ -62,7 +62,6 @@ function createHeaderScope(hasConsent) {
     const HeaderController = loadHeaderController(jquery);
 
     HeaderController(scope, function() {}, cookies, function() {}, {links: []});
-    scope.initialize();
     cookieWrites.length = 0;
 
     return {
@@ -122,15 +121,23 @@ test("theme choices apply immediately while persistence remains consent-gated", 
         "/css/bootstrap-solarized-dark.min.css");
     assert.equal(temporary.cookieWrites.length, 0);
 
-    const persistent = chooseTheme(true, "Glass Blue");
-    assert.equal(persistent.stylesheetHref,
-        "/css/bootstrap-glass-blue.min.css");
-    assert.equal(persistent.cookieWrites.length, 1);
-    assert.equal(persistent.cookieWrites[0][0], "theme");
-    assert.equal(persistent.cookieWrites[0][1], "glass-blue");
+    for (const [theme, slug] of [
+        ["Glass Blue", "glass-blue"],
+        ["Glass Emerald", "glass-emerald"],
+        ["Glass Ruby", "glass-ruby"],
+        ["Glass Amethyst", "glass-amethyst"],
+        ["Glass Amber", "glass-amber"]
+    ]) {
+        const transientGlass = chooseTheme(false, theme);
+        assert.equal(transientGlass.stylesheetHref,
+            `/css/bootstrap-${slug}.min.css`);
+        assert.equal(transientGlass.cookieWrites.length, 0);
 
-    const emerald = chooseTheme(true, "Glass Emerald");
-    assert.equal(emerald.stylesheetHref,
-        "/css/bootstrap-glass-emerald.min.css");
-    assert.equal(emerald.cookieWrites[0][1], "glass-emerald");
+        const persistentGlass = chooseTheme(true, theme);
+        assert.equal(persistentGlass.stylesheetHref,
+            `/css/bootstrap-${slug}.min.css`);
+        assert.equal(persistentGlass.cookieWrites.length, 1);
+        assert.equal(persistentGlass.cookieWrites[0][0], "theme");
+        assert.equal(persistentGlass.cookieWrites[0][1], slug);
+    }
 });

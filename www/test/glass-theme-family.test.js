@@ -122,7 +122,7 @@ test("every Glass entrypoint uses its palette and the shared skin", function() {
 });
 
 test("every Glass bundle and public copy is complete", function() {
-    for (const hue of Object.keys(palettes)) {
+    for (const [hue, expected] of Object.entries(palettes)) {
         for (const filename of [
             `bootstrap-glass-${hue}.css`,
             `bootstrap-glass-${hue}.css.map`,
@@ -144,5 +144,30 @@ test("every Glass bundle and public copy is complete", function() {
                 `${filename} public copy must match dist`
             );
         }
+
+        const expandedFilename = `bootstrap-glass-${hue}.css`;
+        const minifiedFilename = `bootstrap-glass-${hue}.min.css`;
+        const minifiedMapFilename = `${minifiedFilename}.map`;
+        const expanded = fs.readFileSync(path.join(
+            distRoot, expandedFilename), "utf8");
+        const minified = fs.readFileSync(path.join(
+            distRoot, minifiedFilename), "utf8");
+        const expandedMap = JSON.parse(fs.readFileSync(path.join(
+            distRoot, `${expandedFilename}.map`), "utf8"));
+        const minifiedMap = JSON.parse(fs.readFileSync(path.join(
+            distRoot, minifiedMapFilename), "utf8"));
+        const sourceMapReference = minified.match(
+            /sourceMappingURL=([^\s*]+)\s*\*\//);
+
+        assert.ok(sourceMapReference,
+            `${hue} minified CSS must reference its map`);
+        assert.equal(sourceMapReference[1], minifiedMapFilename);
+        assert.match(minified, new RegExp(
+            `--glass-line:${expected.line}`));
+        assert.ok(expandedMap.sources.some(function(source) {
+            return source.endsWith(`_glass-${hue}-palette.scss`);
+        }), `${hue} expanded map must include its palette`);
+        assert.deepEqual(minifiedMap.sources, [expandedFilename]);
+        assert.deepEqual(minifiedMap.sourcesContent, [expanded]);
     }
 });
