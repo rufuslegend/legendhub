@@ -15,6 +15,7 @@ const palettes = {
         line: "#3a6a99", glow: "70, 140, 220", wash: "88, 170, 255",
         ink: "#eaf4ff", backdrop: "#05070b", surface: "#060b12",
         well: "#02050a", category: "#0a1522", accent: "#7fc4ff",
+        nav: "rgba(234, 244, 255, 0.88)",
         bright: "#58aaff", headerBase: "#0d1f30",
         header: "#8fb8dd 0%, #4a7dab 8%, #2b5580 45%, #12293f 50%, #0d1f30 100%",
         button: "rgba(150, 190, 230, .35) 0%, rgba(70, 110, 160, .25) 45%, rgba(8, 20, 38, .55) 50%, rgba(3, 10, 22, .65) 100%",
@@ -24,6 +25,7 @@ const palettes = {
         line: "#3a996a", glow: "70, 220, 140", wash: "88, 255, 170",
         ink: "#eafff4", backdrop: "#050b07", surface: "#06120b",
         well: "#020a05", category: "#0a2215", accent: "#7fffc4",
+        nav: "rgba(234, 255, 244, 0.88)",
         bright: "#58ffaa", headerBase: "#0d301f",
         header: "#8fddb8 0%, #4aab7d 8%, #2b8055 45%, #123f29 50%, #0d301f 100%",
         button: "rgba(150, 230, 190, .35) 0%, rgba(70, 160, 110, .25) 45%, rgba(8, 38, 20, .55) 50%, rgba(3, 22, 10, .65) 100%",
@@ -33,6 +35,7 @@ const palettes = {
         line: "#993a55", glow: "220, 70, 120", wash: "255, 88, 140",
         ink: "#ffeaf0", backdrop: "#0b0507", surface: "#12060a",
         well: "#0a0205", category: "#220a13", accent: "#ff7fa6",
+        nav: "rgba(255, 234, 240, 0.88)",
         bright: "#ff5888", headerBase: "#300d18",
         header: "#dd8fa3 0%, #ab4a63 8%, #802b44 45%, #3f121f 50%, #300d18 100%",
         button: "rgba(230, 150, 180, .35) 0%, rgba(160, 70, 105, .25) 45%, rgba(38, 8, 20, .55) 50%, rgba(22, 3, 11, .65) 100%",
@@ -42,6 +45,7 @@ const palettes = {
         line: "#6a3a99", glow: "140, 70, 220", wash: "170, 88, 255",
         ink: "#f4eaff", backdrop: "#07050b", surface: "#0b0612",
         well: "#05020a", category: "#150a22", accent: "#c47fff",
+        nav: "rgba(244, 234, 255, 0.88)",
         bright: "#aa58ff", headerBase: "#1f0d30",
         header: "#b88fdd 0%, #7d4aab 8%, #552b80 45%, #29123f 50%, #1f0d30 100%",
         button: "rgba(190, 150, 230, .35) 0%, rgba(110, 70, 160, .25) 45%, rgba(20, 8, 38, .55) 50%, rgba(10, 3, 22, .65) 100%",
@@ -51,6 +55,7 @@ const palettes = {
         line: "#99763a", glow: "220, 160, 70", wash: "255, 190, 88",
         ink: "#fff6ea", backdrop: "#0b0805", surface: "#120e06",
         well: "#0a0602", category: "#221a0a", accent: "#ffd77f",
+        nav: "rgba(255, 246, 234, 0.88)",
         bright: "#ffc258", headerBase: "#30240d",
         header: "#ddc48f 0%, #ab8a4a 8%, #80622b 45%, #3f2d12 50%, #30240d 100%",
         button: "rgba(230, 200, 150, .35) 0%, rgba(160, 125, 70, .25) 45%, rgba(38, 28, 8, .55) 50%, rgba(22, 16, 3, .65) 100%",
@@ -169,5 +174,19 @@ test("every Glass bundle and public copy is complete", function() {
         }), `${hue} expanded map must include its palette`);
         assert.deepEqual(minifiedMap.sources, [expandedFilename]);
         assert.deepEqual(minifiedMap.sourcesContent, [expanded]);
+    }
+});
+
+test("every Glass navbar keeps primary links bright before hover", function() {
+    for (const [hue, expected] of Object.entries(palettes)) {
+        const expanded = fs.readFileSync(path.join(
+            distRoot, `bootstrap-glass-${hue}.css`), "utf8");
+
+        assert.match(expanded, new RegExp(
+            String.raw`\.navbar-dark \.navbar-nav \.nav-link \{\s*color: ${expected.nav.replace(/[()]/g, "\\$&")};\s*\}`
+        ), `${hue} navbar links must use the brighter resting color`);
+        assert.match(expanded,
+            /\.navbar-dark \.navbar-nav \.nav-link:hover, \.navbar-dark \.navbar-nav \.nav-link:focus \{\s*color: #fff;\s*\}/,
+            `${hue} navbar links must retain a brighter hover and focus state`);
     }
 });
