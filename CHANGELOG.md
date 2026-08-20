@@ -8,12 +8,14 @@ with version 2.6.0.
 ### Added
 
 - **Era Abilities:** Builder characters can now record ranks for the eight era abilities that affect calculated stats. Their armor class, resource, combat, regeneration, spell, and attribute-cap bonuses are applied automatically instead of requiring faux objects.
+- Added Emerald, Ruby, Amethyst, and Amber Glass themes alongside the default Glass Blue theme.
 
 ### Changed
 
 - Compacted the Builder by making KSM swaps, quest modifiers, and era abilities collapsible with directional indicators, aligning era abilities in three responsive columns, and allowing the Character card to size to its contents.
 - Restyled item-search filters to match the compact, responsive column picker with clearer themed category surfaces.
 - Kept column and filter choices comfortably dark in the Dark and Solarized Dark themes.
+- Grouped the five Glass colors into an expandable theme submenu that works with mouse, touch, and keyboard controls.
 
 ## [2.8.3] - 2026-08-18
 
