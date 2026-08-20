@@ -1,5 +1,5 @@
 <div id="filtersModal" aria-labelledby="filtersModalLabel" class="modal" tabindex="-1" role="dialog">
-    <div class="modal-dialog" role="document">
+    <div class="modal-dialog modal-xl" role="document">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="filtersModalLabel">Select search filters</h5>
@@ -8,32 +8,57 @@
                 </button>
             </div>
             <div class="modal-body">
-                <div class="row">
-                    <p class="col-12 text-info">Use these to only show results with those stats.</p>
-                    <p class="col-12 text-info">Search again after selecting.</p>
+                <div class="filters-picker-toolbar">
+                    <p class="filters-picker-toolbar-copy text-body">
+                        Select filters to narrow item search results. Search again to apply changes.
+                    </p>
+                    <button type="button" class="filters-picker-reset btn btn-primary btn-sm" ng-click="resetFilters()">Reset to defaults</button>
                 </div>
-                <div class="row">
-                    <button class="col-12 btn btn-primary btn-block" ng-click="resetFilters()">Reset to defaults</button>
-                </div>
-                <br />
-                <div class="list-group">
-                <% for (let i = 0; i < vm.itemStatCategories.length; ++i) { %>
-                    <div class="list-group-item flex-column align-items-start">
-                        <h4 class="mb-3"><%= vm.itemStatCategories[i].name %></h4>
+                <div class="filters-picker-grid">
+                <%
+                const knownStackNames = [
+                    ["Basic"],
+                    ["Main", "Limits", "Ranged"],
+                    ["Regen", "Tank", "Melee"],
+                    ["Mage", "Weapon"]
+                ];
+                const knownNames = new Set(knownStackNames.flat());
+                const categoriesByName = new Map();
+
+                for (const category of vm.itemStatCategories) {
+                    if (knownNames.has(category.name) && !categoriesByName.has(category.name)) {
+                        categoriesByName.set(category.name, category);
+                    }
+                }
+
+                const categoryStacks = knownStackNames
+                    .map(names => names
+                        .map(name => categoriesByName.get(name))
+                        .filter(Boolean))
+                    .filter(stack => stack.length > 0);
+
+                for (const category of vm.itemStatCategories) {
+                    if (!knownNames.has(category.name)) {
+                        categoryStacks.push([category]);
+                    }
+                }
+                %>
+                <% for (const categoryStack of categoryStacks) { %>
+                    <div class="filters-picker-stack">
+                    <% for (const category of categoryStack) { %>
+                    <section class="filters-picker-category list-group-item">
+                        <h6 class="filters-picker-category-title"><%= category.name %></h6>
                         <div class="list-group list-group-flush">
-                        <%
-                        for(let j = 0; j < vm.itemStatCategories[i].getItemStatInfo.length; ++j) {
-                            let stat = vm.itemStatCategories[i].getItemStatInfo[j];
-                        %>
-                        <% if (stat.type !== 'select') { %>
-                            <button ng-click="toggleFilter('<%- stat.var %>')" type="button" class="list-group-item list-group-item-action list-group-item-light">
-                                <div class="d-flex col justify-content-between">
-                                    <h5><%= stat.display %></h5>
-                                    <span><i ng-class="{'text-success fa-check': isFilterEnabled('<%- stat.var %>', <%- vm.selectedFilters.hasOwnProperty(stat.var) %>), 'text-danger fa-times': !isFilterEnabled('<%- stat.var %>', <%- vm.selectedFilters.hasOwnProperty(stat.var) %>)}" class="fas"></i></span>
-                                </div>
+                        <% for (const stat of category.getItemStatInfo) { %>
+                        <% if (stat.type !== "select") { %>
+                            <button ng-click="toggleFilter('<%- stat.var %>')" ng-attr-aria-pressed="{{isFilterEnabled('<%- stat.var %>', <%- vm.selectedFilters.hasOwnProperty(stat.var) %>)}}" type="button" class="filters-picker-option list-group-item list-group-item-action list-group-item-light">
+                                <span class="d-flex align-items-center justify-content-between">
+                                    <span><%= stat.display %></span>
+                                    <i ng-class="{'text-success fa-check': isFilterEnabled('<%- stat.var %>', <%- vm.selectedFilters.hasOwnProperty(stat.var) %>), 'text-danger fa-times': !isFilterEnabled('<%- stat.var %>', <%- vm.selectedFilters.hasOwnProperty(stat.var) %>)}" class="fas ml-2" aria-hidden="true"></i>
+                                </span>
                             </button>
                         <% } else { %>
-                            <select class="list-group-item list-group-item-action list-group-item-light" ng-model="multiValueFilters['<%- stat.var %>']" ng-change="onFilterDropdownChange('<%- stat.var %>')"<%- stat.var === "alignRestriction" ? "style='white-space:pre'" : "" %>>
+                            <select class="filters-picker-option list-group-item list-group-item-action list-group-item-light" ng-model="multiValueFilters['<%- stat.var %>']" ng-change="onFilterDropdownChange('<%- stat.var %>')"<%- stat.var === "alignRestriction" ? " style='white-space:pre'" : "" %>>
                                 <option value="">Choose a <%- stat.display %>...</option>
                                 <% for (let k = 0; k < vm.constants.selectShortOptions[stat.var].length; ++k) { %>
                                 <% if (stat.var === "alignRestriction") { %>
@@ -45,6 +70,8 @@
                         <% } %>
                         <% } %>
                         </div>
+                    </section>
+                    <% } %>
                     </div>
                 <% } %>
                 </div>

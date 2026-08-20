@@ -17,6 +17,17 @@
 		.era-ability-value-column {
 			width: 30%;
 		}
+		.collapse-caret {
+			transition: transform 0.15s ease-in-out;
+		}
+		.collapse-toggle:not(.collapsed) .collapse-caret {
+			transform: rotate(90deg);
+		}
+		@media (prefers-reduced-motion: reduce) {
+			.collapse-caret {
+				transition: none;
+			}
+		}
 	</style>
 </head>
 <body ng-app="legendwiki-app" ng-controller="builder">
@@ -123,10 +134,10 @@
 						</form>
 						<div class="border-top mt-3 pt-2">
 							<h5 class="mb-0">
-								<button class="btn btn-link btn-block h5 text-left px-0 py-1 collapsed" type="button"
+								<button class="btn btn-link btn-block h5 text-left px-0 py-1 collapse-toggle collapsed" type="button"
 									data-toggle="collapse" data-target="#ksmQuestMods"
 									aria-expanded="false" aria-controls="ksmQuestMods">
-									<i class="fas fa-chevron-down mr-2" aria-hidden="true"></i>KSM Swap/Quest Mods
+									<i class="fas fa-chevron-right mr-2 collapse-caret" aria-hidden="true"></i>KSM Swap/Quest Mods
 								</button>
 							</h5>
 							<div class="collapse" id="ksmQuestMods">
@@ -222,10 +233,10 @@
 						</div>
 						<div class="border-top mt-3 pt-2">
 							<h5 class="mb-0">
-								<button class="btn btn-link btn-block h5 text-left px-0 py-1 collapsed" type="button"
+								<button class="btn btn-link btn-block h5 text-left px-0 py-1 collapse-toggle collapsed" type="button"
 									data-toggle="collapse" data-target="#eraAbilities"
 									aria-expanded="false" aria-controls="eraAbilities">
-									<i class="fas fa-chevron-down mr-2" aria-hidden="true"></i>Era Abilities
+									<i class="fas fa-chevron-right mr-2 collapse-caret" aria-hidden="true"></i>Era Abilities
 								</button>
 							</h5>
 							<div class="collapse" id="eraAbilities">

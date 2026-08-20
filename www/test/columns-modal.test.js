@@ -62,15 +62,49 @@ function getPickerRule(css, selector) {
     return match[1];
 }
 
+function getCssBlockBodies(css, header) {
+    const bodies = [];
+    let searchFrom = 0;
+
+    while (true) {
+        const headerIndex = css.indexOf(header, searchFrom);
+        if (headerIndex === -1) {
+            return bodies;
+        }
+
+        const openBrace = css.indexOf("{", headerIndex + header.length);
+        assert.notEqual(openBrace, -1, `missing opening brace for ${header}`);
+
+        let depth = 1;
+        let index = openBrace + 1;
+        while (index < css.length && depth > 0) {
+            if (css[index] === "{") {
+                depth++;
+            } else if (css[index] === "}") {
+                depth--;
+            }
+            index++;
+        }
+
+        assert.equal(depth, 0, `unterminated CSS block for ${header}`);
+        bodies.push(css.slice(openBrace + 1, index - 1));
+        searchFrom = index;
+    }
+}
+
 function getDesktopPickerDialogRules(css) {
     const modal = String.raw`\.modal\[aria-labelledby=(?:"columnsModalLabel"|columnsModalLabel)\]`;
-    const match = css.match(new RegExp(
-        String.raw`@media \(min-width: 768px\) \{\s*` +
-        String.raw`\.modal-xl\s*\{([^}]*)\}\s*` +
-        `${modal} \\.modal-dialog\\s*\\{([^}]*)\\}\\s*\\}`
-    ));
-    assert.ok(match, "missing desktop Columns picker dialog rule");
-    return {general: match[1], picker: match[2]};
+    const desktopBlock = getCssBlockBodies(css, "@media (min-width: 768px)")
+        .find(body => new RegExp(`${modal} \\.modal-dialog\\s*\\{`).test(body));
+    assert.ok(desktopBlock,
+        "missing desktop media block containing Columns picker dialog rule");
+    const general = desktopBlock.match(/\.modal-xl\s*\{([^}]*)\}/);
+    const picker = desktopBlock.match(new RegExp(
+        `${modal} \\.modal-dialog\\s*\\{([^}]*)\\}`));
+
+    assert.ok(general, "missing desktop extra-wide modal rule");
+    assert.ok(picker, "missing desktop Columns picker dialog rule");
+    return {general: general[1], picker: picker[1]};
 }
 
 test("shared Columns modal renders in an extra-wide dialog", function() {

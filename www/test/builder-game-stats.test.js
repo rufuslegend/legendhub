@@ -699,6 +699,28 @@ test("builder keeps KSM quest mods and era abilities in collapsed sections", asy
     assert.ok(html.indexOf('id="questMoveInput"') < eraPanel);
 });
 
+test("builder collapse carets point right when collapsed and down when expanded", async function() {
+    const html = await renderBuilder();
+    const toggles = ["ksmQuestMods", "eraAbilities"].map(function(target) {
+        return html.match(new RegExp(
+            `<button[^>]*data-target="#${target}"[^>]*>[\\s\\S]*?<\\/button>`
+        ))[0];
+    });
+
+    for (const toggle of toggles) {
+        assert.match(toggle, /class="[^"]*\bcollapse-toggle\b[^"]*\bcollapsed\b[^"]*"/);
+        assert.match(toggle, /<i class="fas fa-chevron-right mr-2 collapse-caret"/);
+    }
+    assert.match(
+        html,
+        /\.collapse-toggle:not\(\.collapsed\) \.collapse-caret\s*\{[^}]*transform:\s*rotate\(90deg\)/
+    );
+    assert.match(
+        html,
+        /@media \(prefers-reduced-motion:\s*reduce\)\s*\{\s*\.collapse-caret\s*\{[^}]*transition:\s*none/
+    );
+});
+
 test("builder aligns era abilities in three responsive table columns", async function() {
     const html = await renderBuilder();
     const eraColumn = html.match(

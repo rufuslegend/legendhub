@@ -9044,6 +9044,47 @@ body > .container-fluid {
   height: 1.5em;
 }
 
+.modal[aria-labelledby=filtersModalLabel] .modal-body {
+  background-color: #060b12;
+}
+.modal[aria-labelledby=filtersModalLabel] .filters-picker-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.modal[aria-labelledby=filtersModalLabel] .filters-picker-toolbar-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-bottom: 0;
+}
+.modal[aria-labelledby=filtersModalLabel] .filters-picker-reset {
+  flex: 0 0 auto;
+}
+.modal[aria-labelledby=filtersModalLabel] .filters-picker-grid {
+  display: grid;
+  align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 1rem;
+}
+.modal[aria-labelledby=filtersModalLabel] .filters-picker-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.modal[aria-labelledby=filtersModalLabel] .filters-picker-category {
+  padding: 0.75rem;
+  background-color: #0a1522;
+}
+.modal[aria-labelledby=filtersModalLabel] .filters-picker-category-title {
+  margin-bottom: 0.5rem;
+  font-size: 1.2rem;
+}
+.modal[aria-labelledby=filtersModalLabel] .filters-picker-option {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+}
+
 .breadcrumbList {
   padding: 5px 15px;
   list-style: none;
@@ -9156,6 +9197,10 @@ blockquote {
     max-width: 1800px;
   }
   .modal[aria-labelledby=columnsModalLabel] .modal-dialog {
+    width: 50%;
+    max-width: none;
+  }
+  .modal[aria-labelledby=filtersModalLabel] .modal-dialog {
     width: 50%;
     max-width: none;
   }
@@ -9334,6 +9379,24 @@ body[ng-controller=builder] > .container-fluid > .row:first-child > .col-lg-6 {
 
 .modal[aria-labelledby=columnsModalLabel] .list-group-item-light.list-group-item-action:active,
 .modal[aria-labelledby=columnsModalLabel] .list-group-item-light.list-group-item-action.active {
+  color: #eaf4ff;
+  background-color: #18314a;
+  border-color: #3a6a99;
+}
+
+.modal[aria-labelledby=filtersModalLabel] .list-group-item-light {
+  color: #d7e5f2;
+  background-color: #02050a;
+}
+
+.modal[aria-labelledby=filtersModalLabel] .list-group-item-light.list-group-item-action:hover,
+.modal[aria-labelledby=filtersModalLabel] .list-group-item-light.list-group-item-action:focus {
+  color: #fff;
+  background-color: var(--glass-wash);
+}
+
+.modal[aria-labelledby=filtersModalLabel] .list-group-item-light.list-group-item-action:active,
+.modal[aria-labelledby=filtersModalLabel] .list-group-item-light.list-group-item-action.active {
   color: #eaf4ff;
   background-color: #18314a;
   border-color: #3a6a99;
