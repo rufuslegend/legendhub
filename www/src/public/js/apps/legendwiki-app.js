@@ -60,7 +60,7 @@ function templates($templateCache) {
                         '<span>Glass</span>' +
                         '<i class="fas ml-auto" ng-class="glassThemeMenuOpen ? \'fa-caret-down\' : \'fa-caret-right\'" aria-hidden="true"></i>' +
                     '</button>' +
-                    '<div id="glassThemeChoices" ng-show="glassThemeMenuOpen" role="group" aria-label="Glass themes">' +
+                    '<div id="glassThemeChoices" ng-if="glassThemeMenuOpen" role="group" aria-label="Glass themes">' +
                         '<a ng-repeat="theme in glassThemes" class="dropdown-item pl-4" href="" ng-click="setTheme(theme)">{{::theme.replace(\'Glass \', \'\')}}</a>' +
                     '</div>' +
                     '<div class="dropdown-divider"></div>' +
