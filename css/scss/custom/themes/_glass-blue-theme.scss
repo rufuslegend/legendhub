@@ -29,6 +29,10 @@ $glass-ink: #eaf4ff;
 
 $columns-picker-modal-bg: $glass-surface;
 $columns-picker-category-bg: $gray-800;
+$columns-picker-option-bg: $glass-well;
+$columns-picker-option-hover-bg: var(--glass-wash);
+$columns-picker-option-active-bg: $gray-700;
+$columns-picker-option-active-border-color: $glass-line;
 
 $glass-density-breakpoint: 768px;
 $glass-density-scale: .75;

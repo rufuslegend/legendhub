@@ -63,6 +63,16 @@ function getPickerRule(css, selector) {
     return match[1];
 }
 
+function getRuleBodyStartingWith(css, selector) {
+    const start = css.indexOf(selector);
+    assert.notEqual(start, -1, `missing generated rule beginning ${selector}`);
+    const openBrace = css.indexOf("{", start + selector.length);
+    const closeBrace = css.indexOf("}", openBrace + 1);
+    assert.notEqual(openBrace, -1, `missing opening brace after ${selector}`);
+    assert.notEqual(closeBrace, -1, `missing closing brace after ${selector}`);
+    return css.slice(openBrace + 1, closeBrace);
+}
+
 function getCssBlockBodies(css, header) {
     const bodies = [];
     let searchFrom = 0;
@@ -207,4 +217,38 @@ test("Glass Blue gives Filters choices the same dark material as Columns", funct
     assert.ok(rule, "missing dark Filters choice rule");
     assert.match(rule[1], /color:\s*#d7e5f2;/);
     assert.match(rule[1], /background-color:\s*#02050a;/);
+});
+
+test("Dark themes keep Columns and Filters choices dark in every state", function() {
+    const darkSurfaces = {
+        dark: {normal: "#212529", hover: "#495057", active: "#007bff"},
+        "solarized-dark": {
+            normal: "#05232b",
+            hover: "#586e75",
+            active: "#268bd2"
+        }
+    };
+
+    for (const [theme, surfaces] of Object.entries(darkSurfaces)) {
+        const css = fs.readFileSync(path.join(
+            root, `css/dist/css/bootstrap-${theme}.css`), "utf8");
+
+        for (const [modalLabel, pickerClass] of [
+            ["columnsModalLabel", "columns-picker-option"],
+            ["filtersModalLabel", "filters-picker-option"]
+        ]) {
+            const selector = `.modal[aria-labelledby=${modalLabel}] .${pickerClass}`;
+            assert.match(getRuleBodyStartingWith(css, selector),
+                new RegExp(`background-color:\\s*${surfaces.normal};`));
+            assert.match(getRuleBodyStartingWith(css,
+                `${selector}.list-group-item-action:hover`),
+                new RegExp(`background-color:\\s*${surfaces.hover};`));
+            assert.match(getRuleBodyStartingWith(css,
+                `${selector}.list-group-item-action:focus`),
+                new RegExp(`background-color:\\s*${surfaces.hover};`));
+            assert.match(getRuleBodyStartingWith(css,
+                `${selector}.list-group-item-action:active`),
+                new RegExp(`background-color:\\s*${surfaces.active};`));
+        }
+    }
 });

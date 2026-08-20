@@ -13,6 +13,7 @@ with version 2.6.0.
 
 - Compacted the Builder by making KSM swaps, quest modifiers, and era abilities collapsible with directional indicators, aligning era abilities in three responsive columns, and allowing the Character card to size to its contents.
 - Restyled item-search filters to match the compact, responsive column picker with clearer themed category surfaces.
+- Kept column and filter choices comfortably dark in the Dark and Solarized Dark themes.
 
 ## [2.8.3] - 2026-08-18
 

@@ -9040,6 +9040,8 @@ body > .container-fluid {
 .modal[aria-labelledby=columnsModalLabel] .columns-picker-option {
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
+  color: #fff;
+  background-color: #212529;
 }
 .modal[aria-labelledby=columnsModalLabel] .columns-picker-visibility-icon {
   flex: 0 0 auto;
@@ -9086,6 +9088,25 @@ body > .container-fluid {
 .modal[aria-labelledby=filtersModalLabel] .filters-picker-option {
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
+  color: #fff;
+  background-color: #212529;
+}
+
+.modal[aria-labelledby=columnsModalLabel] .columns-picker-option.list-group-item-action:hover,
+.modal[aria-labelledby=columnsModalLabel] .columns-picker-option.list-group-item-action:focus,
+.modal[aria-labelledby=filtersModalLabel] .filters-picker-option.list-group-item-action:hover,
+.modal[aria-labelledby=filtersModalLabel] .filters-picker-option.list-group-item-action:focus {
+  color: #fff;
+  background-color: #495057;
+}
+
+.modal[aria-labelledby=columnsModalLabel] .columns-picker-option.list-group-item-action:active,
+.modal[aria-labelledby=columnsModalLabel] .columns-picker-option.list-group-item-action.active,
+.modal[aria-labelledby=filtersModalLabel] .filters-picker-option.list-group-item-action:active,
+.modal[aria-labelledby=filtersModalLabel] .filters-picker-option.list-group-item-action.active {
+  color: #fff;
+  background-color: #007bff;
+  border-color: #007bff;
 }
 
 .breadcrumbList {

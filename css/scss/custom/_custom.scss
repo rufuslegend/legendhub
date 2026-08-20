@@ -1,5 +1,12 @@
 $columns-picker-modal-bg: $gray-100 !default;
 $columns-picker-category-bg: $white !default;
+$columns-picker-option-bg: $white !default;
+$columns-picker-option-color: $body-color !default;
+$columns-picker-option-hover-bg: $gray-200 !default;
+$columns-picker-option-hover-color: $body-color !default;
+$columns-picker-option-active-bg: $component-active-bg !default;
+$columns-picker-option-active-color: $component-active-color !default;
+$columns-picker-option-active-border-color: $component-active-bg !default;
 
 html {
   position: relative;
@@ -90,6 +97,8 @@ body {
   .columns-picker-option {
     padding: .5rem .75rem;
     font-size: .875rem;
+    color: $columns-picker-option-color;
+    background-color: $columns-picker-option-bg;
   }
 
   .columns-picker-visibility-icon {
@@ -147,7 +156,26 @@ body {
   .filters-picker-option {
     padding: .5rem .75rem;
     font-size: .875rem;
+    color: $columns-picker-option-color;
+    background-color: $columns-picker-option-bg;
   }
+}
+
+.modal[aria-labelledby="columnsModalLabel"] .columns-picker-option.list-group-item-action:hover,
+.modal[aria-labelledby="columnsModalLabel"] .columns-picker-option.list-group-item-action:focus,
+.modal[aria-labelledby="filtersModalLabel"] .filters-picker-option.list-group-item-action:hover,
+.modal[aria-labelledby="filtersModalLabel"] .filters-picker-option.list-group-item-action:focus {
+  color: $columns-picker-option-hover-color;
+  background-color: $columns-picker-option-hover-bg;
+}
+
+.modal[aria-labelledby="columnsModalLabel"] .columns-picker-option.list-group-item-action:active,
+.modal[aria-labelledby="columnsModalLabel"] .columns-picker-option.list-group-item-action.active,
+.modal[aria-labelledby="filtersModalLabel"] .filters-picker-option.list-group-item-action:active,
+.modal[aria-labelledby="filtersModalLabel"] .filters-picker-option.list-group-item-action.active {
+  color: $columns-picker-option-active-color;
+  background-color: $columns-picker-option-active-bg;
+  border-color: $columns-picker-option-active-border-color;
 }
 
 .breadcrumbList {
