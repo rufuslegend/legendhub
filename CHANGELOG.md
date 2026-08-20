@@ -3,6 +3,12 @@
 All notable user-facing changes to LegendHUB are documented here beginning
 with version 2.6.0.
 
+## [2.9.0-beta] - 2026-08-19
+
+### Added
+
+- **Era Abilities:** Builder characters can now record ranks for the eight era abilities that affect calculated stats. Their armor class, resource, combat, regeneration, spell, and attribute-cap bonuses are applied automatically instead of requiring faux objects.
+
 ## [2.8.3] - 2026-08-18
 
 ### Fixed

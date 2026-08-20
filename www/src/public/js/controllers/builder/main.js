@@ -5,13 +5,15 @@
         /** Initializes the controller. */
         $scope.initialize = function() {
             $scope.exceptionEncountered = false;
-            $scope.listVer = 5;
+            $scope.listVer = 6;
             exceptionService.addCallback(function (exception, cause) {
                 $scope.exceptionEncountered = true;
             });
 
             $scope.slots = itemConstants.selectShortOptions.slot;
             $scope.selectShortOptions = itemConstants.selectShortOptions;
+            $scope.eraAbilityEras = ["Ancient", "Medieval", "Industrial"];
+            $scope.eraAbilities = gameStats.getEraAbilities();
 
             $scope.itemsPerPage = 20;
             $scope.itemsPerPageOptions = [20, 50, 100, 200, 500, 1000];
@@ -139,6 +141,7 @@
                 "quest_move": 0
             };
             list.ksmStats = {"strength": 0, "mind": 0, "dexterity": 0, "constitution": 0, "perception": 0, "spirit": 0};
+            list.eraAbilities = gameStats.getDefaultEraAbilityRanks();
             
             // runecraft charms
             list.runeCharms = {"charm1": "AAAAA", "charm2": "AAAAA", "charm3": "AAAAA", "charm4": "AAAAA"};
@@ -303,6 +306,7 @@
                 perception: 0,
                 spirit: 0
             };
+            newList.eraAbilities = gameStats.getDefaultEraAbilityRanks();
 
             newList.runeCharms = {
                 charm1: "AAAAA",
@@ -402,6 +406,27 @@
                 baseStats.quest_move = encoder.toNumber(encodedQuestResources.slice(6, 9));
                 listStr = listStr.substring(9);
             }
+
+            var eraAbilityRanks = gameStats.getDefaultEraAbilityRanks();
+            if (listVersion >= 6) {
+                const abilityCount = $scope.eraAbilities.length;
+                const encodedEraAbilities = listStr.slice(0, abilityCount);
+                if (!(new RegExp(`^[0-9A-Za-z]{${abilityCount}}$`)).test(
+                    encodedEraAbilities
+                )) {
+                    throw "Invalid list.";
+                }
+
+                for (let i = 0; i < abilityCount; ++i) {
+                    const ability = $scope.eraAbilities[i];
+                    const rank = encoder.toNumber(encodedEraAbilities[i]);
+                    if (rank > ability.maxRank) {
+                        throw "Invalid list.";
+                    }
+                    eraAbilityRanks[ability.key] = rank;
+                }
+                listStr = listStr.substring(abilityCount);
+            }
             
             runeCharms.charm1 = "AAAAA";
             runeCharms.charm2 = "AAAAA";
@@ -494,6 +519,7 @@
                     name: variantName,
                     baseStats: baseStats,
                     ksmStats: ksmStats,
+                    eraAbilities: eraAbilityRanks,
                     runeCharms: runeCharms,
                     items: items
                 }]
@@ -858,6 +884,16 @@
                     list.baseStats[questResourceStat]
                 );
                 listCookieStr += encoder.fromNumber(value, 3);
+            }
+
+            const eraAbilityRanks = gameStats.normalizeEraAbilityRanks(
+                list.eraAbilities
+            );
+            for (const ability of $scope.eraAbilities) {
+                listCookieStr += encoder.fromNumber(
+                    eraAbilityRanks[ability.key],
+                    1
+                );
             }
 
             var charmStr = "";
@@ -2058,6 +2094,9 @@
                 case "perception":
                 case "spirit":
                     max = 100;
+                    max += gameStats.calculateEraAbilityStatCapBonus(
+                        $scope.selectedList.eraAbilities
+                    );
                     for (var i = 0; i < $scope.selectedList.items.length; ++i) {
                         if ($scope.selectedList.items[i][statName + "Cap"])
                             max += $scope.selectedList.items[i][statName + "Cap"];
@@ -2188,8 +2227,14 @@
             // stat bonuses
             var fromBonus = getTotalFromStatBonuses(statName);
 
+            // persistent era ability bonuses
+            var fromEraAbilities = gameStats.calculateEraAbilityBonus(
+                statName,
+                $scope.selectedList.eraAbilities
+            );
+
             // sum up the different sections
-            var total = fromBaseStats + fromKSMStats + fromStatQuests + fromItems + fromSpells + fromBonus;
+            var total = fromBaseStats + fromKSMStats + fromStatQuests + fromItems + fromSpells + fromBonus + fromEraAbilities;
 
             // apply total bonuses
             total += getStatTotalBonus(statName, total);

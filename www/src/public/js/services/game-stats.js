@@ -17,6 +17,122 @@
 
     const MAX_QUEST_RESOURCE_BONUS = 238327;
 
+    const eraAbilities = [
+        {
+            key: "mentalEnhancement",
+            name: "Mental Enhancement",
+            era: "Ancient",
+            maxRank: 3,
+            effects: {ma: 10}
+        },
+        {
+            key: "arcaneFocus",
+            name: "Arcane Focus",
+            era: "Ancient",
+            maxRank: 5,
+            effects: {spelldam: 1, spellcrit: 1}
+        },
+        {
+            key: "hardenedSkin",
+            name: "Hardened Skin",
+            era: "Medieval",
+            maxRank: 5,
+            effects: {ac: -3}
+        },
+        {
+            key: "increasedPotential",
+            name: "Increased Potential",
+            era: "Medieval",
+            maxRank: 5,
+            effects: {}
+        },
+        {
+            key: "physicalEnhancement",
+            name: "Physical Enhancement",
+            era: "Medieval",
+            maxRank: 3,
+            effects: {mv: 20}
+        },
+        {
+            key: "weaponFocus",
+            name: "Weapon Focus",
+            era: "Medieval",
+            maxRank: 1,
+            effects: {hit: 5, dam: 5}
+        },
+        {
+            key: "innateRegeneration",
+            name: "Innate Regeneration",
+            era: "Medieval",
+            maxRank: 3,
+            effects: {hpr: 1, mar: 1, mvr: 1}
+        },
+        {
+            key: "physicalEndurance",
+            name: "Physical Endurance",
+            era: "Industrial",
+            maxRank: 3,
+            effects: {hp: 10}
+        }
+    ];
+
+    function getEraAbilities() {
+        return eraAbilities.map(function(ability) {
+            return {
+                key: ability.key,
+                name: ability.name,
+                era: ability.era,
+                maxRank: ability.maxRank,
+                ranks: Array.from(
+                    {length: ability.maxRank},
+                    function(unused, index) {
+                        return index + 1;
+                    }
+                )
+            };
+        });
+    }
+
+    function getDefaultEraAbilityRanks() {
+        const ranks = {};
+        for (const ability of eraAbilities) {
+            ranks[ability.key] = 0;
+        }
+        return ranks;
+    }
+
+    function normalizeEraAbilityRanks(ranks) {
+        const normalized = getDefaultEraAbilityRanks();
+        ranks = ranks || {};
+
+        for (const ability of eraAbilities) {
+            const rank = Number(ranks[ability.key]);
+            if (Number.isFinite(rank)) {
+                normalized[ability.key] = Math.min(
+                    Math.max(Math.trunc(rank), 0),
+                    ability.maxRank
+                );
+            }
+        }
+
+        return normalized;
+    }
+
+    function calculateEraAbilityBonus(statName, ranks) {
+        const normalized = normalizeEraAbilityRanks(ranks);
+        let bonus = 0;
+
+        for (const ability of eraAbilities) {
+            bonus += normalized[ability.key] * (ability.effects[statName] || 0);
+        }
+
+        return bonus;
+    }
+
+    function calculateEraAbilityStatCapBonus(ranks) {
+        return normalizeEraAbilityRanks(ranks).increasedPotential;
+    }
+
     const naturalStatDependencies = {
         hp: ["constitution"],
         ma: ["mind"],
@@ -124,7 +240,7 @@
                  * The builder models level-50 characters. Mirror reroll_hps_internal()
                  * and hp_for_con_internal() using the current Legend configuration.
                  * Quest HP supplies all permanent quest boosts, including the five India
-                 * boosts. Physical Endurance is represented by a compensating object.
+                 * boosts. The controller adds Physical Endurance separately.
                  */
                 const level = 50;
                 const baseHp = 20;
@@ -154,8 +270,7 @@
                  * ma_for_mind() is (level * current mind) / MANA_FOR_MIND_DIV. At
                  * level 50 with MANA_FOR_MIND_DIV set to 10, that is 5 mana per mind.
                  * Quest Mana contains all completed resource-quest bonuses and is added
-                 * exactly once. Mental Enhancement remains represented by compensating
-                 * Other-slot objects and must not also be included here.
+                 * exactly once. The controller adds Mental Enhancement separately.
                  */
                 const level = 50;
                 const baseMana = 100;
@@ -175,8 +290,7 @@
                  *
                  * MV_STATIC_SUBTITUTE_FOR_DEX is configured to zero, so mv_for_stat()
                  * uses capped current dexterity: (level * dexterity) / MV_DIV. Quest Mv
-                 * is explicit, while Physical Enhancement remains represented by its
-                 * faux builder item and must not also be included here.
+                 * is explicit, while the controller adds Physical Enhancement separately.
                  */
                 const level = 50;
                 const baseMove = 150;
@@ -277,15 +391,16 @@
             case "ac":
                 /*
                  * The Builder models a standing, neutral-wary, non-vehicle character.
-                 * Mirror get_naked_ac() and get_stat_ac(); skills, era abilities,
-                 * spells, buffs, and other conditional modifiers remain faux objects.
+                 * Mirror get_naked_ac() and get_stat_ac(); the controller adds Hardened
+                 * Skin, while skills, spells, buffs, and other conditional modifiers
+                 * remain faux objects.
                  */
                 return 100 - Math.trunc((stats.dexterity - 30) / 2);
             /*
              * These natural terms mirror get_hp_regen_con_bonus_internal(),
-             * get_mana_regen_mind_bonus(), and get_move_regen_wsp(). Innate
-             * Regeneration and spell/ability bonuses are supplied separately by the
-             * builder's uncapped Familiar and Other slots.
+             * get_mana_regen_mind_bonus(), and get_move_regen_wsp(). The controller
+             * adds Innate Regeneration; spell and buff bonuses remain available through
+             * the builder's uncapped Familiar and Other slots.
              */
             case "hpr": {
                 const con = normalizeRegenStat(stats.constitution);
@@ -318,10 +433,15 @@
 
     return {
         calculateDamrollEquipmentCap,
+        calculateEraAbilityBonus,
+        calculateEraAbilityStatCapBonus,
         calculateHitrollEquipmentCap,
         calculateNaturalStatBonus,
         calculateRegenEquipmentCap,
+        getDefaultEraAbilityRanks,
+        getEraAbilities,
         getNaturalStatDependencies,
+        normalizeEraAbilityRanks,
         normalizeQuestResourceBonus
     };
 });

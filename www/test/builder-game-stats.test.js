@@ -97,7 +97,9 @@ function createBuilderScope() {
         "ac",
         "hpr",
         "mar",
-        "mvr"
+        "mvr",
+        "spelldam",
+        "spellcrit"
     ].map(function(statName) {
         return {var: statName, type: "int"};
     });
@@ -150,6 +152,31 @@ function createLegacyImport(scope, name, sentinelIndex, sentinelId) {
     return `${name}!Original_${fields.join("_")}`;
 }
 
+function assertDefaultEraAbilities(list) {
+    assert.deepEqual(list.eraAbilities, {
+        mentalEnhancement: 0,
+        arcaneFocus: 0,
+        hardenedSkin: 0,
+        increasedPotential: 0,
+        physicalEnhancement: 0,
+        weaponFocus: 0,
+        innateRegeneration: 0,
+        physicalEndurance: 0
+    });
+}
+
+function createVersion6Import(scope, eraRanks) {
+    const encoder = createEncoder();
+    const baseStats = Array(6).fill(encoder.fromNumber(30, 2)).join("");
+    const ksmStats = "0".repeat(6);
+    const questSelections = "_".repeat(3);
+    const questResources = "0".repeat(9);
+    const items = "_".repeat(scope.slotOrder.length);
+
+    return `6*Version Six~Original~${baseStats}${ksmStats}` +
+        `${questSelections}${questResources}${eraRanks}${items}`;
+}
+
 function equipStats(scope, overrides) {
     const items = Array.from({length: 25}, function() {
         return {};
@@ -172,8 +199,16 @@ function equipStats(scope, overrides) {
             quest_move: overrides.quest_move || 0
         },
         ksmStats: {},
+        eraAbilities: Object.assign(
+            gameStats.getDefaultEraAbilityRanks(),
+            overrides.eraAbilities
+        ),
         items
     };
+}
+
+function numericTotal(scope, statName) {
+    return Number.parseInt(scope.getStatTotal(statName), 10);
 }
 
 test("builder raises only the equipment hitroll cap with final dexterity", function() {
@@ -379,6 +414,102 @@ test("new builder lists default quest resource bonuses to zero", function() {
     assert.equal(list.baseStats.quest_move, 0);
 });
 
+test("new builder lists default every era ability rank to zero", function() {
+    const scope = createBuilderScope();
+    const list = scope.getDefaultList("Original");
+
+    assert.deepEqual(list.eraAbilities, {
+        mentalEnhancement: 0,
+        arcaneFocus: 0,
+        hardenedSkin: 0,
+        increasedPotential: 0,
+        physicalEnhancement: 0,
+        weaponFocus: 0,
+        innateRegeneration: 0,
+        physicalEndurance: 0
+    });
+});
+
+test("builder applies persistent era ability bonuses to final totals", function() {
+    const cases = [
+        ["mentalEnhancement", 3, [["ma", 30]]],
+        ["arcaneFocus", 5, [["spelldam", 5], ["spellcrit", 5]]],
+        ["hardenedSkin", 5, [["ac", -15]]],
+        ["physicalEnhancement", 3, [["mv", 60]]],
+        ["weaponFocus", 1, [["hit", 5], ["dam", 5]]],
+        ["innateRegeneration", 3, [["hpr", 3], ["mar", 3], ["mvr", 3]]],
+        ["physicalEndurance", 3, [["hp", 30]]]
+    ];
+
+    for (const [ability, rank, effects] of cases) {
+        const baseline = createBuilderScope();
+        const withAbility = createBuilderScope();
+        const stats = {
+            strength: 90,
+            mind: 90,
+            dexterity: 90,
+            constitution: 90,
+            equipment: {
+                ac: -12,
+                hit: 4,
+                dam: 6,
+                hpr: 2,
+                mar: 3,
+                mvr: 4,
+                spelldam: 5,
+                spellcrit: 6
+            },
+            other: {
+                ac: -25,
+                hit: 2,
+                dam: 3,
+                hpr: 1,
+                mar: 1,
+                mvr: 1,
+                spelldam: 2,
+                spellcrit: 2
+            }
+        };
+        equipStats(baseline, stats);
+        equipStats(withAbility, Object.assign({}, stats, {
+            eraAbilities: {[ability]: rank}
+        }));
+
+        for (const [statName, expectedDifference] of effects) {
+            assert.equal(
+                numericTotal(withAbility, statName) -
+                    numericTotal(baseline, statName),
+                expectedDifference,
+                `${ability} must change ${statName}`
+            );
+        }
+    }
+});
+
+test("Increased Potential raises attribute caps before dependent formulas", function() {
+    const baseline = createBuilderScope();
+    const withAbility = createBuilderScope();
+    const stats = {
+        strength: 100,
+        equipment: {strength: 10, strengthCap: 4},
+        other: {}
+    };
+    equipStats(baseline, stats);
+    equipStats(withAbility, Object.assign({}, stats, {
+        eraAbilities: {increasedPotential: 4}
+    }));
+
+    assert.equal(baseline.getStatTotal("strength"), 104);
+    assert.equal(baseline.getStatTotal("dam"), "34 (0)");
+    assert.equal(withAbility.getStatTotal("strength"), 108);
+    assert.equal(withAbility.getStatTotal("dam"), "35 (0)");
+    assert.deepEqual(getRestrictions(withAbility, "strength"), [{
+        restriction: "fromTotalMax",
+        amount: 110,
+        limit: 108
+    }]);
+});
+
 test("builder applies each quest bonus only to its matching resource", function() {
     const scope = createBuilderScope();
     equipStats(scope, {
@@ -479,7 +610,36 @@ test("builder stats block renders the three quest resource inputs", function() {
     }
 });
 
-test("builder version 5 round-trips quest resources without shifting items", function() {
+test("builder renders metadata-driven era ability rank selectors", function() {
+    const template = fs.readFileSync(path.join(
+        __dirname,
+        "../src/views/builder/index.ejs"
+    ), "utf8");
+    const questMoveIndex = template.indexOf('id="questMoveInput"');
+    const eraAbilitiesIndex = template.indexOf("Era Abilities");
+
+    assert.ok(
+        eraAbilitiesIndex > questMoveIndex,
+        "Era Abilities must follow character quest resources"
+    );
+    assert.match(template, /ng-repeat="era in eraAbilityEras track by era"/);
+    assert.match(
+        template,
+        /ng-repeat="ability in eraAbilities \| filter:\{era: era\} track by ability\.key"/
+    );
+    assert.match(
+        template,
+        /ng-model="selectedList\.eraAbilities\[ability\.key\]"/
+    );
+    assert.match(template, /ng-change="saveClientSideData\(\)"/);
+    assert.match(template, /<option ng-value="0">None<\/option>/);
+    assert.match(
+        template,
+        /ng-repeat="rank in ability\.ranks track by rank" ng-value="rank">Rank \{\{::rank\}\}/
+    );
+});
+
+test("builder version 6 round-trips quest resources and era abilities without shifting items", function() {
     const scope = createBuilderScope();
     const list = scope.getDefaultList("Original");
     Object.assign(list.baseStats, {
@@ -493,6 +653,16 @@ test("builder version 5 round-trips quest resources without shifting items", fun
         quest_mana: 23,
         quest_move: 300000
     });
+    Object.assign(list.eraAbilities, {
+        mentalEnhancement: 2,
+        arcaneFocus: 5,
+        hardenedSkin: 4,
+        increasedPotential: 3,
+        physicalEnhancement: 1,
+        weaponFocus: 1,
+        innateRegeneration: 2,
+        physicalEndurance: 3
+    });
     list.items[0] = {id: 1144, slot: 0, name: "Test Item"};
     scope.allLists = [{name: "Quest Hero", variants: [list]}];
     scope.selectedListIndex = 0;
@@ -500,9 +670,10 @@ test("builder version 5 round-trips quest resources without shifting items", fun
     scope.selectedList = list;
 
     scope.onExportClicked();
-    assert.match(scope.exportModel.curVariant, /^5\*/);
+    assert.match(scope.exportModel.curVariant, /^6\*/);
     const compactData = scope.exportModel.curVariant.split("~")[2];
     assert.equal(compactData.slice(21, 30), "00H00Nzzz");
+    assert.equal(compactData.slice(30, 38), "25431123");
 
     scope.importModel = {
         input: scope.exportModel.curVariant,
@@ -516,8 +687,36 @@ test("builder version 5 round-trips quest resources without shifting items", fun
     assert.equal(imported.baseStats.quest_hp, 17);
     assert.equal(imported.baseStats.quest_mana, 23);
     assert.equal(imported.baseStats.quest_move, 238327);
+    assert.deepEqual(imported.eraAbilities, {
+        mentalEnhancement: 2,
+        arcaneFocus: 5,
+        hardenedSkin: 4,
+        increasedPotential: 3,
+        physicalEnhancement: 1,
+        weaponFocus: 1,
+        innateRegeneration: 2,
+        physicalEndurance: 3
+    });
     assert.equal(imported.items.length, scope.slotOrder.length);
     assert.equal(imported.items[0].id, 1144);
+});
+
+test("builder version 5 imports default era abilities without shifting items", function() {
+    const scope = createBuilderScope();
+    const encoder = createEncoder();
+    const baseStats = Array(6).fill(encoder.fromNumber(30, 2)).join("");
+    const ksmStats = "0".repeat(6);
+    const items = Array(scope.slotOrder.length).fill("_");
+    items[7] = encoder.fromNumber(808, 3);
+    const imported = importBuilderList(
+        scope,
+        `5*Version Five~Original~${baseStats}${ksmStats}___` +
+            `${"0".repeat(9)}${items.join("")}`
+    );
+
+    assertDefaultEraAbilities(imported);
+    assert.equal(imported.items[7].id, 808);
+    assert.equal(imported.items[7].slot, 5);
 });
 
 test("builder version 1 imports its legacy sentinel without shifting items", function() {
@@ -530,6 +729,7 @@ test("builder version 1 imports its legacy sentinel without shifting items", fun
     assert.equal(imported.baseStats.quest_hp, 0);
     assert.equal(imported.baseStats.quest_mana, 0);
     assert.equal(imported.baseStats.quest_move, 0);
+    assertDefaultEraAbilities(imported);
     assert.equal(imported.items.length, scope.slotOrder.length);
     assert.equal(imported.items[1].id, 101);
     assert.equal(imported.items[1].slot, 1);
@@ -545,6 +745,7 @@ test("builder version 2 imports its compact sentinel without shifting items", fu
     assert.equal(imported.baseStats.quest_hp, 0);
     assert.equal(imported.baseStats.quest_mana, 0);
     assert.equal(imported.baseStats.quest_move, 0);
+    assertDefaultEraAbilities(imported);
     assert.equal(imported.items.length, scope.slotOrder.length);
     assert.equal(imported.items[5].id, 202);
     assert.equal(imported.items[5].slot, 3);
@@ -560,6 +761,7 @@ test("builder version 3 imports its compact sentinel without shifting items", fu
     assert.equal(imported.baseStats.quest_hp, 0);
     assert.equal(imported.baseStats.quest_mana, 0);
     assert.equal(imported.baseStats.quest_move, 0);
+    assertDefaultEraAbilities(imported);
     assert.equal(imported.items.length, scope.slotOrder.length);
     assert.equal(imported.items[11].id, 303);
     assert.equal(imported.items[11].slot, 9);
@@ -575,6 +777,7 @@ test("builder version 4 imports its compact sentinel without shifting items", fu
     assert.equal(imported.baseStats.quest_hp, 0);
     assert.equal(imported.baseStats.quest_mana, 0);
     assert.equal(imported.baseStats.quest_move, 0);
+    assertDefaultEraAbilities(imported);
     assert.equal(imported.items.length, scope.slotOrder.length);
     assert.equal(imported.items[16].id, 404);
     assert.equal(imported.items[16].slot, 14);
@@ -590,6 +793,7 @@ test("unversioned legacy builder imports its sentinel without shifting items", f
     assert.equal(imported.baseStats.quest_hp, 0);
     assert.equal(imported.baseStats.quest_mana, 0);
     assert.equal(imported.baseStats.quest_move, 0);
+    assertDefaultEraAbilities(imported);
     assert.equal(imported.items.length, scope.slotOrder.length);
     assert.equal(imported.items[22].id, 505);
     assert.equal(imported.items[22].slot, 18);
@@ -610,8 +814,34 @@ test("unversioned legacy builder imports preserve multiple lists", function() {
     scope.onImportInputChanged();
 
     assert.equal(scope.importModel.lists.length, 2);
+    assertDefaultEraAbilities(scope.importModel.lists[0].variants[0]);
+    assertDefaultEraAbilities(scope.importModel.lists[1].variants[0]);
     assert.equal(scope.importModel.lists[0].variants[0].items[2].id, 606);
     assert.equal(scope.importModel.lists[1].variants[0].items[3].id, 707);
+});
+
+test("builder rejects non-alphanumeric version-6 era ability data", function() {
+    const scope = createBuilderScope();
+
+    assert.throws(function() {
+        importBuilderList(scope, createVersion6Import(scope, "000_0000"));
+    }, /Invalid list/);
+});
+
+test("builder rejects truncated version-6 era ability data", function() {
+    const scope = createBuilderScope();
+
+    assert.throws(function() {
+        importBuilderList(scope, createVersion6Import(scope, "0000000"));
+    }, /Invalid list/);
+});
+
+test("builder rejects version-6 era ranks above an ability maximum", function() {
+    const scope = createBuilderScope();
+
+    assert.throws(function() {
+        importBuilderList(scope, createVersion6Import(scope, "40000000"));
+    }, /Invalid list/);
 });
 
 test("builder rejects malformed version-5 quest resource data", function() {

@@ -10,6 +10,166 @@ function calculate(statName, stats, items = []) {
     return gameStats.calculateNaturalStatBonus(statName, stats, items);
 }
 
+test("era ability catalog exposes the supported ranks in stable order", function() {
+    assert.deepEqual(gameStats.getEraAbilities(), [
+        {
+            key: "mentalEnhancement",
+            name: "Mental Enhancement",
+            era: "Ancient",
+            maxRank: 3,
+            ranks: [1, 2, 3]
+        },
+        {
+            key: "arcaneFocus",
+            name: "Arcane Focus",
+            era: "Ancient",
+            maxRank: 5,
+            ranks: [1, 2, 3, 4, 5]
+        },
+        {
+            key: "hardenedSkin",
+            name: "Hardened Skin",
+            era: "Medieval",
+            maxRank: 5,
+            ranks: [1, 2, 3, 4, 5]
+        },
+        {
+            key: "increasedPotential",
+            name: "Increased Potential",
+            era: "Medieval",
+            maxRank: 5,
+            ranks: [1, 2, 3, 4, 5]
+        },
+        {
+            key: "physicalEnhancement",
+            name: "Physical Enhancement",
+            era: "Medieval",
+            maxRank: 3,
+            ranks: [1, 2, 3]
+        },
+        {
+            key: "weaponFocus",
+            name: "Weapon Focus",
+            era: "Medieval",
+            maxRank: 1,
+            ranks: [1]
+        },
+        {
+            key: "innateRegeneration",
+            name: "Innate Regeneration",
+            era: "Medieval",
+            maxRank: 3,
+            ranks: [1, 2, 3]
+        },
+        {
+            key: "physicalEndurance",
+            name: "Physical Endurance",
+            era: "Industrial",
+            maxRank: 3,
+            ranks: [1, 2, 3]
+        }
+    ]);
+});
+
+test("era ability catalog and defaults are isolated from callers", function() {
+    const abilities = gameStats.getEraAbilities();
+    const defaults = gameStats.getDefaultEraAbilityRanks();
+
+    abilities[0].name = "Changed";
+    abilities[0].ranks.push(4);
+    defaults.mentalEnhancement = 3;
+
+    assert.equal(gameStats.getEraAbilities()[0].name, "Mental Enhancement");
+    assert.deepEqual(gameStats.getEraAbilities()[0].ranks, [1, 2, 3]);
+    assert.deepEqual(gameStats.getDefaultEraAbilityRanks(), {
+        mentalEnhancement: 0,
+        arcaneFocus: 0,
+        hardenedSkin: 0,
+        increasedPotential: 0,
+        physicalEnhancement: 0,
+        weaponFocus: 0,
+        innateRegeneration: 0,
+        physicalEndurance: 0
+    });
+});
+
+test("era ability ranks normalize to known integer rank ranges", function() {
+    assert.deepEqual(gameStats.normalizeEraAbilityRanks({
+        mentalEnhancement: "2.9",
+        arcaneFocus: 99,
+        hardenedSkin: -2,
+        increasedPotential: "not a number",
+        physicalEnhancement: 1.8,
+        weaponFocus: Infinity,
+        physicalEndurance: 2.9,
+        unknownAbility: 5
+    }), {
+        mentalEnhancement: 2,
+        arcaneFocus: 5,
+        hardenedSkin: 0,
+        increasedPotential: 0,
+        physicalEnhancement: 1,
+        weaponFocus: 0,
+        innateRegeneration: 0,
+        physicalEndurance: 2
+    });
+
+    assert.deepEqual(
+        gameStats.normalizeEraAbilityRanks(),
+        gameStats.getDefaultEraAbilityRanks()
+    );
+});
+
+test("era abilities apply their persistent per-rank stat bonuses", function() {
+    assert.equal(gameStats.calculateEraAbilityBonus("ac", {
+        hardenedSkin: 5
+    }), -15);
+    assert.equal(gameStats.calculateEraAbilityBonus("hp", {
+        physicalEndurance: 3
+    }), 30);
+    assert.equal(gameStats.calculateEraAbilityBonus("ma", {
+        mentalEnhancement: 3
+    }), 30);
+    assert.equal(gameStats.calculateEraAbilityBonus("mv", {
+        physicalEnhancement: 3
+    }), 60);
+    assert.equal(gameStats.calculateEraAbilityBonus("hit", {
+        weaponFocus: 1
+    }), 5);
+    assert.equal(gameStats.calculateEraAbilityBonus("dam", {
+        weaponFocus: 1
+    }), 5);
+
+    for (const statName of ["hpr", "mar", "mvr"]) {
+        assert.equal(gameStats.calculateEraAbilityBonus(statName, {
+            innateRegeneration: 3
+        }), 3);
+    }
+
+    for (const statName of ["spelldam", "spellcrit"]) {
+        assert.equal(gameStats.calculateEraAbilityBonus(statName, {
+            arcaneFocus: 5
+        }), 5);
+    }
+});
+
+test("era ability calculations clamp ranks and ignore unrelated stats", function() {
+    assert.equal(gameStats.calculateEraAbilityBonus("hp", {
+        physicalEndurance: 99
+    }), 30);
+    assert.equal(gameStats.calculateEraAbilityBonus("mitigation", {
+        hardenedSkin: 5,
+        physicalEndurance: 3
+    }), 0);
+    assert.equal(gameStats.calculateEraAbilityStatCapBonus({
+        increasedPotential: 4
+    }), 4);
+    assert.equal(gameStats.calculateEraAbilityStatCapBonus({
+        increasedPotential: 99
+    }), 5);
+    assert.equal(gameStats.calculateEraAbilityStatCapBonus(), 0);
+});
+
 test("natural HP mirrors the level-50 Legend calculation", function() {
     assert.equal(calculate("hp", {constitution: 30}), 366);
     assert.equal(calculate("hp", {constitution: 89}), 661);

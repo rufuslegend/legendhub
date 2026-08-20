@@ -201,6 +201,27 @@
 									ng-model-options="{debounce:250}" min="0" max="238327" step="1">
 							</div>
 						</div>
+						<div class="mt-4">
+							<h5>Era Abilities</h5>
+							<div class="row">
+								<div class="col-12 col-md-4" ng-repeat="era in eraAbilityEras track by era">
+									<h6>{{::era}}</h6>
+									<div class="input-group input-group-sm mb-2"
+										ng-repeat="ability in eraAbilities | filter:{era: era} track by ability.key">
+										<div class="input-group-prepend">
+											<label class="input-group-text" for="eraAbility-{{::ability.key}}">{{::ability.name}}</label>
+										</div>
+										<select class="custom-select custom-select-sm"
+											id="eraAbility-{{::ability.key}}"
+											ng-model="selectedList.eraAbilities[ability.key]"
+											ng-change="saveClientSideData()">
+											<option ng-value="0">None</option>
+											<option ng-repeat="rank in ability.ranks track by rank" ng-value="rank">Rank {{::rank}}</option>
+										</select>
+									</div>
+								</div>
+							</div>
+						</div>
 					</div>
 				</div>
 			</div>
