@@ -18,6 +18,10 @@ with version 2.6.0.
 - Kept column and filter choices comfortably dark in the Dark and Solarized Dark themes.
 - Grouped the five Glass colors into an expandable theme submenu that works with mouse, touch, and keyboard controls.
 
+### Fixed
+
+- Corrected the High Contrast Builder's equipment slots and Total rows so their text stays readable on bright backgrounds.
+
 ## [2.8.3] - 2026-08-18
 
 ### Fixed

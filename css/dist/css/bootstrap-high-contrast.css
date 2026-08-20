@@ -9376,6 +9376,12 @@ body {
   background-color: #101010;
 }
 
+body[ng-controller=builder] .bg-primary.text-white,
+body[ng-controller=builder] .bg-secondary.text-white,
+body[ng-controller=builder] .bg-danger.text-white {
+  color: #000 !important;
+}
+
 .btn {
   text-shadow: none;
   background-image: none;

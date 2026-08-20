@@ -176,6 +176,33 @@ test("High Contrast button interaction states retain AAA text contrast", functio
     assert.match(darkButton, /border-color:\s*#8a8a8a;/);
 });
 
+test("High Contrast builder bright utility surfaces use dark text", function() {
+    const css = fs.readFileSync(expandedPath, "utf8");
+    const surfaces = {
+        primary: "#ffe9b0",
+        secondary: "#b0b0b0",
+        danger: "#ff6e5e"
+    };
+
+    for (const [name, background] of Object.entries(surfaces)) {
+        const selector =
+            `body[ng-controller=builder] .bg-${name}.text-white`;
+        const rule = lastRuleContaining(css, selector);
+        const backgroundRule = lastRuleContaining(css, `.bg-${name} {`);
+        const compiledBackground = backgroundRule.match(
+            /background-color:\s*(#[0-9a-f]{3,6})\s*!important;/);
+
+        assert.match(rule, /color:\s*#000\s*!important;/,
+            `${name} builder surfaces must use black text`);
+        assert.ok(compiledBackground,
+            `${name} must emit a hex utility background`);
+        assert.equal(compiledBackground[1], background,
+            `${name} must keep its approved background`);
+        assert.ok(contrast("#000", compiledBackground[1]) >= 7,
+            `${name} builder surfaces must reach 7:1`);
+    }
+});
+
 test("High Contrast captions retain AAA text contrast", function() {
     const css = fs.readFileSync(expandedPath, "utf8");
 
