@@ -63,24 +63,29 @@ function assertFocusWidth(css, selector) {
         `${selector} must retain a 3.2px focus ring`);
 }
 
-test("Glass Blue has a standalone source and minification pipeline", function() {
+test("Glass Blue uses the shared Glass source and minification pipeline", function() {
     const entry = fs.readFileSync(path.join(
         sourceRoot, "bootstrap-glass-blue.scss"), "utf8");
     const packageJson = JSON.parse(fs.readFileSync(path.join(
         root, "css/package.json"), "utf8"));
 
-    assert.match(entry, /custom\/themes\/glass-blue-theme/);
-    assert.match(entry, /custom\/themes\/glass-blue-chrome/);
+    assert.match(entry, /custom\/themes\/glass-blue-palette/);
+    assert.match(entry, /custom\/themes\/glass-theme/);
+    assert.match(entry, /custom\/themes\/glass-chrome/);
     assert.match(packageJson.scripts["build:minify"],
         /bootstrap-glass-blue\.min\.css/);
 
+    const paletteIndex = entry.indexOf(
+        '@import "custom/themes/glass-blue-palette";');
     const variablesIndex = entry.indexOf(
-        '@import "custom/themes/glass-blue-theme";');
+        '@import "custom/themes/glass-theme";');
     const bootstrapIndex = entry.indexOf('@import "bootstrap/functions";');
     const sharedIndex = entry.indexOf('@import "custom/custom";');
     const chromeIndex = entry.indexOf(
-        '@import "custom/themes/glass-blue-chrome";');
+        '@import "custom/themes/glass-chrome";');
 
+    assert.ok(paletteIndex < variablesIndex,
+        "Glass palette must load before shared variables");
     assert.ok(variablesIndex < bootstrapIndex,
         "Glass variables must load before Bootstrap");
     assert.ok(bootstrapIndex < sharedIndex,
@@ -90,13 +95,16 @@ test("Glass Blue has a standalone source and minification pipeline", function() 
 });
 
 test("Glass Blue source defines its material contract and component coverage", function() {
+    const palette = fs.readFileSync(path.join(
+        sourceRoot, "custom/themes/_glass-blue-palette.scss"), "utf8");
     const variables = fs.readFileSync(path.join(
-        sourceRoot, "custom/themes/_glass-blue-theme.scss"), "utf8");
+        sourceRoot, "custom/themes/_glass-theme.scss"), "utf8");
     const chrome = fs.readFileSync(path.join(
-        sourceRoot, "custom/themes/_glass-blue-chrome.scss"), "utf8");
+        sourceRoot, "custom/themes/_glass-chrome.scss"), "utf8");
 
-    assert.match(variables, /\$glass-line: #3a6a99/);
-    assert.match(variables, /\$body-bg: #05070b/);
+    assert.match(palette, /\$glass-line: #3a6a99/);
+    assert.match(palette, /\$glass-backdrop: #05070b/);
+    assert.match(variables, /\$body-bg: \$glass-backdrop/);
     assert.match(variables, /Palatino/);
     assert.match(chrome, /--glass-header-gradient:/);
     assert.match(chrome, /\.breadcrumbNav\.bg-dark/);
@@ -112,7 +120,7 @@ test("Glass Blue source defines its material contract and component coverage", f
 
 test("Glass Blue preserves contextual and active menu states", function() {
     const chrome = fs.readFileSync(path.join(
-        sourceRoot, "custom/themes/_glass-blue-chrome.scss"), "utf8");
+        sourceRoot, "custom/themes/_glass-chrome.scss"), "utf8");
 
     assert.doesNotMatch(chrome,
         /\.list-group-item\s*\{\s*background-color:\s*\$glass-surface;/,
@@ -140,7 +148,7 @@ test("Glass Blue keeps pressed list actions readable", function() {
 
 test("Glass Blue draws explicit steel-blue navigation and panel rims", function() {
     const chrome = fs.readFileSync(path.join(
-        sourceRoot, "custom/themes/_glass-blue-chrome.scss"), "utf8");
+        sourceRoot, "custom/themes/_glass-chrome.scss"), "utf8");
 
     assert.match(chrome,
         /\.navbar,\s*\.jumbotron\s*\{\s*border:\s*1px solid \$glass-line;/);
@@ -150,7 +158,7 @@ test("Glass Blue draws explicit steel-blue navigation and panel rims", function(
 
 test("Glass Blue uses the dark tooltip material for body and arrows", function() {
     const variables = fs.readFileSync(path.join(
-        sourceRoot, "custom/themes/_glass-blue-theme.scss"), "utf8");
+        sourceRoot, "custom/themes/_glass-theme.scss"), "utf8");
     const expanded = fs.readFileSync(path.join(
         distRoot, "bootstrap-glass-blue.css"), "utf8");
     const tooltipStart = expanded.indexOf(".tooltip {");
@@ -167,17 +175,17 @@ test("Glass Blue uses the dark tooltip material for body and arrows", function()
 
 test("Glass Blue finishes and focuses the navbar toggler", function() {
     const chrome = fs.readFileSync(path.join(
-        sourceRoot, "custom/themes/_glass-blue-chrome.scss"), "utf8");
+        sourceRoot, "custom/themes/_glass-chrome.scss"), "utf8");
 
     assert.match(chrome,
         /\.navbar-toggler\s*\{[\s\S]*background-image:\s*var\(--glass-button-gradient\);[\s\S]*border:\s*1px solid \$glass-line;/);
     assert.match(chrome,
-        /\.navbar-toggler:focus\s*\{[\s\S]*border-color:\s*#58aaff;[\s\S]*outline:\s*0;/);
+        /\.navbar-toggler:focus\s*\{[\s\S]*border-color:\s*\$glass-accent-bright;[\s\S]*outline:\s*0;/);
 });
 
 test("Glass Blue reserves hover glow for enabled buttons", function() {
     const chrome = fs.readFileSync(path.join(
-        sourceRoot, "custom/themes/_glass-blue-chrome.scss"), "utf8");
+        sourceRoot, "custom/themes/_glass-chrome.scss"), "utf8");
 
     assert.doesNotMatch(chrome, /\.btn:hover\s*\{/);
     assert.match(chrome,

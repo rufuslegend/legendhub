@@ -8,12 +8,19 @@ const ejs = require("ejs");
 
 const root = path.join(__dirname, "../..");
 const templatePath = path.join(root, "www/src/views/shared/filtersModal.ejs");
-const themes = ["light", "dark", "solarized-dark", "glass-blue"];
+const themes = [
+    "light", "dark", "solarized-dark", "glass-blue", "glass-emerald",
+    "glass-ruby", "glass-amethyst", "glass-amber"
+];
 const pickerSurfaces = {
     light: {modal: "#f8f9fa", category: "#fff"},
     dark: {modal: "#212529", category: "#343a40"},
     "solarized-dark": {modal: "#002b36", category: "#073642"},
-    "glass-blue": {modal: "#060b12", category: "#0a1522"}
+    "glass-blue": {modal: "#060b12", category: "#0a1522"},
+    "glass-emerald": {modal: "#06120b", category: "#0a2215"},
+    "glass-ruby": {modal: "#12060a", category: "#220a13"},
+    "glass-amethyst": {modal: "#0b0612", category: "#150a22"},
+    "glass-amber": {modal: "#120e06", category: "#221a0a"}
 };
 
 function stat(display, variable, type = "int") {
@@ -217,6 +224,38 @@ test("Glass Blue gives Filters choices the same dark material as Columns", funct
     assert.ok(rule, "missing dark Filters choice rule");
     assert.match(rule[1], /color:\s*#d7e5f2;/);
     assert.match(rule[1], /background-color:\s*#02050a;/);
+});
+
+test("every Glass hue keeps Columns and Filters choices dark in every state", function() {
+    const glassSurfaces = {
+        "glass-blue": {normal: "#02050a", active: "#18314a"},
+        "glass-emerald": {normal: "#020a05", active: "#184a31"},
+        "glass-ruby": {normal: "#0a0205", active: "#4a1827"},
+        "glass-amethyst": {normal: "#05020a", active: "#31184a"},
+        "glass-amber": {normal: "#0a0602", active: "#4a3a18"}
+    };
+
+    for (const [theme, surfaces] of Object.entries(glassSurfaces)) {
+        const css = fs.readFileSync(path.join(
+            root, `css/dist/css/bootstrap-${theme}.css`), "utf8");
+
+        for (const [modalLabel, pickerClass] of [
+            ["columnsModalLabel", "columns-picker-option"],
+            ["filtersModalLabel", "filters-picker-option"]
+        ]) {
+            const selector = `.modal[aria-labelledby=${modalLabel}] .${pickerClass}`;
+            assert.match(getRuleBodyStartingWith(css, selector),
+                new RegExp(`background-color:\\s*${surfaces.normal};`));
+            for (const state of ["hover", "focus"]) {
+                assert.match(getRuleBodyStartingWith(css,
+                    `${selector}.list-group-item-action:${state}`),
+                /background-color:\s*var\(--glass-wash\);/);
+            }
+            assert.match(getRuleBodyStartingWith(css,
+                `${selector}.list-group-item-action:active`),
+                new RegExp(`background-color:\\s*${surfaces.active};`));
+        }
+    }
 });
 
 test("Dark themes keep Columns and Filters choices dark in every state", function() {

@@ -8,12 +8,19 @@ const ejs = require("ejs");
 
 const root = path.join(__dirname, "../..");
 const templatePath = path.join(root, "www/src/views/shared/columnsModal.ejs");
-const themes = ["light", "dark", "solarized-dark", "glass-blue"];
+const themes = [
+    "light", "dark", "solarized-dark", "glass-blue", "glass-emerald",
+    "glass-ruby", "glass-amethyst", "glass-amber"
+];
 const pickerSurfaces = {
     light: {modal: "#f8f9fa", category: "#fff"},
     dark: {modal: "#212529", category: "#343a40"},
     "solarized-dark": {modal: "#002b36", category: "#073642"},
-    "glass-blue": {modal: "#060b12", category: "#0a1522"}
+    "glass-blue": {modal: "#060b12", category: "#0a1522"},
+    "glass-emerald": {modal: "#06120b", category: "#0a2215"},
+    "glass-ruby": {modal: "#12060a", category: "#220a13"},
+    "glass-amethyst": {modal: "#0b0612", category: "#150a22"},
+    "glass-amber": {modal: "#120e06", category: "#221a0a"}
 };
 
 function category(name, short = name, display = `${name} Stat`) {
