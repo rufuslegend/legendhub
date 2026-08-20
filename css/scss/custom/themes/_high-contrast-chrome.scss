@@ -1,0 +1,150 @@
+:root {
+  --hc-bg: #{$body-bg};
+  --hc-fg: #{$body-color};
+  --hc-border: #{$border-color};
+  --hc-accent: #{$primary};
+  --hc-accent-bright: #{$link-hover-color};
+  --hc-muted: #{$text-muted};
+  --hc-red: #{$red};
+  --hc-green: #{$green};
+  --hc-yellow: #{$yellow};
+  --hc-blue: #{$blue};
+  --hc-magenta: #{$pink};
+  --hc-cyan: #{$cyan};
+}
+
+body {
+  background-image: none;
+}
+
+.navbar.bg-dark,
+.breadcrumbNav.bg-dark,
+.footer.bg-dark {
+  background-color: $black !important;
+}
+
+.navbar,
+.breadcrumbNav,
+.card,
+.card-header,
+.jumbotron,
+.dropdown-menu,
+.modal-content,
+.modal-header,
+.popover,
+.popover-header,
+.list-group,
+.categoryListContainer {
+  text-shadow: none;
+  background-color: $black;
+  background-image: none;
+  border-color: $border-color;
+  box-shadow: none;
+}
+
+.card-header,
+.modal-header,
+.popover-header,
+.table thead th,
+.categoryListContainer h2 {
+  background-color: $gray-700;
+}
+
+.btn {
+  text-shadow: none;
+  background-image: none;
+  box-shadow: none;
+}
+
+/* stylelint-disable selector-not-notation */
+@each $color, $value in $theme-colors {
+  @if $color != "dark" {
+    .btn-#{$color}:hover,
+    .btn-#{$color}:not(:disabled):not(.disabled):active,
+    .btn-#{$color}:not(:disabled):not(.disabled).active,
+    .show > .btn-#{$color}.dropdown-toggle {
+      color: $black;
+      background-color: $value;
+      border-color: $value;
+    }
+  }
+}
+
+.btn-dark,
+.btn-outline-dark {
+  color: $white;
+  border-color: $border-color;
+}
+
+.btn-dark:hover,
+.btn-dark:not(:disabled):not(.disabled):active,
+.btn-dark:not(:disabled):not(.disabled).active,
+.show > .btn-dark.dropdown-toggle,
+.btn-outline-dark:hover,
+.btn-outline-dark:not(:disabled):not(.disabled):active,
+.btn-outline-dark:not(:disabled):not(.disabled).active,
+.show > .btn-outline-dark.dropdown-toggle {
+  color: $white;
+  background-color: $gray-700;
+  border-color: $border-color;
+}
+/* stylelint-enable selector-not-notation */
+
+.alert-primary,
+.alert-secondary,
+.alert-success,
+.alert-info,
+.alert-warning,
+.alert-danger,
+.alert-light,
+.alert-dark {
+  color: $body-color;
+  background-color: $black;
+  border-color: $border-color;
+}
+
+.close {
+  opacity: 1;
+}
+
+/* stylelint-disable selector-max-attribute, selector-max-type */
+:is(
+  button,
+  input,
+  select,
+  textarea,
+  a,
+  [role="button"],
+  [role="radio"],
+  [role="tab"]
+):focus-visible {
+  outline: 2px solid $link-hover-color;
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+.custom-control-input:focus-visible ~ .custom-control-label::before {
+  outline: 2px solid $link-hover-color;
+  outline-offset: 2px;
+  box-shadow: none;
+}
+/* stylelint-enable selector-max-attribute, selector-max-type */
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: $black;
+}
+
+::-webkit-scrollbar-thumb {
+  background: $gray-300;
+  border: 2px solid $black;
+  border-radius: 6px;
+}
+
+* {
+  scrollbar-color: $gray-300 $black;
+}

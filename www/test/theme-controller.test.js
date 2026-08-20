@@ -92,7 +92,7 @@ test("theme choices separate the Glass family from standard themes", function() 
         "Glass Amber"
     ]);
     assert.deepEqual(Array.from(scope.standardThemes), [
-        "Light", "Dark", "Solarized Dark"
+        "Light", "Dark", "Solarized Dark", "High Contrast"
     ]);
     assert.equal(scope.glassThemeMenuOpen, false);
 });
@@ -122,6 +122,7 @@ test("theme choices apply immediately while persistence remains consent-gated", 
     assert.equal(temporary.cookieWrites.length, 0);
 
     for (const [theme, slug] of [
+        ["High Contrast", "high-contrast"],
         ["Glass Blue", "glass-blue"],
         ["Glass Emerald", "glass-emerald"],
         ["Glass Ruby", "glass-ruby"],

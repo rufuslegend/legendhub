@@ -9,6 +9,7 @@ with version 2.6.0.
 
 - **Era Abilities:** Builder characters can now record ranks for the eight era abilities that affect calculated stats. Their armor class, resource, combat, regeneration, spell, and attribute-cap bonuses are applied automatically instead of requiring faux objects.
 - Added Emerald, Ruby, Amethyst, and Amber Glass themes alongside the default Glass Blue theme.
+- Added a High Contrast theme with black surfaces, bright text, clear borders, and gold keyboard-focus rings.
 
 ### Changed
 

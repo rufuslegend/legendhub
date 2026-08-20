@@ -39,7 +39,7 @@ test("Glass Blue is the default while saved themes remain unchanged", async func
     assert.match(defaultHtml,
         /<meta property="theme-color" content="#0d1f30" \/>/);
 
-    for (const theme of ["light", "dark", "solarized-dark"]) {
+    for (const theme of ["light", "dark", "solarized-dark", "high-contrast"]) {
         const html = await renderHome({theme});
         assert.match(html, new RegExp(
             `href="/css/bootstrap-${theme}\\.min\\.css\\?v=test"`));
@@ -53,7 +53,7 @@ test("theme chooser exposes the Glass family and preserves standard choices", fu
     assert.match(source,
         /\$scope\.glassThemes = \['Glass Blue', 'Glass Emerald', 'Glass Ruby', 'Glass Amethyst', 'Glass Amber'\]/);
     assert.match(source,
-        /\$scope\.standardThemes = \['Light', 'Dark', 'Solarized Dark'\]/);
+        /\$scope\.standardThemes = \['Light', 'Dark', 'Solarized Dark', 'High Contrast'\]/);
     assert.match(source, /toLowerCase\(\)\.replace\(\/\\s\/g, '-'\)/);
 });
 
