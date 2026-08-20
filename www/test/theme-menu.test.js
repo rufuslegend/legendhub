@@ -39,6 +39,8 @@ function renderClientHeader() {
 }
 
 function assertGlassSubmenu(markup) {
+    assert.match(markup,
+        /<button[^>]*id="themeDropdown"[^>]*aria-label="Choose theme"[^>]*>/);
     assert.match(markup, /<button[^>]*class="[^"]*dropdown-item[^"]*"[^>]*>/);
     assert.match(markup, /ng-click="toggleGlassThemeMenu\(\$event\)"/);
     assert.match(markup,
@@ -48,6 +50,8 @@ function assertGlassSubmenu(markup) {
         /ng-class="glassThemeMenuOpen \? 'fa-caret-down' : 'fa-caret-right'"/);
     assert.match(markup, /id="glassThemeChoices"/);
     assert.match(markup, /ng-show="glassThemeMenuOpen"/);
+    assert.match(markup, /role="group"/);
+    assert.match(markup, /aria-label="Glass themes"/);
     assert.match(markup, /ng-repeat="theme in glassThemes"/);
     assert.match(markup, /ng-repeat="theme in standardThemes"/);
 }
