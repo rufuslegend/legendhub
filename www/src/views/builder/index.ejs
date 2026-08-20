@@ -8,6 +8,15 @@
 			white-space: pre;
 			max-width: none;
 		}
+		.era-abilities-table {
+			table-layout: fixed;
+		}
+		.era-ability-key-column {
+			width: 70%;
+		}
+		.era-ability-value-column {
+			width: 30%;
+		}
 	</style>
 </head>
 <body ng-app="legendwiki-app" ng-controller="builder">
@@ -15,7 +24,7 @@
 	<div class="container-fluid">
 		<div class="row" ng-cloak>
 			<div class="col-lg-6 col-12 mb-4">
-				<div class="card border-primary h-100">
+				<div class="card border-primary">
 					<div class="card-header py-2">
 						<div class="row  align-items-center justify-content-between">
 							<span class="col-auto h4 mb-0">Character</span><span class="col-auto h6 mb-0" ng-cloak>{{displayClientSideDataSize()}}</span>
@@ -112,113 +121,143 @@
 							</div>
 							<p ng-show="baseStatsForm.strInput.$error.total" class="text-danger">Base stats should add up to either 198 or 244.</p>
 						</form>
-						<form name="ksmStatsForm">
-							<p class="h5 mt-3 mb-0">KSM Swap</h5>
-							<div class="row mb-3">
-								<div class="col-4 col-sm-2 text-center">
-									<label class="col-form-label col-form-label-sm" for="ksmStrInput">Str</label>
-									<input type="number" id="ksmStrInput" name="ksmStrInput" class="form-control form-control-sm" ng-model="selectedList.ksmStats.strength" ng-change="onStatChanged()" ng-model-options="{debounce:250}" max="3" min="-3">
-								</div>
-								<div class="col-4 col-sm-2 text-center">
-									<label class="col-form-label col-form-label-sm" for="ksmMinInput">Min</label>
-									<input type="number" id="ksmMinInput" class="form-control form-control-sm" ng-model="selectedList.ksmStats.mind" ng-change="onStatChanged()" ng-model-options="{debounce:250}">
-								</div>
-								<div class="col-4 col-sm-2 text-center">
-									<label class="col-form-label col-form-label-sm" for="ksmDexInput">Dex</label>
-									<input type="number" id="ksmDexInput" class="form-control form-control-sm" ng-model="selectedList.ksmStats.dexterity" ng-change="onStatChanged()" ng-model-options="{debounce:250}">
-								</div>
-								<div class="col-4 col-sm-2 text-center">
-									<label class="col-form-label col-form-label-sm" for="ksmConInput">Con</label>
-									<input type="number" id="ksmConInput" class="form-control form-control-sm" ng-model="selectedList.ksmStats.constitution" ng-change="onStatChanged()" ng-model-options="{debounce:250}">
-								</div>
-								<div class="col-4 col-sm-2 text-center">
-									<label class="col-form-label col-form-label-sm" for="ksmPerInput">Per</label>
-									<input type="number" id="ksmPerInput" class="form-control form-control-sm" ng-model="selectedList.ksmStats.perception" ng-change="onStatChanged()" ng-model-options="{debounce:250}">
-								</div>
-								<div class="col-4 col-sm-2 text-center">
-									<label class="col-form-label col-form-label-sm" for="ksmSpiInput">Spi</label>
-									<input type="number" id="ksmSpiInput" class="form-control form-control-sm" ng-model="selectedList.ksmStats.spirit" ng-change="onStatChanged()" ng-model-options="{debounce:250}">
-								</div>
-							</div>
-							<p ng-show="ksmStatsForm.ksmStrInput.$error.balanced" class="text-danger">Total KSM stats must equal zero.</p>
-							<p ng-show="ksmStatsForm.ksmStrInput.$error.max" class="text-danger">You can only swap stats a maximum of three times.</p>
-						</form>
-						<div class="row">
-							<div class="input-group input-group-sm col-8 col-sm-4 mb-3 mb-sm-0">
-								<div class="input-group-prepend">
-									<label class="input-group-text" for="longhouseSelect">Longhouse</label>
-								</div>
-								<select class="custom-select custom-select-sm" id="longhouseSelect" ng-model="selectedList.baseStats.longhouse" ng-change="saveClientSideData()" ng-model-options="{debounce:250}" ng-disabled="!showStatQuests()">
-									<option ng-value="-1">-</option>
-									<option ng-repeat="house in longhouseList track by $index" ng-value="$index">{{::house}}</option>
-								</select>
-							</div>
-							<div class="input-group input-group-sm col-8 col-sm-4 mb-3 mb-sm-0">
-								<div class="input-group-prepend">
-									<label class="input-group-text" for="amuletSelect">Amulet</label>
-								</div>
-								<select class="custom-select custom-select-sm" id="amuletSelect" ng-model="selectedList.baseStats.amulet" ng-change="saveClientSideData()" ng-model-options="{debounce:250}" ng-disabled="!showStatQuests()">
-									<option ng-value="-1">-</option>
-									<option ng-repeat="amulet in amuletList track by $index" ng-value="$index">{{::amulet}}</option>
-								</select>
-							</div>
-							<div class="input-group input-group-sm col-8 col-sm-4 mb-3 mb-sm-0">
-								<div class="input-group-prepend">
-									<label class="input-group-text" for="hazelnutSelect">Hazelnut</label>
-								</div>
-								<select class="custom-select custom-select-sm" id="hazelnutSelect" ng-model="selectedList.baseStats.hazelnut" ng-change="saveClientSideData()" ng-model-options="{debounce:250}" ng-disabled="!showStatQuests()">
-									<option ng-value="-1">-</option>
-									<option ng-repeat="hazelnut in hazelnutList track by $index" ng-value="$index">{{::hazelnut}}</option>
-								</select>
-							</div>
-						</div>
-						<div class="row mt-3">
-							<div class="input-group input-group-sm col-8 col-sm-4 mb-3 mb-sm-0">
-								<div class="input-group-prepend">
-									<label class="input-group-text" for="questHpInput">Quest HP</label>
-								</div>
-								<input type="number" id="questHpInput" class="form-control form-control-sm"
-									ng-model="selectedList.baseStats.quest_hp"
-									ng-change="saveClientSideData()"
-									ng-model-options="{debounce:250}" min="0" max="238327" step="1">
-							</div>
-							<div class="input-group input-group-sm col-8 col-sm-4 mb-3 mb-sm-0">
-								<div class="input-group-prepend">
-									<label class="input-group-text" for="questManaInput">Quest Mana</label>
-								</div>
-								<input type="number" id="questManaInput" class="form-control form-control-sm"
-									ng-model="selectedList.baseStats.quest_mana"
-									ng-change="saveClientSideData()"
-									ng-model-options="{debounce:250}" min="0" max="238327" step="1">
-							</div>
-							<div class="input-group input-group-sm col-8 col-sm-4">
-								<div class="input-group-prepend">
-									<label class="input-group-text" for="questMoveInput">Quest Mv</label>
-								</div>
-								<input type="number" id="questMoveInput" class="form-control form-control-sm"
-									ng-model="selectedList.baseStats.quest_move"
-									ng-change="saveClientSideData()"
-									ng-model-options="{debounce:250}" min="0" max="238327" step="1">
-							</div>
-						</div>
-						<div class="mt-4">
-							<h5>Era Abilities</h5>
-							<div class="row">
-								<div class="col-12 col-md-4" ng-repeat="era in eraAbilityEras track by era">
-									<h6>{{::era}}</h6>
-									<div class="input-group input-group-sm mb-2"
-										ng-repeat="ability in eraAbilities | filter:{era: era} track by ability.key">
-										<div class="input-group-prepend">
-											<label class="input-group-text" for="eraAbility-{{::ability.key}}">{{::ability.name}}</label>
+						<div class="border-top mt-3 pt-2">
+							<h5 class="mb-0">
+								<button class="btn btn-link btn-block h5 text-left px-0 py-1 collapsed" type="button"
+									data-toggle="collapse" data-target="#ksmQuestMods"
+									aria-expanded="false" aria-controls="ksmQuestMods">
+									<i class="fas fa-chevron-down mr-2" aria-hidden="true"></i>KSM Swap/Quest Mods
+								</button>
+							</h5>
+							<div class="collapse" id="ksmQuestMods">
+								<form name="ksmStatsForm">
+									<div class="row mb-3">
+										<div class="col-4 col-sm-2 text-center">
+											<label class="col-form-label col-form-label-sm" for="ksmStrInput">Str</label>
+											<input type="number" id="ksmStrInput" name="ksmStrInput" class="form-control form-control-sm" ng-model="selectedList.ksmStats.strength" ng-change="onStatChanged()" ng-model-options="{debounce:250}" max="3" min="-3">
 										</div>
-										<select class="custom-select custom-select-sm"
-											id="eraAbility-{{::ability.key}}"
-											ng-model="selectedList.eraAbilities[ability.key]"
-											ng-change="saveClientSideData()">
-											<option ng-value="0">None</option>
-											<option ng-repeat="rank in ability.ranks track by rank" ng-value="rank">Rank {{::rank}}</option>
+										<div class="col-4 col-sm-2 text-center">
+											<label class="col-form-label col-form-label-sm" for="ksmMinInput">Min</label>
+											<input type="number" id="ksmMinInput" class="form-control form-control-sm" ng-model="selectedList.ksmStats.mind" ng-change="onStatChanged()" ng-model-options="{debounce:250}">
+										</div>
+										<div class="col-4 col-sm-2 text-center">
+											<label class="col-form-label col-form-label-sm" for="ksmDexInput">Dex</label>
+											<input type="number" id="ksmDexInput" class="form-control form-control-sm" ng-model="selectedList.ksmStats.dexterity" ng-change="onStatChanged()" ng-model-options="{debounce:250}">
+										</div>
+										<div class="col-4 col-sm-2 text-center">
+											<label class="col-form-label col-form-label-sm" for="ksmConInput">Con</label>
+											<input type="number" id="ksmConInput" class="form-control form-control-sm" ng-model="selectedList.ksmStats.constitution" ng-change="onStatChanged()" ng-model-options="{debounce:250}">
+										</div>
+										<div class="col-4 col-sm-2 text-center">
+											<label class="col-form-label col-form-label-sm" for="ksmPerInput">Per</label>
+											<input type="number" id="ksmPerInput" class="form-control form-control-sm" ng-model="selectedList.ksmStats.perception" ng-change="onStatChanged()" ng-model-options="{debounce:250}">
+										</div>
+										<div class="col-4 col-sm-2 text-center">
+											<label class="col-form-label col-form-label-sm" for="ksmSpiInput">Spi</label>
+											<input type="number" id="ksmSpiInput" class="form-control form-control-sm" ng-model="selectedList.ksmStats.spirit" ng-change="onStatChanged()" ng-model-options="{debounce:250}">
+										</div>
+									</div>
+									<p ng-show="ksmStatsForm.ksmStrInput.$error.balanced" class="text-danger">Total KSM stats must equal zero.</p>
+									<p ng-show="ksmStatsForm.ksmStrInput.$error.max" class="text-danger">You can only swap stats a maximum of three times.</p>
+								</form>
+								<div class="row">
+									<div class="input-group input-group-sm col-8 col-sm-4 mb-3 mb-sm-0">
+										<div class="input-group-prepend">
+											<label class="input-group-text" for="longhouseSelect">Longhouse</label>
+										</div>
+										<select class="custom-select custom-select-sm" id="longhouseSelect" ng-model="selectedList.baseStats.longhouse" ng-change="saveClientSideData()" ng-model-options="{debounce:250}" ng-disabled="!showStatQuests()">
+											<option ng-value="-1">-</option>
+											<option ng-repeat="house in longhouseList track by $index" ng-value="$index">{{::house}}</option>
 										</select>
 									</div>
+									<div class="input-group input-group-sm col-8 col-sm-4 mb-3 mb-sm-0">
+										<div class="input-group-prepend">
+											<label class="input-group-text" for="amuletSelect">Amulet</label>
+										</div>
+										<select class="custom-select custom-select-sm" id="amuletSelect" ng-model="selectedList.baseStats.amulet" ng-change="saveClientSideData()" ng-model-options="{debounce:250}" ng-disabled="!showStatQuests()">
+											<option ng-value="-1">-</option>
+											<option ng-repeat="amulet in amuletList track by $index" ng-value="$index">{{::amulet}}</option>
+										</select>
+									</div>
+									<div class="input-group input-group-sm col-8 col-sm-4 mb-3 mb-sm-0">
+										<div class="input-group-prepend">
+											<label class="input-group-text" for="hazelnutSelect">Hazelnut</label>
+										</div>
+										<select class="custom-select custom-select-sm" id="hazelnutSelect" ng-model="selectedList.baseStats.hazelnut" ng-change="saveClientSideData()" ng-model-options="{debounce:250}" ng-disabled="!showStatQuests()">
+											<option ng-value="-1">-</option>
+											<option ng-repeat="hazelnut in hazelnutList track by $index" ng-value="$index">{{::hazelnut}}</option>
+										</select>
+									</div>
+								</div>
+								<div class="row mt-3">
+									<div class="input-group input-group-sm col-8 col-sm-4 mb-3 mb-sm-0">
+										<div class="input-group-prepend">
+											<label class="input-group-text" for="questHpInput">Quest HP</label>
+										</div>
+										<input type="number" id="questHpInput" class="form-control form-control-sm"
+											ng-model="selectedList.baseStats.quest_hp"
+											ng-change="saveClientSideData()"
+											ng-model-options="{debounce:250}" min="0" max="238327" step="1">
+									</div>
+									<div class="input-group input-group-sm col-8 col-sm-4 mb-3 mb-sm-0">
+										<div class="input-group-prepend">
+											<label class="input-group-text" for="questManaInput">Quest Mana</label>
+										</div>
+										<input type="number" id="questManaInput" class="form-control form-control-sm"
+											ng-model="selectedList.baseStats.quest_mana"
+											ng-change="saveClientSideData()"
+											ng-model-options="{debounce:250}" min="0" max="238327" step="1">
+									</div>
+									<div class="input-group input-group-sm col-8 col-sm-4">
+										<div class="input-group-prepend">
+											<label class="input-group-text" for="questMoveInput">Quest Mv</label>
+										</div>
+										<input type="number" id="questMoveInput" class="form-control form-control-sm"
+											ng-model="selectedList.baseStats.quest_move"
+											ng-change="saveClientSideData()"
+											ng-model-options="{debounce:250}" min="0" max="238327" step="1">
+									</div>
+								</div>
+							</div>
+						</div>
+						<div class="border-top mt-3 pt-2">
+							<h5 class="mb-0">
+								<button class="btn btn-link btn-block h5 text-left px-0 py-1 collapsed" type="button"
+									data-toggle="collapse" data-target="#eraAbilities"
+									aria-expanded="false" aria-controls="eraAbilities">
+									<i class="fas fa-chevron-down mr-2" aria-hidden="true"></i>Era Abilities
+								</button>
+							</h5>
+							<div class="collapse" id="eraAbilities">
+								<div class="table-responsive">
+									<table class="table table-sm table-bordered era-abilities-table mb-0">
+										<colgroup>
+											<col class="era-ability-key-column">
+											<col class="era-ability-value-column">
+										</colgroup>
+										<thead class="sr-only">
+											<tr><th scope="col">Ability</th><th scope="col">Rank</th></tr>
+										</thead>
+										<tbody ng-repeat="era in eraAbilityEras track by era">
+											<tr class="table-active">
+												<th scope="rowgroup" colspan="2">{{::era}}</th>
+											</tr>
+											<tr ng-repeat="ability in eraAbilities | filter:{era: era} track by ability.key">
+												<th scope="row" class="align-middle font-weight-normal py-1">
+													<label class="mb-0" for="eraAbility-{{::ability.key}}">{{::ability.name}}</label>
+												</th>
+												<td class="py-1">
+													<select class="custom-select custom-select-sm w-100"
+														id="eraAbility-{{::ability.key}}"
+														ng-model="selectedList.eraAbilities[ability.key]"
+														ng-change="saveClientSideData()">
+														<option ng-value="0">None</option>
+														<option ng-repeat="rank in ability.ranks track by rank" ng-value="rank">Rank {{::rank}}</option>
+													</select>
+												</td>
+											</tr>
+										</tbody>
+									</table>
 								</div>
 							</div>
 						</div>

@@ -3,8 +3,26 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
+const ejs = require("ejs");
 
 const gameStats = require("../src/public/js/services/game-stats");
+
+function renderBuilder() {
+    return ejs.renderFile(path.join(
+        __dirname,
+        "../src/views/builder/index.ejs"
+    ), {
+        cookies: {},
+        title: "Builder",
+        url: {path: "/builder/"},
+        user: null,
+        version: "test",
+        vm: {
+            itemStatCategories: [],
+            selectedColumns: []
+        }
+    });
+}
 
 function createEncoder() {
     const digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -637,6 +655,68 @@ test("builder renders metadata-driven era ability rank selectors", function() {
         template,
         /ng-repeat="rank in ability\.ranks track by rank" ng-value="rank">Rank \{\{::rank\}\}/
     );
+});
+
+test("builder Character card stays content-height beside Stats", async function() {
+    const html = await renderBuilder();
+    const headingIndex = html.indexOf(">Character</span>");
+    const cardStart = html.lastIndexOf('<div class="card border-primary', headingIndex);
+    const cardTag = html.slice(cardStart, html.indexOf(">", cardStart) + 1);
+
+    assert.ok(headingIndex >= 0, "missing Character heading");
+    assert.ok(cardStart >= 0, "missing Character card");
+    assert.doesNotMatch(cardTag, /\bh-100\b/);
+});
+
+test("builder keeps KSM quest mods and era abilities in collapsed sections", async function() {
+    const html = await renderBuilder();
+    const ksmToggle = html.match(
+        /<button[^>]*data-target="#ksmQuestMods"[^>]*>[\s\S]*?KSM Swap\/Quest Mods[\s\S]*?<\/button>/
+    );
+    const eraToggle = html.match(
+        /<button[^>]*data-target="#eraAbilities"[^>]*>[\s\S]*?Era Abilities[\s\S]*?<\/button>/
+    );
+
+    assert.ok(ksmToggle, "missing KSM Swap/Quest Mods collapse toggle");
+    assert.match(ksmToggle[0], /class="[^"]*\bh5\b[^"]*"/);
+    assert.match(ksmToggle[0], /data-toggle="collapse"/);
+    assert.match(ksmToggle[0], /aria-controls="ksmQuestMods"/);
+    assert.match(ksmToggle[0], /aria-expanded="false"/);
+    assert.ok(eraToggle, "missing Era Abilities collapse toggle");
+    assert.match(eraToggle[0], /class="[^"]*\bh5\b[^"]*"/);
+    assert.match(eraToggle[0], /data-toggle="collapse"/);
+    assert.match(eraToggle[0], /aria-controls="eraAbilities"/);
+    assert.match(eraToggle[0], /aria-expanded="false"/);
+    assert.doesNotMatch(ksmToggle[0], /data-parent=/);
+    assert.doesNotMatch(eraToggle[0], /data-parent=/);
+
+    const ksmPanel = html.indexOf('<div class="collapse" id="ksmQuestMods">');
+    const eraPanel = html.indexOf('<div class="collapse" id="eraAbilities">');
+    assert.ok(ksmPanel >= 0, "KSM panel must start collapsed");
+    assert.ok(eraPanel > ksmPanel, "Era Abilities panel must start collapsed");
+    assert.ok(html.indexOf('id="ksmStrInput"') > ksmPanel);
+    assert.ok(html.indexOf('id="questMoveInput"') > ksmPanel);
+    assert.ok(html.indexOf('id="questMoveInput"') < eraPanel);
+});
+
+test("builder aligns every era ability key and rank in one fixed table", async function() {
+    const html = await renderBuilder();
+    const tableStart = html.indexOf('<table class="table table-sm table-bordered era-abilities-table');
+    const tableEnd = html.indexOf("</table>", tableStart);
+    const table = html.slice(tableStart, tableEnd + "</table>".length);
+
+    assert.ok(tableStart >= 0, "missing Era Abilities table");
+    assert.match(table, /<col class="era-ability-key-column">/);
+    assert.match(table, /<col class="era-ability-value-column">/);
+    assert.match(table, /ng-repeat="era in eraAbilityEras track by era"/);
+    assert.match(
+        table,
+        /ng-repeat="ability in eraAbilities \| filter:\{era: era\} track by ability\.key"/
+    );
+    assert.match(table, /class="custom-select custom-select-sm w-100"/);
+    assert.match(html, /\.era-abilities-table\s*\{[^}]*table-layout:\s*fixed/);
+    assert.match(html, /\.era-ability-key-column\s*\{[^}]*width:\s*70%/);
+    assert.match(html, /\.era-ability-value-column\s*\{[^}]*width:\s*30%/);
 });
 
 test("builder version 6 round-trips quest resources and era abilities without shifting items", function() {
