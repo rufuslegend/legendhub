@@ -47,11 +47,13 @@ test("Glass Blue is the default while saved themes remain unchanged", async func
     }
 });
 
-test("theme chooser exposes Glass Blue and preserves the existing choices", function() {
+test("theme chooser exposes the Glass family and preserves standard choices", function() {
     const source = fs.readFileSync(path.join(
         __dirname, "../src/public/js/apps/legendwiki-app.js"), "utf8");
     assert.match(source,
-        /\$scope\.themes = \['Glass Blue', 'Light', 'Dark', 'Solarized Dark'\]/);
+        /\$scope\.glassThemes = \['Glass Blue', 'Glass Emerald', 'Glass Ruby', 'Glass Amethyst', 'Glass Amber'\]/);
+    assert.match(source,
+        /\$scope\.standardThemes = \['Light', 'Dark', 'Solarized Dark'\]/);
     assert.match(source, /toLowerCase\(\)\.replace\(\/\\s\/g, '-'\)/);
 });
 

@@ -56,7 +56,15 @@ function templates($templateCache) {
                     '<i class="fas fa-palette"></i>' +
                 '</a>' +
                 '<div class="dropdown-menu dropdown-menu-right" aria-labelledby="themeDropdown">' +
-                   '<a ng-repeat="theme in themes" class="dropdown-item" href="" ng-click="setTheme(theme)">{{::theme}}</a>' +
+                    '<button type="button" class="dropdown-item d-flex align-items-center" ng-click="toggleGlassThemeMenu($event)" ng-attr-aria-expanded="{{glassThemeMenuOpen}}" aria-controls="glassThemeChoices">' +
+                        '<span>Glass</span>' +
+                        '<i class="fas ml-auto" ng-class="glassThemeMenuOpen ? \'fa-caret-down\' : \'fa-caret-right\'" aria-hidden="true"></i>' +
+                    '</button>' +
+                    '<div id="glassThemeChoices" ng-show="glassThemeMenuOpen">' +
+                        '<a ng-repeat="theme in glassThemes" class="dropdown-item pl-4" href="" ng-click="setTheme(theme)">{{::theme.replace(\'Glass \', \'\')}}</a>' +
+                    '</div>' +
+                    '<div class="dropdown-divider"></div>' +
+                    '<a ng-repeat="theme in standardThemes" class="dropdown-item" href="" ng-click="setTheme(theme)">{{::theme}}</a>' +
                 '</div>' +
 				//'<a class="nav-link" href="" ng-click="toggleTheme()"><i ng-class="getThemeClass()"></i></a>' +
 			'</li>' +
@@ -448,7 +456,9 @@ HeaderController.$inject = ["$scope", "$http", "$cookies", "$compile", "breadcru
 
 function HeaderController($scope, $http, $cookies, $compile, breadcrumb) {
 	$scope.initialize = function() {
-        $scope.themes = ['Glass Blue', 'Light', 'Dark', 'Solarized Dark'];
+        $scope.glassThemes = ['Glass Blue', 'Glass Emerald', 'Glass Ruby', 'Glass Amethyst', 'Glass Amber'];
+        $scope.standardThemes = ['Light', 'Dark', 'Solarized Dark'];
+        $scope.glassThemeMenuOpen = false;
 		$scope.bcFactory = breadcrumb;
 		$scope.returnUrl = window.location.pathname + window.location.search;
 
@@ -470,6 +480,15 @@ function HeaderController($scope, $http, $cookies, $compile, breadcrumb) {
         cookieDate.setTime(2144232732000);
         $cookies.put("tzoffset", offset, {path: "/", samesite: "lax", secure: true, expires: cookieDate});
 	};
+
+    $scope.toggleGlassThemeMenu = function(event) {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        $scope.glassThemeMenuOpen = !$scope.glassThemeMenuOpen;
+    };
 
 	$scope.setTheme = function(theme) {
         theme = theme.toLowerCase().replace(/\s/g, '-');
