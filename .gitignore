@@ -17,6 +17,8 @@ python/**/*$py.class
 
 # NPM
 node_modules/
+www/playwright-report/
+www/test-results/
 
 # mysql
 mysql/backup.sql

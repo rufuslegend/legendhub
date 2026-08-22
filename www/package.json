@@ -7,6 +7,7 @@
         "test:characterization": "node --test test/characterization.test.js",
         "test:migrations:integration": "MYSQL_MIGRATION_INTEGRATION=1 node --test test/migrations.integration.test.js",
         "test:smoke": "node --test test/smoke.test.js",
+        "test:a11y": "playwright test",
         "start": "node src/app.js"
     },
     "engines": {
@@ -47,5 +48,9 @@
         "mysql": "^2.18.1",
         "ruru": "^2.0.1",
         "sync-rpc": "^1.3.7"
+    },
+    "devDependencies": {
+        "@axe-core/playwright": "^4.13.0",
+        "@playwright/test": "^1.62.1"
     }
 }

@@ -10,9 +10,11 @@
 		<div class="row h-100 align-items-center">
 			<div id="accordion" class="col-12 col-sm-8 col-md-6 col-lg-4 mx-auto">
 				<form action="/login.html" method="POST" class="card" name="login">
-                    <div class="card-header" id="loginHeading" style="cursor: pointer;" data-toggle="collapse" data-target=".multi-collapse" aria-expanded="<%-!vm.register_error%>"
-					    aria-controls="loginCollapse registerCollapse">
-						<h3 class="text-center">Login</h3>
+                    <div class="card-header" id="loginHeading">
+						<h3 class="text-center mb-0">
+                            <button type="button" class="btn btn-link btn-block" data-toggle="collapse" data-target=".multi-collapse" aria-expanded="<%-!vm.register_error%>"
+                                aria-controls="loginCollapse registerCollapse">Login</button>
+                        </h3>
 					</div>
                     <div id="loginCollapse" class="collapse multi-collapse<%-vm.register_error?'':' show'%>" aria-labelledby="loginHeading" data-parent="#accordion">
 						<div class="card-body">
@@ -20,14 +22,14 @@
 								<div class="input-group-prepend">
 									<label class="input-group-text" id="login_usernameLabel" for="login_username">Username</label>
 								</div>
-                                <input id="login_username" name="login_username" type="text" class="form-control" aria-describedby="login_usernameLabel" value="<%-vm.body.login_username%>" required autofocus>
+                                <input id="login_username" name="login_username" type="text" class="form-control" value="<%-vm.body.login_username%>" required autofocus>
 							</div>
 							<br />
 							<div class="input-group">
 								<div class="input-group-prepend">
-									<span class="input-group-text" id="login_passwordLabel" for="login_password">Password</span>
+									<label class="input-group-text" id="login_passwordLabel" for="login_password">Password</label>
 								</div>
-                                <input id="login_password" name="login_password" type="password" class="form-control" aria-describedby="login_passwordLabel" value="<%-vm.body.login_password%>" required>
+                                <input id="login_password" name="login_password" type="password" class="form-control" value="<%-vm.body.login_password%>" required>
 							</div>
                             <input name="returnUrl" type="hidden" value="<%=locals.url.query.returnUrl%>" />
                             <% if (vm.login_error) {%>
@@ -45,31 +47,33 @@
 					</div>
 				</form>
 				<form action="/login.html?returnUrl=<%=locals.url.query.returnUrl%>" method="POST" class="card" name="register">
-					<div class="card-header" id="registerHeading" style="cursor: pointer;" data-toggle="collapse" data-target=".multi-collapse"
-                                                                                                                  aria-expanded="<%-!!vm.register_error%>" aria-controls="loginCollapse registerCollapse">
-						<h3 class="text-center">Register</h3>
+					<div class="card-header" id="registerHeading">
+						<h3 class="text-center mb-0">
+                            <button type="button" class="btn btn-link btn-block" data-toggle="collapse" data-target=".multi-collapse"
+                                aria-expanded="<%-!!vm.register_error%>" aria-controls="loginCollapse registerCollapse">Register</button>
+                        </h3>
 					</div>
                     <div id="registerCollapse" class="collapse multi-collapse<%-vm.register_error?' show':''%>" aria-labelledby="registerHeading" data-parent="#accordion">
 						<div class="card-body">
 							<div class="input-group">
 								<div class="input-group-prepend">
-									<span class="input-group-text" id="register_usernameLabel" for="register_username">Username</span>
+									<label class="input-group-text" id="register_usernameLabel" for="register_username">Username</label>
 								</div>
-                                <input id="register_username" name="register_username" pattern="^[A-Za-z0-9]*$" type="text" class="form-control" aria-describedby="register_usernameLabel" value="<%-vm.body.register_username%>" required>
+                                <input id="register_username" name="register_username" pattern="^[A-Za-z0-9]*$" type="text" class="form-control" value="<%-vm.body.register_username%>" required>
 							</div>
 							<br />
 							<div class="input-group">
 								<div class="input-group-prepend">
-									<span class="input-group-text" id="register_passwordLabel" for="register_password">Password</span>
+									<label class="input-group-text" id="register_passwordLabel" for="register_password">Password</label>
 								</div>
-								<input id="register_password" name="register_password" type="password" class="form-control" aria-describedby="passwordLabel" required>
+								<input id="register_password" name="register_password" type="password" class="form-control" required>
 							</div>
 							<br />
 							<div class="input-group">
 								<div class="input-group-prepend">
-									<span class="input-group-text" id="register_confirmPasswordLabel" for="register_confirmPassword">Confirm</span>
+									<label class="input-group-text" id="register_confirmPasswordLabel" for="register_confirmPassword">Confirm</label>
 								</div>
-								<input id="register_confirmPassword" name="register_confirmPassword" type="password" class="form-control" aria-describedby="register_confirmPasswordLabel" required>
+								<input id="register_confirmPassword" name="register_confirmPassword" type="password" class="form-control" required>
 							</div>
                             <!-- TODO replace with ejs errors -->
                             <% if (vm.register_error) {%>
