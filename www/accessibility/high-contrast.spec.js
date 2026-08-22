@@ -268,7 +268,7 @@ test("Builder collapsible section supports keyboard access without detectable vi
     await page.keyboard.press("Enter");
 
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
-    await expect(page.locator("#ksmQuestMods")).toBeVisible();
+    await expect(page.locator("#ksmQuestMods")).toHaveClass(/(^|\s)show(\s|$)/);
     await expect(toggle).toBeFocused();
     await expectNoWcagViolations(page);
 
