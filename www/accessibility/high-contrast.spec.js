@@ -3,14 +3,21 @@
 const Module = require("node:module");
 const AxeBuilder = require("@axe-core/playwright").default;
 const { expect, test } = require("@playwright/test");
+const publicPageData = require("./support/public-page-data");
 
 const pages = [
     { heading: "Welcome to LegendHUB!", name: "home", path: "/" },
     { heading: "Login", name: "login", path: "/login.html" },
-    { heading: "Send Feedback", name: "feedback", path: "/feedback.html" }
+    { heading: "Send Feedback", name: "feedback", path: "/feedback.html" },
+    { name: "builder", path: "/builder/", title: "Builder | LegendHUB" },
+    { fixtureText: "Brass lantern", heading: "Items", name: "items", path: "/items/" },
+    { fixtureText: "Test sentry", heading: "Mobs", name: "mobs", path: "/mobs/" },
+    { fixtureText: "A representative quest", heading: "Quests", name: "quests", path: "/quests/" },
+    { fixtureText: "A representative wiki page", heading: "Wiki", name: "wiki", path: "/wiki/" }
 ];
 
 let baseUrl;
+let restorePostAsync;
 let server;
 
 function loadAppWithoutDatabaseMetadataQuery() {
@@ -37,6 +44,12 @@ function loadAppWithoutDatabaseMetadataQuery() {
 
 test.beforeAll(async function() {
     const app = loadAppWithoutDatabaseMetadataQuery();
+    const apiUtils = require("../src/routes/api/utils");
+    const originalPostAsync = apiUtils.postAsync;
+    apiUtils.postAsync = publicPageData;
+    restorePostAsync = function() {
+        apiUtils.postAsync = originalPostAsync;
+    };
     server = await new Promise(function(resolve) {
         const listeningServer = app.listen(0, "127.0.0.1", function() {
             resolve(listeningServer);
@@ -46,6 +59,9 @@ test.beforeAll(async function() {
 });
 
 test.afterAll(async function() {
+    if (restorePostAsync)
+        restorePostAsync();
+
     if (!server)
         return;
 
@@ -63,10 +79,19 @@ async function expectHighContrastPage(page, pageUnderTest) {
     const response = await page.goto(`${baseUrl}${pageUnderTest.path}`);
     expect(response).not.toBeNull();
     expect(response.status()).toBe(200);
-    await expect(page.getByRole("heading", {
-        name: pageUnderTest.heading,
-        exact: true
-    })).toBeVisible();
+    if (pageUnderTest.heading) {
+        await expect(page.getByRole("heading", {
+            name: pageUnderTest.heading,
+            exact: true
+        })).toBeVisible();
+    }
+    else {
+        await expect(page).toHaveTitle(pageUnderTest.title);
+    }
+
+    if (pageUnderTest.fixtureText)
+        await expect(page.getByText(pageUnderTest.fixtureText, { exact: true })).toBeVisible();
+
     await expect(page.locator("link#theme")).toHaveAttribute(
         "href",
         /\/css\/bootstrap-high-contrast\.min\.css/

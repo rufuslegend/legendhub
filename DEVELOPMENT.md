@@ -85,7 +85,8 @@ npm test
 
 The browser accessibility checks run separately from the fast Node suite. After
 installing the Chromium test browser once, scan the home, login, registration
-error, and feedback states in High Contrast mode with:
+error, feedback, Builder, Items, Mobs, Quests, and Wiki states in High Contrast
+mode with:
 
 ```sh
 npx playwright install chromium
@@ -93,9 +94,15 @@ npm run test:a11y
 ```
 
 The accessibility tests start the Express application on an ephemeral local
-port with database metadata stubbed and external resources blocked. They check
-WCAG A and AA rules that axe can detect automatically; passing them does not
-replace keyboard, screen-reader, or other manual accessibility testing.
+port with deterministic catalog data and database metadata stubbed, and with
+external resources blocked. They check WCAG A and AA rules that axe can detect
+automatically; passing them does not replace keyboard, screen-reader, or other
+manual accessibility testing.
+
+This initial public matrix covers anonymous, server-rendered page states only.
+Because CDN-hosted scripts are blocked, it does not exercise hydrated client
+interactions, authenticated pages, or editor states; those require separate
+automated coverage and manual testing.
 
 Validate the registry publishing and Compose tooling from the repository root:
 

@@ -20,6 +20,7 @@ with version 2.6.0.
 
 ### Fixed
 
+- Gave the add and details icon links descriptive names for screen-reader users across Items, Mobs, Quests, and Wiki.
 - Underlined High Contrast content links so they remain identifiable without relying on color alone, while keeping navigation and button styling uncluttered.
 - Made the login and registration panels keyboard-operable and connected login, registration, and feedback labels to their form fields for assistive technology.
 - Corrected the High Contrast Builder's equipment slots and Total rows so their text stays readable on bright backgrounds.
