@@ -9343,6 +9343,24 @@ body {
   background-image: none;
 }
 
+a {
+  text-decoration: underline;
+}
+
+.navbar a,
+.breadcrumbNav a,
+.footer a,
+.categoryList a,
+.nav a,
+.dropdown-menu a,
+.pagination a,
+a.btn,
+a.badge,
+a.float-right,
+a[role=button] {
+  text-decoration: none;
+}
+
 .navbar.bg-dark,
 .breadcrumbNav.bg-dark,
 .footer.bg-dark {

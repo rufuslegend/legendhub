@@ -142,6 +142,32 @@ test("High Contrast renders flat chrome and a universal gold focus ring", functi
         /:focus-visible\s*\{[^}]*outline:\s*(?:0|none);/);
 });
 
+test("High Contrast identifies content links without decorating navigation controls", function() {
+    const css = fs.readFileSync(expandedPath, "utf8");
+    const contentLinks = lastRuleContaining(css, "\na {");
+    const structuralLinks = [
+        ".navbar a,",
+        ".breadcrumbNav a,",
+        ".footer a,",
+        ".categoryList a,",
+        ".nav a,",
+        ".dropdown-menu a,",
+        ".pagination a,",
+        "a.btn,",
+        "a.badge,",
+        "a.float-right,",
+        "a[role=button]"
+    ];
+
+    assert.match(contentLinks, /text-decoration:\s*underline;/,
+        "content links must have a persistent non-color cue");
+    for (const selector of structuralLinks) {
+        assert.match(lastRuleContaining(css, selector),
+            /text-decoration:\s*none;/,
+            `${selector} must retain its component presentation`);
+    }
+});
+
 test("High Contrast button interaction states retain AAA text contrast", function() {
     const css = fs.readFileSync(expandedPath, "utf8");
     const brightButtons = {
