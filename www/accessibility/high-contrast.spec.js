@@ -3,6 +3,7 @@
 const Module = require("node:module");
 const AxeBuilder = require("@axe-core/playwright").default;
 const { expect, test } = require("@playwright/test");
+const fulfillLocalBrowserScript = require("./support/local-browser-scripts");
 const publicPageData = require("./support/public-page-data");
 
 const pages = [
@@ -113,6 +114,22 @@ async function expectNoWcagViolations(page) {
     expect(results.violations).toEqual([]);
 }
 
+async function expectKeyboardModal(page, trigger, dialog) {
+    await trigger.focus();
+    await expect(trigger).toBeFocused();
+    await page.keyboard.press("Enter");
+
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(dialog.getByRole("button", { name: "Close" })).toBeFocused();
+    await expectNoWcagViolations(page);
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+}
+
 test.beforeEach(async function({ context, page }) {
     await context.addCookies([{
         name: "theme",
@@ -123,7 +140,7 @@ test.beforeEach(async function({ context, page }) {
         if (route.request().url().startsWith(baseUrl))
             return route.continue();
 
-        return route.abort();
+        return fulfillLocalBrowserScript(route);
     });
 });
 
@@ -171,4 +188,105 @@ test("registration error state has no detectable WCAG A or AA violations in High
     await expect(page.locator("#register_confirmPassword")).toHaveAccessibleName("Confirm");
     await expect(page.locator("#register_confirmPassword")).toHaveAccessibleDescription("");
     await expectNoWcagViolations(page);
+});
+
+test("theme chooser supports keyboard access to the Glass theme submenu", async function({ page }) {
+    const homePage = pages.find(function(pageUnderTest) {
+        return pageUnderTest.name === "home";
+    });
+    await expectHighContrastPage(page, homePage);
+
+    const themeButton = page.getByRole("button", { name: "Choose theme" });
+    await themeButton.focus();
+    await expect(themeButton).toBeFocused();
+    await page.keyboard.press("Enter");
+
+    await expect(themeButton).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator('.dropdown-menu[aria-labelledby="themeDropdown"]')).toBeVisible();
+
+    await page.keyboard.press("Tab");
+    const glassButton = page.getByRole("button", { name: "Glass", exact: true });
+    await expect(glassButton).toBeFocused();
+    await page.keyboard.press("Enter");
+
+    await expect(glassButton).toHaveAttribute("aria-expanded", "true");
+    const glassThemes = page.getByRole("group", { name: "Glass themes" });
+    await expect(glassThemes).toBeVisible();
+    await expect(glassThemes.getByRole("link")).toHaveCount(5);
+    await expectNoWcagViolations(page);
+
+    await page.keyboard.press("Tab");
+    const glassBlue = glassThemes.getByRole("link", { name: "Blue", exact: true });
+    await expect(glassBlue).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("link#theme")).toHaveAttribute(
+        "href",
+        /\/css\/bootstrap-glass-blue\.min\.css/
+    );
+});
+
+test("Items Columns dialog supports keyboard access without detectable violations", async function({ page }) {
+    const itemsPage = pages.find(function(pageUnderTest) {
+        return pageUnderTest.name === "items";
+    });
+    await expectHighContrastPage(page, itemsPage);
+
+    await expectKeyboardModal(
+        page,
+        page.getByRole("button", { name: "Columns", exact: true }),
+        page.getByRole("dialog", { name: "Select visible columns" })
+    );
+});
+
+test("Items Filters dialog supports keyboard access without detectable violations", async function({ page }) {
+    const itemsPage = pages.find(function(pageUnderTest) {
+        return pageUnderTest.name === "items";
+    });
+    await expectHighContrastPage(page, itemsPage);
+
+    await expectKeyboardModal(
+        page,
+        page.getByRole("button", { name: "Filters", exact: true }),
+        page.getByRole("dialog", { name: "Select search filters" })
+    );
+});
+
+test("Builder collapsible section supports keyboard access without detectable violations", async function({ page }) {
+    const builderPage = pages.find(function(pageUnderTest) {
+        return pageUnderTest.name === "builder";
+    });
+    await expectHighContrastPage(page, builderPage);
+
+    await expect(page.locator('select[ng-model="selectedListIndex"]'))
+        .toHaveAccessibleName("Character");
+    await expect(page.locator('select[ng-model="selectedListVariantIndex"]'))
+        .toHaveAccessibleName("Variant");
+
+    const toggle = page.getByRole("button", { name: "KSM Swap/Quest Mods" });
+    await toggle.focus();
+    await expect(toggle).toBeFocused();
+    await page.keyboard.press("Enter");
+
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator("#ksmQuestMods")).toBeVisible();
+    await expect(toggle).toBeFocused();
+    await expectNoWcagViolations(page);
+
+    await page.keyboard.press("Enter");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator("#ksmQuestMods")).toBeHidden();
+    await expect(toggle).toBeFocused();
+});
+
+test("Builder Columns dialog supports keyboard access without detectable violations", async function({ page }) {
+    const builderPage = pages.find(function(pageUnderTest) {
+        return pageUnderTest.name === "builder";
+    });
+    await expectHighContrastPage(page, builderPage);
+
+    await expectKeyboardModal(
+        page,
+        page.getByRole("button", { name: "Hide/Show Columns", exact: true }).filter({ visible: true }),
+        page.getByRole("dialog", { name: "Select visible columns" })
+    );
 });
