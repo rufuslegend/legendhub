@@ -20,6 +20,7 @@ with version 2.6.0.
 
 ### Fixed
 
+- Updated the browser library behind interactive pages to close known HTML-handling vulnerabilities while preserving existing behavior.
 - Gave the add and details icon links descriptive names for screen-reader users across Items, Mobs, Quests, and Wiki.
 - Named the Builder character and variant selectors for screen-reader users.
 - Underlined High Contrast content links so they remain identifiable without relying on color alone, while keeping navigation and button styling uncluttered.

@@ -4,7 +4,7 @@ const fs = require("node:fs");
 
 const scripts = new Map([
     [
-        "https://code.jquery.com/jquery-3.4.1.slim.min.js",
+        "https://code.jquery.com/jquery-3.7.1.slim.min.js",
         "jquery/dist/jquery.slim.min.js"
     ],
     [

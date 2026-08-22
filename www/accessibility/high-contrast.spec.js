@@ -157,6 +157,17 @@ for (const pageUnderTest of pages) {
     });
 }
 
+test("browser runtime preserves self-closing HTML during jQuery prefiltering", async function({ page }) {
+    const response = await page.goto(`${baseUrl}/`);
+    expect(response).not.toBeNull();
+    expect(response.status()).toBe(200);
+
+    const filteredHtml = await page.evaluate(function() {
+        return window.jQuery.htmlPrefilter("<div/>");
+    });
+    expect(filteredHtml).toBe("<div/>");
+});
+
 test("registration error state has no detectable WCAG A or AA violations in High Contrast", async function({ page }) {
     const loginPage = pages.find(function(pageUnderTest) {
         return pageUnderTest.name === "login";
