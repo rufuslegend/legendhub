@@ -386,9 +386,13 @@ test("Items React dialogs retain their interaction classes in every supported th
         const columnsTrigger = page.getByRole("button", {name: "Columns", exact: true});
         await columnsTrigger.click();
         const columns = page.getByRole("dialog", {name: "Select visible columns"}); const slot = columns.getByRole("button", {name: "Slot", exact: true});
+        expect(await columns.locator("h6").allTextContents()).toEqual(["Basic", "Main", "Limits", "Ranged", "Regen", "Tank", "Melee", "Mage", "Weapon", "Future"]);
+        expect(await columns.locator(".columns-picker-option").allTextContents()).toEqual(["Name", "Slot", "Light", "Main Stat", "Limits Stat", "Ranged Stat", "Regen Stat", "Tank Stat", "Melee Stat", "Mage Stat", "Weapon Stat", "Future Stat"]);
         await expect(columns).toBeVisible(); await expect(slot).toHaveClass(/columns-picker-option/); await slot.click(); await expect(slot.locator("svg.text-success")).toBeVisible(); await columns.getByRole("button", {name: "Reset to defaults", exact: true}).click(); await expect(slot.locator("svg.text-danger")).toBeVisible(); await page.keyboard.press("Escape"); await expect(columns).not.toBeVisible(); await expect(columnsTrigger).toBeFocused();
         const filtersTrigger = page.getByRole("button", {name: "Filters", exact: true});
         await filtersTrigger.click(); const filters = page.getByRole("dialog", {name: "Select search filters"}); const light = filters.getByRole("button", {name: "Light", exact: true});
+        expect(await filters.locator("h6").allTextContents()).toEqual(["Basic", "Main", "Limits", "Ranged", "Regen", "Tank", "Melee", "Mage", "Weapon", "Future"]);
+        expect(await filters.locator(".filters-picker-option").evaluateAll(elements => elements.map(element => element.tagName === "SELECT" ? element.getAttribute("aria-label") : element.textContent.trim()))).toEqual(["Name", "Slot", "Light", "Main Stat", "Limits Stat", "Ranged Stat", "Regen Stat", "Tank Stat", "Melee Stat", "Mage Stat", "Weapon Stat", "Future Stat"]);
         await expect(filters).toBeVisible(); await expect(light).toHaveClass(/filters-picker-option/); await light.click(); await expect(light).toHaveAttribute("aria-pressed", "true"); await filters.getByLabel("Slot").selectOption("0"); await expect(filters.getByLabel("Slot")).toHaveValue("0"); await filters.getByRole("button", {name: "Reset to defaults", exact: true}).click(); await expect(light).toHaveAttribute("aria-pressed", "false"); await expect(filters.getByLabel("Slot")).toHaveValue(""); await page.keyboard.press("Escape"); await expect(filters).not.toBeVisible(); await expect(filtersTrigger).toBeFocused();
     }
 });
