@@ -216,6 +216,42 @@ test("Builder equipment footer repeats totals and stat cells use real controls",
     await expect(page.getByRole("dialog", {name: "Choose Item"})).toBeVisible();
 });
 
+// Catches either total-row bulk control changing every lock without the legacy
+// confirmation, or using stale wording after all items become locked.
+test("Builder bulk lock controls confirm cancel and apply for both lock states", async function({page}) {
+    await page.goto(`${baseUrl}/builder/`);
+    const table = equipmentTable(page);
+    const itemLocks = table.getByRole("button", {name: /^Toggle lock for /});
+    await expect(itemLocks).toHaveCount(35);
+    expect((await itemLocks.allTextContents()).some(value => value === "Unlocked")).toBe(true);
+
+    let bulk = table.getByRole("button", {name: "Lock all items", exact: true});
+    await expect(bulk).toHaveCount(2);
+    await bulk.first().click();
+    let dialog = page.getByRole("dialog", {name: "Confirm lock all items"});
+    await expect(dialog).toContainText("Are you sure you want to lock all items?");
+    await dialog.getByRole("button", {name: "Close"}).click();
+    expect((await itemLocks.allTextContents()).some(value => value === "Unlocked")).toBe(true);
+
+    await bulk.nth(1).click();
+    dialog = page.getByRole("dialog", {name: "Confirm lock all items"});
+    await dialog.getByRole("button", {name: "Yes", exact: true}).click();
+    expect((await itemLocks.allTextContents()).every(value => value === "Locked")).toBe(true);
+
+    bulk = table.getByRole("button", {name: "Unlock all items", exact: true});
+    await expect(bulk).toHaveCount(2);
+    await bulk.first().click();
+    dialog = page.getByRole("dialog", {name: "Confirm unlock all items"});
+    await expect(dialog).toContainText("Are you sure you want to unlock all items?");
+    await dialog.getByRole("button", {name: "Close"}).click();
+    expect((await itemLocks.allTextContents()).every(value => value === "Locked")).toBe(true);
+
+    await bulk.nth(1).click();
+    dialog = page.getByRole("dialog", {name: "Confirm unlock all items"});
+    await dialog.getByRole("button", {name: "Yes", exact: true}).click();
+    expect((await itemLocks.allTextContents()).every(value => value === "Unlocked")).toBe(true);
+});
+
 // Catches a React dialog that only looks modal: keyboard users must stay in it,
 // close it with Escape, and return to the control that opened it.
 test("Builder dialogs contain focus and restore their trigger", async function({page}) {
@@ -299,6 +335,50 @@ test("Builder preserves exact saved data through failed hydration and visible re
     await expect(equipmentTable(page).locator("tbody tr").nth(4)).toContainText("Runecharm (Uruz/Eihwaz/Gebo)");
     await expect.poll(() => hydrationAttempts).toBe(2);
     await expect.poll(() => page.evaluate(() => localStorage.getItem("cln"))).toBe(encodedLists);
+});
+
+// Catches an initial metadata outage enabling persistence and replacing valid
+// saved character bytes with the temporary Untitled fallback.
+test("Builder leaves saved character bytes untouched when initial metadata fails", async function({page}) {
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (request.query.includes("getItemStatInfo")) {
+            return route.fulfill({
+                status: 503,
+                contentType: "application/json",
+                body: JSON.stringify({errors: [{message: "Metadata temporarily unavailable"}]})
+            });
+        }
+        return route.fallback();
+    });
+
+    await page.goto(`${baseUrl}/builder/`);
+    await expect(page.getByRole("alert")).toContainText("The request could not be completed");
+    await page.waitForTimeout(100);
+    expect(await page.evaluate(() => ({
+        lists: localStorage.getItem("cln"),
+        selected: localStorage.getItem("scl")
+    }))).toEqual({lists: encodedLists, selected: "Hero!Tank"});
+});
+
+// Catches malformed or future-version saved data being treated as a blank,
+// successfully hydrated Builder and persisted over the original bytes.
+test("Builder leaves malformed and unsupported saved character bytes untouched", async function({page}) {
+    for (const savedLists of ["6*malformed", "7*Future~Original~opaque*"]) {
+        await page.goto(`${baseUrl}/cookies.html`);
+        await page.evaluate(function(value) {
+            localStorage.setItem("cln", value);
+            localStorage.setItem("scl", "Future!Original");
+        }, savedLists);
+
+        await page.goto(`${baseUrl}/builder/`);
+        await expect(page.getByRole("alert")).toBeVisible();
+        await page.waitForTimeout(100);
+        expect(await page.evaluate(() => ({
+            lists: localStorage.getItem("cln"),
+            selected: localStorage.getItem("scl")
+        }))).toEqual({lists: savedLists, selected: "Future!Original"});
+    }
 });
 
 // Catches a picker that accepts only placeholder data or drops the established

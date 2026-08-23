@@ -22,14 +22,14 @@
 								<div class="input-group-prepend">
 									<label class="input-group-text" id="login_usernameLabel" for="login_username">Username</label>
 								</div>
-                                <input id="login_username" name="login_username" type="text" class="form-control" value="<%-vm.body.login_username%>" required autofocus>
+                                <input id="login_username" name="login_username" type="text" class="form-control" value="<%=vm.body.login_username%>" required autofocus>
 							</div>
 							<br />
 							<div class="input-group">
 								<div class="input-group-prepend">
 									<label class="input-group-text" id="login_passwordLabel" for="login_password">Password</label>
 								</div>
-                                <input id="login_password" name="login_password" type="password" class="form-control" value="<%-vm.body.login_password%>" required>
+                                <input id="login_password" name="login_password" type="password" class="form-control" required>
 							</div>
                             <input name="returnUrl" type="hidden" value="<%=locals.url.query.returnUrl%>" />
                             <% if (vm.login_error) {%>
@@ -59,7 +59,7 @@
 								<div class="input-group-prepend">
 									<label class="input-group-text" id="register_usernameLabel" for="register_username">Username</label>
 								</div>
-                                <input id="register_username" name="register_username" pattern="^[A-Za-z0-9]*$" type="text" class="form-control" value="<%-vm.body.register_username%>" required>
+                                <input id="register_username" name="register_username" pattern="^[A-Za-z0-9]*$" type="text" class="form-control" value="<%=vm.body.register_username%>" required>
 							</div>
 							<br />
 							<div class="input-group">

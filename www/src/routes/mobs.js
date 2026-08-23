@@ -2,21 +2,36 @@ let router = require("express").Router();
 let itemApi = require("./api/items");
 let apiUtils = require("./api/utils");
 let {renderMarkdown} = require("../markdown");
+let {booleanParam, buildListUrl, integerParam, pageParam, sortParam, stringParam} = require("./list-params");
+
+const MOB_SORT_FIELDS = ["modifiedOn", "name", "areaName", "xp", "gold", "aggro"];
 
 router.get(["/", "/index.html"], async function(req, res, next) {
-    let page = req.query.page === undefined ? 1 : Number(req.query.page);
-    if (page < 1) page = 1;
+    let page = pageParam(req.query.page);
     let rows = 20;
+    const searchString = stringParam(req.query.search);
+    const eraId = integerParam(req.query.eraId);
+    const areaId = integerParam(req.query.areaId);
+    const sortBy = sortParam(req.query.sortBy, MOB_SORT_FIELDS);
+    const sortAsc = booleanParam(req.query.sortAsc);
     let getMobsQuery = `
-    {
+    query MobList(
+        $searchString: String
+        $eraId: Int
+        $areaId: Int
+        $sortBy: String
+        $sortAsc: Boolean
+        $page: Int!
+        $rows: Int!
+    ) {
         getMobs(
-        ${req.query.search === undefined ? '' : `searchString:"${req.query.search}"`}
-        ${req.query.eraId === undefined ? '' : `eraId:${req.query.eraId}`}
-        ${req.query.areaId === undefined ? '' : `areaId:${req.query.areaId}`}
-        ${req.query.sortBy === undefined ? '' : `sortBy:"${req.query.sortBy}"`}
-        ${req.query.sortAsc === undefined ? '' : `sortAsc:${req.query.sortAsc}`}
-        page:${page}
-        rows:${rows}) {
+        searchString: $searchString
+        eraId: $eraId
+        areaId: $areaId
+        sortBy: $sortBy
+        sortAsc: $sortAsc
+        page: $page
+        rows: $rows) {
             moreResults
             mobs {
                 id
@@ -40,7 +55,15 @@ router.get(["/", "/index.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(getMobsQuery);
+        var data = await apiUtils.postAsync(getMobsQuery, undefined, {
+            searchString,
+            eraId,
+            areaId,
+            sortBy,
+            sortAsc,
+            page,
+            rows
+        });
     }
     catch (e) {
         return next(e);
@@ -53,10 +76,10 @@ router.get(["/", "/index.html"], async function(req, res, next) {
     for (let i = 0; i < categories.length; ++i) {
         categories[i].subcategories = categories[i].getAreas;
 
-        if (categories[i].id == req.query.eraId) {
-            if (req.query.areaId) {
+        if (categories[i].id == eraId) {
+            if (areaId) {
                 for (let j = 0; j < categories[i].subcategories.length; ++j) {
-                    if (categories[i].subcategories[j].id == req.query.areaId)
+                    if (categories[i].subcategories[j].id == areaId)
                         activeCategory = categories[i].subcategories[j].name;
                 }
             }
@@ -66,21 +89,33 @@ router.get(["/", "/index.html"], async function(req, res, next) {
         }
     }
 
+    const path = "/mobs/index.html";
+    const searchParams = {search: searchString};
+    const categoryParams = {...searchParams, eraId, areaId};
+    const sortParams = {...categoryParams, sortBy, sortAsc};
     let vm = {
-        query: req.query,
-        noSearch: req.query.search == null && !req.query.eraId && !req.query.areaId,
-        searchString: req.query.search,
+        query: {search: searchString, eraId, areaId, sortBy, sortAsc},
+        noSearch: searchString == null && !eraId && !areaId,
+        searchString,
         results: mobs,
         moreResults: moreResults,
         page: page,
         rows: rows,
         categories: categories,
-        categoryId: req.query.eraId,
-        subcategoryId: req.query.areaId,
+        categoryId: eraId,
+        subcategoryId: areaId,
         activeCategory: activeCategory,
+        urls: {
+            form: path,
+            search: buildListUrl(path, searchParams),
+            category: (nextEraId, nextAreaId) => buildListUrl(path, {...searchParams, eraId: nextEraId, areaId: nextAreaId}),
+            sort: (nextSortBy, nextSortAsc) => buildListUrl(path, {...categoryParams, sortBy: nextSortBy, sortAsc: nextSortAsc}),
+            page: nextPage => buildListUrl(path, nextPage === 1 ? sortParams : {...sortParams, page: nextPage}),
+            canonical: buildListUrl(path, {...sortParams, page})
+        },
         cookies: req.cookies
     };
-    let title = vm.noSearch ? "Recent Mobs" : `${mobs.length}${moreResults?"+":""} mob results for "${req.query.search || ""}"`;
+    let title = vm.noSearch ? "Recent Mobs" : `${mobs.length}${moreResults?"+":""} mob results for "${searchString || ""}"`;
     res.render("mobs/index", {title, vm});
 });
 

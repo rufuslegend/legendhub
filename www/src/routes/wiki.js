@@ -1,21 +1,36 @@
 let router = require("express").Router();
 let apiUtils = require("./api/utils");
 let {renderMarkdown} = require("../markdown");
+let {booleanParam, buildListUrl, integerParam, pageParam, sortParam, stringParam} = require("./list-params");
+
+const WIKI_SORT_FIELDS = ["modifiedOn", "title", "categoryName", "subcategoryName"];
 
 router.get(["/", "/index.html"], async function(req, res, next) {
-    let page = req.query.page === undefined ? 1 : Number(req.query.page);
-    if (page < 1) page = 1;
+    let page = pageParam(req.query.page);
     let rows = 20;
+    const searchString = stringParam(req.query.search);
+    const categoryId = integerParam(req.query.categoryId);
+    const subcategoryId = integerParam(req.query.subcategoryId);
+    const sortBy = sortParam(req.query.sortBy, WIKI_SORT_FIELDS);
+    const sortAsc = booleanParam(req.query.sortAsc);
     let getWikiPagesQuery = `
-    {
+    query WikiList(
+        $searchString: String
+        $categoryId: Int
+        $subcategoryId: Int
+        $sortBy: String
+        $sortAsc: Boolean
+        $page: Int!
+        $rows: Int!
+    ) {
         getWikiPages(
-        ${req.query.search === undefined ? '' : `searchString:"${req.query.search}"`}
-        ${req.query.categoryId === undefined ? '' : `categoryId:${req.query.categoryId}`}
-        ${req.query.subcategoryId === undefined ? '' : `subcategoryId:${req.query.subcategoryId}`}
-        ${req.query.sortBy === undefined ? '' : `sortBy:"${req.query.sortBy}"`}
-        ${req.query.sortAsc === undefined ? '' : `sortAsc:${req.query.sortAsc}`}
-        page:${page}
-        rows:${rows}) {
+        searchString: $searchString
+        categoryId: $categoryId
+        subcategoryId: $subcategoryId
+        sortBy: $sortBy
+        sortAsc: $sortAsc
+        page: $page
+        rows: $rows) {
             moreResults
             wikiPages {
                 id
@@ -39,7 +54,15 @@ router.get(["/", "/index.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(getWikiPagesQuery);
+        var data = await apiUtils.postAsync(getWikiPagesQuery, undefined, {
+            searchString,
+            categoryId,
+            subcategoryId,
+            sortBy,
+            sortAsc,
+            page,
+            rows
+        });
     }
     catch (e) {
         return next(e);
@@ -50,10 +73,10 @@ router.get(["/", "/index.html"], async function(req, res, next) {
     for (let i = 0; i < categories.length; ++i) {
         categories[i].subcategories = categories[i].getSubcategories;
 
-        if (categories[i].id == req.query.categoryId) {
-            if (req.query.subcategoryId) {
+        if (categories[i].id == categoryId) {
+            if (subcategoryId) {
                 for (let j = 0; j < categories[i].subcategories.length; ++j) {
-                    if (categories[i].subcategories[j].id == req.query.subcategoryId)
+                    if (categories[i].subcategories[j].id == subcategoryId)
                         activeCategory = categories[i].subcategories[j].name;
                 }
             }
@@ -63,20 +86,32 @@ router.get(["/", "/index.html"], async function(req, res, next) {
         }
     }
 
+    const path = "/wiki/index.html";
+    const searchParams = {search: searchString};
+    const categoryParams = {...searchParams, categoryId, subcategoryId};
+    const sortParams = {...categoryParams, sortBy, sortAsc};
     let vm = {
-        query: req.query,
-        noSearch: req.query.search == null && !req.query.categoryId && !req.query.subcategoryId,
+        query: {search: searchString, categoryId, subcategoryId, sortBy, sortAsc},
+        noSearch: searchString == null && !categoryId && !subcategoryId,
         results: data.getWikiPages.wikiPages,
         moreResults: data.getWikiPages.moreResults,
         page: page,
         rows: rows,
         categories: categories,
-        categoryId: req.query.categoryId,
-        subcategoryId: req.query.subcategoryId,
+        categoryId,
+        subcategoryId,
         activeCategory: activeCategory,
+        urls: {
+            form: path,
+            search: buildListUrl(path, searchParams),
+            category: (nextCategoryId, nextSubcategoryId) => buildListUrl(path, {...searchParams, categoryId: nextCategoryId, subcategoryId: nextSubcategoryId}),
+            sort: (nextSortBy, nextSortAsc) => buildListUrl(path, {...categoryParams, sortBy: nextSortBy, sortAsc: nextSortAsc}),
+            page: nextPage => buildListUrl(path, nextPage === 1 ? sortParams : {...sortParams, page: nextPage}),
+            canonical: buildListUrl(path, {...sortParams, page})
+        },
         cookies: req.cookies
     };
-    let title = vm.noSearch ? "Recent Wiki Pages" : `${data.getWikiPages.wikiPages.length}${data.getWikiPages.moreResults?"+":""} wiki results for "${req.query.search || ""}"`;
+    let title = vm.noSearch ? "Recent Wiki Pages" : `${data.getWikiPages.wikiPages.length}${data.getWikiPages.moreResults?"+":""} wiki results for "${searchString || ""}"`;
     res.render("wiki/index", {title, vm});
 });
 

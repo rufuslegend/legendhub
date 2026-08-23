@@ -17,7 +17,7 @@ class Notification {
         this.verb = sqlResult.Verb;
         this.count = sqlResult.Count;
         this.createdOn = sqlResult.CreatedOn;
-        this.message = `${this.objectType[0].toUpperCase()}${this.objectType.slice(1)} <span class="text-info">${this.objectName}</span> has been ${this.verb} `;
+        this.message = `${this.objectType[0].toUpperCase()}${this.objectType.slice(1)} ${this.objectName} has been ${this.verb} `;
         if (this.count > 1)
             this.message += `${this.count} times.`;
         else

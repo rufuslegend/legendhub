@@ -2,31 +2,40 @@ let express = require("express");
 let router = express.Router();
 let apiUtils = require("./api/utils");
 let auth = require("./api/auth");
+let {pageParam} = require("./list-params");
 
 router.get(["/", "/index.html"], async function(req, res, next) {
     if (!res.locals.user)
         return res.redirect(`/login.html?returnUrl=${encodeURIComponent(res.locals.url.path)}`);
 
-    let page = req.query.page === undefined ? 1 : Number(req.query.page);
+    let page = pageParam(req.query.page);
     let rows = 20;
     let query = `
-    {
+    query NotificationsPage($authToken: String!, $page: Int!, $rows: Int!) {
         getNotifications(
-        authToken:"${req.cookies.loginToken}"
-        page:${page}
-        rows:${rows}) {
+        authToken: $authToken
+        page: $page
+        rows: $rows) {
             moreResults
             results {
-                message
-                link
+                actorName
+                count
                 createdOn
+                link
+                objectName
+                objectType
                 read
+                verb
             }
         }
     }
     `;
     try {
-        var data = await apiUtils.postAsync(query);
+        var data = await apiUtils.postAsync(query, undefined, {
+            authToken: req.cookies.loginToken,
+            page,
+            rows
+        });
     }
     catch (e) {
         return next(e);

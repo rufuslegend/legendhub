@@ -2,22 +2,39 @@ var router = require("express").Router();
 let itemApi = require("./api/items");
 let apiUtils = require("./api/utils");
 let {renderMarkdown} = require("../markdown");
+let {booleanParam, buildListUrl, integerParam, pageParam, sortParam, stringParam} = require("./list-params");
+
+const QUEST_SORT_FIELDS = ["modifiedOn", "title", "areaName"];
 
 router.get(["/", "/index.html"], async function(req, res, next) {
-    let page = req.query.page === undefined ? 1 : Number(req.query.page);
-    if (page < 1) page = 1;
+    let page = pageParam(req.query.page);
     let rows = 20;
+    const searchString = stringParam(req.query.search);
+    const eraId = integerParam(req.query.eraId);
+    const areaId = integerParam(req.query.areaId);
+    const stat = booleanParam(req.query.stat);
+    const sortBy = sortParam(req.query.sortBy, QUEST_SORT_FIELDS);
+    const sortAsc = booleanParam(req.query.sortAsc);
     let getQuestsQuery = `
-    {
+    query QuestList(
+        $searchString: String
+        $eraId: Int
+        $areaId: Int
+        $stat: Boolean
+        $sortBy: String
+        $sortAsc: Boolean
+        $page: Int!
+        $rows: Int!
+    ) {
         getQuests(
-        ${req.query.search === undefined ? '' : `searchString:"${req.query.search}"`}
-        ${req.query.eraId === undefined ? '' : `eraId:${req.query.eraId}`}
-        ${req.query.areaId === undefined ? '' : `areaId:${req.query.areaId}`}
-        ${req.query.stat === undefined ? '' : `stat:${req.query.stat}`}
-        ${req.query.sortBy === undefined ? '' : `sortBy:"${req.query.sortBy}"`}
-        ${req.query.sortAsc === undefined ? '' : `sortAsc:${req.query.sortAsc}`}
-        page:${page}
-        rows:${rows}) {
+        searchString: $searchString
+        eraId: $eraId
+        areaId: $areaId
+        stat: $stat
+        sortBy: $sortBy
+        sortAsc: $sortAsc
+        page: $page
+        rows: $rows) {
             moreResults
             quests {
                 id
@@ -38,7 +55,16 @@ router.get(["/", "/index.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(getQuestsQuery);
+        var data = await apiUtils.postAsync(getQuestsQuery, undefined, {
+            searchString,
+            eraId,
+            areaId,
+            stat,
+            sortBy,
+            sortAsc,
+            page,
+            rows
+        });
     }
     catch (e) {
         next(e);
@@ -49,10 +75,10 @@ router.get(["/", "/index.html"], async function(req, res, next) {
     for (let i = 0; i < categories.length; ++i) {
         categories[i].subcategories = categories[i].getAreas;
 
-        if (categories[i].id == req.query.eraId) {
-            if (req.query.areaId) {
+        if (categories[i].id == eraId) {
+            if (areaId) {
                 for (let j = 0; j < categories[i].subcategories.length; ++j) {
-                    if (categories[i].subcategories[j].id == req.query.areaId)
+                    if (categories[i].subcategories[j].id == areaId)
                         activeCategory = categories[i].subcategories[j].name;
                 }
             }
@@ -62,20 +88,32 @@ router.get(["/", "/index.html"], async function(req, res, next) {
         }
     }
 
+    const path = "/quests/index.html";
+    const searchParams = {search: searchString, stat};
+    const categoryParams = {...searchParams, eraId, areaId};
+    const sortParams = {...categoryParams, sortBy, sortAsc};
     let vm = {
-        query: req.query,
-        noSearch: req.query.search == null && !req.query.eraId && !req.query.areaId,
+        query: {search: searchString, stat, eraId, areaId, sortBy, sortAsc},
+        noSearch: searchString == null && !eraId && !areaId,
         results: data.getQuests.quests,
         moreResults: data.getQuests.moreResults,
         page: page,
         rows: rows,
         categories: categories,
-        categoryId: req.query.eraId,
-        subcategoryId: req.query.areaId,
+        categoryId: eraId,
+        subcategoryId: areaId,
         activeCategory: activeCategory,
+        urls: {
+            form: path,
+            search: buildListUrl(path, searchParams),
+            category: (nextEraId, nextAreaId) => buildListUrl(path, {...searchParams, eraId: nextEraId, areaId: nextAreaId}),
+            sort: (nextSortBy, nextSortAsc) => buildListUrl(path, {...categoryParams, sortBy: nextSortBy, sortAsc: nextSortAsc}),
+            page: nextPage => buildListUrl(path, nextPage === 1 ? sortParams : {...sortParams, page: nextPage}),
+            canonical: buildListUrl(path, {...sortParams, page})
+        },
         cookies: req.cookies
     };
-    let title = vm.noSearch ? "Recent Quests" : `${data.getQuests.quests.length}${data.getQuests.moreResults?"+":""} quest results for "${req.query.search || ""}"`;
+    let title = vm.noSearch ? "Recent Quests" : `${data.getQuests.quests.length}${data.getQuests.moreResults?"+":""} quest results for "${searchString || ""}"`;
     res.render("quests/index", {title, vm});
 });
 

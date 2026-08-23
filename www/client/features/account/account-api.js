@@ -69,8 +69,7 @@ function currentCookies(document) {
 }
 
 function persistTokenRenewal(document, tokenRenewal) {
-    const cookies = currentCookies(document);
-    if (cookies["cookie-consent"] !== "true" || !tokenRenewal?.token)
+    if (!tokenRenewal?.token)
         return;
 
     const options = tokenRenewal.expires

@@ -42,6 +42,7 @@ const pages = [
 ];
 
 let baseUrl;
+let graphqlCalls = [];
 let restorePostAsync;
 let server;
 
@@ -71,7 +72,12 @@ test.beforeAll(async function() {
     const app = loadAppWithoutDatabaseMetadataQuery();
     const apiUtils = require("../src/routes/api/utils");
     const originalPostAsync = apiUtils.postAsync;
-    apiUtils.postAsync = publicPageData;
+    apiUtils.postAsync = async function(query, ip, variables) {
+        graphqlCalls.push({query, ip, variables});
+        if (query.includes("authLogin"))
+            throw new Error("Invalid credentials.");
+        return publicPageData(query);
+    };
     restorePostAsync = function() {
         apiUtils.postAsync = originalPostAsync;
     };
@@ -101,6 +107,7 @@ test.afterAll(async function() {
 });
 
 test.beforeEach(async function({context, page}) {
+    graphqlCalls = [];
     await context.addCookies([{
         name: "cookie-consent",
         value: "true",
@@ -110,6 +117,100 @@ test.beforeEach(async function({context, page}) {
         if (route.request().url().startsWith(baseUrl))
             return route.continue();
         return fulfillLocalBrowserScript(route);
+    });
+});
+
+const reflectedPayload = '\\" autofocus onfocus=__legendhubReflectedXss() x=\\"';
+
+for (const routeCase of [{
+    heading: "Mobs",
+    operation: "getMobs",
+    path: "/mobs/index.html",
+    params: {eraId: "1", areaId: "11"},
+    variables: {eraId: 1, areaId: 11}
+}, {
+    heading: "Quests",
+    operation: "getQuests",
+    path: "/quests/index.html",
+    params: {eraId: "1", areaId: "11", stat: "true"},
+    variables: {eraId: 1, areaId: 11, stat: true}
+}, {
+    heading: "Wiki",
+    operation: "getWikiPages",
+    path: "/wiki/index.html",
+    params: {categoryId: "4", subcategoryId: "41"},
+    variables: {categoryId: 4, subcategoryId: 41}
+}]) {
+    // Catches request text being executable in an attribute while remaining a
+    // syntactically valid interpolated GraphQL string.
+    test(`${routeCase.heading} keeps hostile list parameters in variables and inert markup`, async function({page}) {
+        await page.addInitScript(function() {
+            window.__legendhubReflectedXssCount = 0;
+            window.__legendhubReflectedXss = function() {
+                window.__legendhubReflectedXssCount += 1;
+            };
+        });
+        const target = new URL(`${baseUrl}${routeCase.path}`);
+        target.searchParams.set("search", reflectedPayload);
+        target.searchParams.set("sortBy", reflectedPayload);
+        target.searchParams.set("sortAsc", "true");
+        target.searchParams.set("page", "not-an-integer");
+        for (const [name, value] of Object.entries(routeCase.params))
+            target.searchParams.set(name, value);
+
+        const response = await page.goto(target.href);
+        expect(response).not.toBeNull();
+        expect(response.status()).toBe(200);
+        await expect(page.getByRole("textbox")).toHaveValue(reflectedPayload);
+        expect(await page.locator("[onfocus], [onerror], [onload]").count()).toBe(0);
+        expect(await page.evaluate(() => window.__legendhubReflectedXssCount)).toBe(0);
+
+        const call = graphqlCalls.find(entry => entry.query.includes(routeCase.operation));
+        expect(call).toBeDefined();
+        expect(call.query).not.toContain(reflectedPayload);
+        expect(call.query).toContain("$searchString");
+        expect(call.variables).toEqual({
+            searchString: reflectedPayload,
+            ...routeCase.variables,
+            sortBy: null,
+            sortAsc: true,
+            page: 1,
+            rows: 20
+        });
+        const sortHref = await page.getByRole("columnheader").first().getByRole("link").getAttribute("href");
+        expect(new URL(sortHref, baseUrl).searchParams.get("search")).toBe(reflectedPayload);
+    });
+}
+
+// Catches failed authentication reflecting a GraphQL-safe attribute breakout
+// and repopulating the submitted password into the response document.
+test("failed login keeps credentials in variables and never repopulates the password", async function({page}) {
+    await page.addInitScript(function() {
+        window.__legendhubReflectedXssCount = 0;
+        window.__legendhubReflectedXss = function() {
+            window.__legendhubReflectedXssCount += 1;
+        };
+    });
+    const password = `secret-${reflectedPayload}`;
+    await page.goto(`${baseUrl}/login.html`);
+    await page.locator("#login_username").fill(reflectedPayload);
+    await page.locator("#login_password").fill(password);
+    await Promise.all([
+        page.waitForURL(`${baseUrl}/login.html`),
+        page.locator('form[name="login"] button[type="submit"]').click()
+    ]);
+
+    await expect(page.locator("#login_username")).toHaveValue(reflectedPayload);
+    await expect(page.locator("#login_password")).toHaveValue("");
+    expect(await page.locator("[onfocus], [onerror], [onload]").count()).toBe(0);
+    expect(await page.evaluate(() => window.__legendhubReflectedXssCount)).toBe(0);
+    const call = graphqlCalls.find(entry => entry.query.includes("authLogin"));
+    expect(call).toBeDefined();
+    expect(call.query).not.toContain(reflectedPayload);
+    expect(call.variables).toEqual({
+        username: reflectedPayload,
+        password,
+        stayLoggedIn: false
     });
 });
 

@@ -101,6 +101,7 @@ function EquipmentHeaderRow({ stats, className = "" }) {
 }
 
 function EquipmentTotalRow({
+  allLocked,
   stats,
   totals,
   statRestrictions,
@@ -114,10 +115,10 @@ function EquipmentTotalRow({
         <button
           type="button"
           className="btn btn-link p-0"
-          aria-label="Toggle all item locks"
+          aria-label={`${allLocked ? "Unlock" : "Lock"} all items`}
           onClick={onToggleLocks}
         >
-          Lock
+          {allLocked ? "Unlock" : "Lock"}
         </button>
       </td>
       <th scope="row">Total</th>
@@ -153,12 +154,14 @@ export default function EquipmentPanel({
   restrictions,
   statRestrictions,
   onAction,
+  onToggleLocks,
   onOpen,
   onPick,
   onClose,
 }) {
   const stats = visibleStats(state);
   const current = state.currentItem;
+  const allLocked = state.selectedList.items.every((item) => item.locked);
   const filtered = sortItems(
     selectFilteredItems(state) || [],
     state.sortStat,
@@ -193,10 +196,11 @@ export default function EquipmentPanel({
           </thead>
           <tbody>
             <EquipmentTotalRow
+              allLocked={allLocked}
               stats={stats}
               totals={totals}
               statRestrictions={statRestrictions}
-              onToggleLocks={() => onAction({ type: "items/toggle-lock" })}
+              onToggleLocks={onToggleLocks}
               showWarnings
             />
             {state.selectedList.items.map((item, index) => {
@@ -266,10 +270,11 @@ export default function EquipmentPanel({
           <tfoot>
             <EquipmentHeaderRow stats={stats} className="bg-dark text-white" />
             <EquipmentTotalRow
+              allLocked={allLocked}
               stats={stats}
               totals={totals}
               statRestrictions={statRestrictions}
-              onToggleLocks={() => onAction({ type: "items/toggle-lock" })}
+              onToggleLocks={onToggleLocks}
               showWarnings={false}
             />
           </tfoot>

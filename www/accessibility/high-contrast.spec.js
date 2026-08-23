@@ -324,14 +324,100 @@ test("Items Columns dialog keeps the selected option focused while changing visi
     await expect(option).toBeFocused();
 });
 
+// Catches sort ownership on a non-interactive heading and an item name that is
+// only navigable through a mouse-only row click.
+test("Items sort and primary result navigation work from the keyboard", async function({page}) {
+    const itemsPage = pages.find(pageUnderTest => pageUnderTest.name === "items");
+    let sortRequest;
+    await page.route(`${baseUrl}/api`, async function(route) {
+        sortRequest = route.request().postDataJSON();
+        await route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify({data: {getItems: {items: [{id: 101, name: "Brass lantern", slot: 0, isLight: true}], moreResults: false}}})
+        });
+    });
+    await expectHighContrastPage(page, itemsPage);
+
+    const sort = page.getByRole("button", {name: "Sort by Name", exact: true});
+    await expect(sort).toHaveCount(1);
+    await sort.focus();
+    await expect(sort).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect.poll(() => sortRequest?.variables.sortBy).toBe("name");
+    expect(sortRequest.variables.sortAsc).toBe(false);
+    await expect(page).toHaveURL(/sortBy=name/);
+
+    await page.route(`${baseUrl}/items/details.html?id=101`, function(route) {
+        return route.fulfill({body: "<!doctype html><title>Item details</title>", contentType: "text/html"});
+    });
+    const details = page.getByRole("link", {name: "Brass lantern", exact: true});
+    await expect(details).not.toHaveAttribute("target");
+    await details.focus();
+    await expect(details).toBeFocused();
+    await Promise.all([
+        page.waitForURL(`${baseUrl}/items/details.html?id=101`),
+        page.keyboard.press("Enter")
+    ]);
+});
+
+// Catches an uncaught render failure that otherwise replaces the Items page
+// with an empty React root and no recovery action.
+test("Items page error boundary offers an accessible reload action", async function({page}) {
+    let documentRequests = 0;
+    page.on("request", function(request) {
+        if (request.isNavigationRequest() && request.url() === `${baseUrl}/items/`)
+            documentRequests += 1;
+    });
+    await page.addInitScript(function() {
+        const originalParse = JSON.parse;
+        JSON.parse = function(text, reviver) {
+            const value = originalParse.call(this, text, reviver);
+            if (value && typeof value === "object" && Array.isArray(value.results)) {
+                value.results = new Proxy(value.results, {
+                    get: function(target, property, receiver) {
+                        if (property === "map")
+                            throw new Error("Injected items render failure");
+                        return Reflect.get(target, property, receiver);
+                    }
+                });
+            }
+            return value;
+        };
+    });
+
+    const response = await page.goto(`${baseUrl}/items/`);
+    expect(response).not.toBeNull();
+    expect(response.status()).toBe(200);
+    const fallback = page.getByRole("alert");
+    await expect(fallback.getByRole("heading", {name: "Something went wrong"})).toBeVisible();
+    await expect(fallback).toContainText("We could not load this page. Reload and try again.");
+    const reloadButton = fallback.getByRole("button", {name: "Reload page"});
+    await expect(reloadButton).toBeVisible();
+
+    await Promise.all([
+        page.waitForEvent("load"),
+        reloadButton.click()
+    ]);
+    await expect.poll(function() { return documentRequests; }).toBe(2);
+    await expect(page.getByRole("alert").getByRole("button", {name: "Reload page"})).toBeVisible();
+});
+
 // Catches a pending search that prevents a newer query, or an older response that overwrites it.
 test("Items search aborts obsolete requests and renders only the newest results", async function({ page }) {
     const itemsPage = pages.find(function(pageUnderTest) { return pageUnderTest.name === "items"; });
     let count = 0;
+    let obsoleteRequestFailure;
     let releaseFirst;
     const firstStarted = new Promise(resolve => { releaseFirst = resolve; });
     let started;
     const firstRequest = new Promise(resolve => { started = resolve; });
+    page.on("requestfailed", function(request) {
+        if (request.url() !== `${baseUrl}/api`)
+            return;
+        const body = request.postDataJSON();
+        if (body?.variables?.searchString === "old")
+            obsoleteRequestFailure = request.failure()?.errorText;
+    });
     await page.route(`${baseUrl}/api`, async function(route) {
         count++;
         if (count === 1) {
@@ -350,6 +436,7 @@ test("Items search aborts obsolete requests and renders only the newest results"
     await input.fill("new");
     await page.getByRole("button", {name: /Search/}).click();
     await expect.poll(() => count).toBe(2);
+    await expect.poll(() => obsoleteRequestFailure).toContain("ERR_ABORTED");
     releaseFirst();
     await expect(page.getByText("New result", {exact: true})).toBeVisible();
     await expect(page.getByText("Old result", {exact: true})).toHaveCount(0);

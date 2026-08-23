@@ -182,15 +182,15 @@ function expectGraphqlContract(body, expected) {
 test("account notification settings mount from props and save once with keyboard controls", async function({context, page}) {
     let releaseSave;
     let notificationRequests = 0;
-    let submittedBody;
+    const submittedBodies = [];
     await page.route(`${baseUrl}/api`, async function(route) {
         const body = route.request().postDataJSON();
         if (!body.query.includes("UpdateNotificationSettings"))
             return route.abort();
 
         notificationRequests += 1;
-        submittedBody = body;
-        if (notificationRequests === 3)
+        submittedBodies.push(body);
+        if (notificationRequests === 4)
             return route.abort("failed");
         if (notificationRequests === 1) {
             await new Promise(function(resolve) {
@@ -204,7 +204,9 @@ test("account notification settings mount from props and save once with keyboard
                     updateNotificationSettings: {
                         token: notificationRequests === 1
                             ? "notification-renewed-token"
-                            : "renewal-without-consent",
+                            : notificationRequests === 2
+                                ? "renewal-without-consent"
+                                : "second-renewal-without-consent",
                         expires: notificationRequests === 1
                             ? "2030-01-01T00:00:00.000Z"
                             : null
@@ -254,7 +256,7 @@ test("account notification settings mount from props and save once with keyboard
         .evaluate(function(form) { form.requestSubmit(); });
     expect(notificationRequests).toBe(1);
 
-    expectGraphqlContract(submittedBody, {
+    expectGraphqlContract(submittedBodies[0], {
         operationName: "UpdateNotificationSettings",
         fieldName: "updateNotificationSettings",
         variableDefinitions: {
@@ -281,7 +283,7 @@ test("account notification settings mount from props and save once with keyboard
         },
         response: {token: true, expires: true}
     });
-    expect(submittedBody.variables).toEqual({
+    expect(submittedBodies[0].variables).toEqual({
         authToken: "initial-token",
         ...editableNotifications,
         itemUpdated: true
@@ -307,15 +309,25 @@ test("account notification settings mount from props and save once with keyboard
     await expect(page.getByRole("button", {name: "Edit notification settings"})).toBeFocused();
     const cookies = await context.cookies(baseUrl);
     expect(cookies.find(function(cookie) { return cookie.name === "loginToken"; })?.value)
-        .toBe("notification-renewed-token");
+        .toBe("renewal-without-consent");
 
     await pressButton(page, "Edit notification settings");
     await page.getByLabel("Mob Added", {exact: true}).selectOption("true");
     await pressButton(page, "Save notification settings");
+    await expect.poll(function() { return notificationRequests; }).toBe(3);
+    expect(submittedBodies[2].variables.authToken).toBe("renewal-without-consent");
+    await expect.poll(async function() {
+        const currentCookies = await context.cookies(baseUrl);
+        return currentCookies.find(function(cookie) { return cookie.name === "loginToken"; })?.value;
+    }).toBe("second-renewal-without-consent");
+
+    await pressButton(page, "Edit notification settings");
+    await page.getByLabel("Quest Added", {exact: true}).selectOption("false");
+    await pressButton(page, "Save notification settings");
     await expect(page.getByRole("alert"))
         .toHaveText("Notification settings could not be saved. Try again.");
     await expect(page.getByRole("alert")).toBeFocused();
-    expect(notificationRequests).toBe(3);
+    expect(notificationRequests).toBe(4);
 });
 
 test("password editing announces validation and request failures before saving a renewed token", async function({context, page}) {

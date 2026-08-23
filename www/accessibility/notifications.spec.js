@@ -5,6 +5,22 @@ const {expect, test} = require("@playwright/test");
 const fulfillLocalBrowserScript = require("./support/local-browser-scripts");
 const publicPageData = require("./support/public-page-data");
 
+const storedEntityName = '<img src="/missing-notification-image" onerror="__legendhubNotificationXss()"><svg onload="__legendhubNotificationXss()"></svg>';
+const storedNotification = {
+    actorName: "Fixture actor",
+    count: 1,
+    createdOn: "2026-08-23T12:00:00.000Z",
+    id: 81,
+    link: "/items/details.html?id=101",
+    message: `Item <span class="text-info">${storedEntityName}</span> has been updated by Fixture actor.`,
+    objectId: 101,
+    objectName: storedEntityName,
+    objectPage: "items",
+    objectType: "item",
+    read: false,
+    verb: "updated"
+};
+
 let baseUrl;
 let restoreDependencies;
 let server;
@@ -30,7 +46,17 @@ function loadAppWithAuthenticatedFixture() {
             return {memberId: 7, username: "Notification Tester"};
         };
         authApi.utils.getPermissions = async function() { return {}; };
-        apiUtils.postAsync = publicPageData;
+        apiUtils.postAsync = async function(query) {
+            if (query.includes("getNotifications(")) {
+                return {
+                    getNotifications: {
+                        moreResults: false,
+                        results: [storedNotification]
+                    }
+                };
+            }
+            return publicPageData(query);
+        };
         restoreDependencies = function() {
             authApi.utils.authToken = originalAuthToken;
             authApi.utils.getPermissions = originalGetPermissions;
@@ -100,4 +126,97 @@ test("rejected notification marking remains visible in the real Bootstrap popove
     await popover.getByRole("button", {name: "Mark all as read"}).click();
     await expect(popover).toBeVisible();
     await expect(popover.getByRole("status")).toHaveText("Unable to update notifications.");
+});
+
+// Catches duplicate mark-read mutations while the first request is pending and
+// verifies that a failed attempt restores the control for an intentional retry.
+test("notification marking is single-flight and restores its button after failure", async function({page}) {
+    let releaseResponse;
+    let requestCount = 0;
+    const responseGate = new Promise(resolve => { releaseResponse = resolve; });
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const body = route.request().postDataJSON();
+        if (!body.query.includes("MarkNotificationAsRead"))
+            return route.abort();
+        requestCount += 1;
+        await responseGate;
+        return route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify({errors: [{message: "Unable to update notifications."}]})
+        });
+    });
+
+    await page.goto(`${baseUrl}/`);
+    await page.locator("[data-notification-popover]").filter({visible: true}).click();
+    const popover = page.locator(".popover");
+    const button = popover.getByRole("button", {name: "Mark all as read"});
+
+    try {
+        await button.evaluate(function(element) {
+            element.click();
+            element.click();
+        });
+        await expect.poll(function() { return requestCount; }).toBe(1);
+        await expect(button).toBeDisabled();
+        await expect(button).toHaveAttribute("aria-busy", "true");
+    }
+    finally {
+        releaseResponse();
+    }
+
+    await expect(popover.getByRole("status")).toHaveText("Unable to update notifications.");
+    await expect(button).toBeEnabled();
+    await expect(button).toHaveAttribute("aria-busy", "false");
+});
+
+// Catches stored entity names becoming executable HTML in either notification
+// view or in the Bootstrap clone used by the header popover.
+test("stored notification names remain text in the page and popover", async function({page}) {
+    await page.addInitScript(function() {
+        window.__legendhubNotificationXssCount = 0;
+        window.__legendhubNotificationXss = function() {
+            window.__legendhubNotificationXssCount += 1;
+        };
+    });
+
+    await page.goto(`${baseUrl}/`);
+    const source = page.locator("#notification-window");
+    await expect(source).toContainText(storedEntityName);
+    await expect(source.locator("img, svg")).toHaveCount(0);
+    const trigger = page.locator("[data-notification-popover]").filter({visible: true});
+    await trigger.click();
+    const popover = page.locator(".popover");
+    await expect(popover).toContainText(storedEntityName);
+    await expect(popover.locator("img, svg")).toHaveCount(0);
+    await expect(popover.locator("[onerror], [onload]")).toHaveCount(0);
+    expect(await page.evaluate(() => window.__legendhubNotificationXssCount)).toBe(0);
+
+    await page.goto(`${baseUrl}/notifications/`);
+    const notificationList = page.locator("main, body").filter({hasText: "All Notifications"});
+    await expect(notificationList).toContainText(storedEntityName);
+    await expect(notificationList.locator("img, svg")).toHaveCount(0);
+    await expect(notificationList.locator("[onerror], [onload]")).toHaveCount(0);
+    expect(await page.evaluate(() => window.__legendhubNotificationXssCount)).toBe(0);
+});
+
+// Catches a role-only notification opener that can receive focus but does not
+// activate with the native Enter and Space button gestures.
+test("notification trigger opens and closes from both keyboard activation keys", async function({page}) {
+    await page.goto(`${baseUrl}/`);
+    const trigger = page.locator("[data-notification-popover]").filter({visible: true});
+    expect(await trigger.evaluate(element => element.tagName)).toBe("BUTTON");
+    await trigger.focus();
+    await expect(trigger).toBeFocused();
+
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".popover")).toBeVisible();
+    await expect(trigger).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".popover")).toBeHidden();
+
+    await page.keyboard.press("Space");
+    await expect(page.locator(".popover")).toBeVisible();
+    await expect(trigger).toBeFocused();
+    await page.keyboard.press("Space");
+    await expect(page.locator(".popover")).toBeHidden();
 });

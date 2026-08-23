@@ -343,8 +343,6 @@ router.get(["/add.html"], async function(req, res, next) {
         }
     }
 
-    console.log(item);
-
     let vm = {
         item,
         itemStatCategories,

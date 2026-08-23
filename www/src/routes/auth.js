@@ -60,21 +60,29 @@ var authFunc = async function(req, res, next) {
 
         try {
             let query = `
-            {
-                getNotifications(authToken:"${req.cookies.loginToken}",read:false) {
+            query UnreadNotifications($authToken: String!, $read: Boolean!) {
+                getNotifications(authToken: $authToken, read: $read) {
                     moreResults
                     results {
+                        actorName
+                        count
                         createdOn
-                        message
-                        link
                         id
+                        link
                         objectId
+                        objectName
+                        objectPage
                         objectType
+                        read
+                        verb
                     }
                 }
             }
             `;
-            let response = await apiUtils.postAsync(query);
+            let response = await apiUtils.postAsync(query, undefined, {
+                authToken: req.cookies.loginToken,
+                read: false
+            });
             res.locals.user.moreNotifications = response.getNotifications.moreResults;
             res.locals.user.notifications = response.getNotifications.results;
         }

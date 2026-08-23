@@ -1,3 +1,4 @@
+import DOMPurify from "dompurify";
 import {parseCookieHeader} from "./cookies.js";
 import {graphqlRequest as defaultGraphqlRequest} from "./graphql-request.js";
 
@@ -33,6 +34,7 @@ export function initializeNotifications({
 
     const content = document.querySelector("#notification-window");
     let activeTrigger;
+    let markingNotifications = false;
 
     function hidePopover() {
         if (!activeTrigger)
@@ -59,7 +61,8 @@ export function initializeNotifications({
                 html: true,
                 trigger: "manual",
                 placement: "bottom",
-                sanitize: false
+                sanitize: true,
+                sanitizeFn: value => DOMPurify.sanitize(value)
             });
         }
     }
@@ -80,6 +83,12 @@ export function initializeNotifications({
         }
 
         event.preventDefault();
+        if (markingNotifications)
+            return;
+
+        markingNotifications = true;
+        button.disabled = true;
+        button.setAttribute("aria-busy", "true");
         try {
             const data = await graphqlRequest({
                 query: markNotificationsReadMutation,
@@ -90,7 +99,12 @@ export function initializeNotifications({
             reload();
         }
         catch (error) {
-            announceError(document, event.target, error);
+            announceError(document, button, error);
+        }
+        finally {
+            markingNotifications = false;
+            button.disabled = false;
+            button.setAttribute("aria-busy", "false");
         }
     });
 }

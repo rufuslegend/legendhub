@@ -1,0 +1,1 @@
+<%=notification.objectType.charAt(0).toUpperCase() + notification.objectType.slice(1)%> <span class="text-info"><%=notification.objectName%></span> has been <%=notification.verb%> <%if (notification.count > 1) {%><%=notification.count%> times.<%} else {%>by <%=notification.actorName%>.<%}%>

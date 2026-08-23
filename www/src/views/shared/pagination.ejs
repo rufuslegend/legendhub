@@ -5,7 +5,7 @@
                 <%if (page === 1) {%>
                 <span class="page-link" aria-label="first">
                 <%}else{%>
-                <a href="<%-baseUrl%>" class="page-link" aria-label="first">
+                <a href="<%=pageUrl(1)%>" class="page-link" aria-label="first">
                 <%}%>
                     <span aria-hidden="true">
                         <i class="fas fa-angle-double-left"></i>
@@ -21,7 +21,7 @@
                 <%if (page === 1) {%>
                 <span class="page-link" aria-label="previous">
                 <%}else{%>
-                <a href="<%-baseUrl + "&page=" + (page - 1)%>" class="page-link" aria-label="previous">
+                <a href="<%=pageUrl(page - 1)%>" class="page-link" aria-label="previous">
                 <%}%>
                     <span aria-hidden="true">
                         <i class="fas fa-angle-left"></i>
@@ -35,7 +35,7 @@
             </li>
             <li class="page-item<%-moreResults ? "":" disabled"%>">
                 <%if (moreResults) {%>
-                <a href="<%-baseUrl+"&page=" + (page + 1)%>" class="page-link" aria-label="next">
+                <a href="<%=pageUrl(page + 1)%>" class="page-link" aria-label="next">
                 <%}else{%>
                 <span class="page-link" aria-label="next">
                 <%}%>

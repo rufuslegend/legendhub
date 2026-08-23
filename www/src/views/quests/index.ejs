@@ -2,17 +2,7 @@
 <html lang="en">
     <head>
         <%-include("../shared/meta")-%>
-        <%
-        let searchPart = (vm.query.search !== undefined ? "&search=" + vm.query.search : "") + (vm.query.stat !== undefined ? "&stat=" + vm.query.stat:"");
-        let categoryPart = `${(vm.query.eraId ? `&eraId=${vm.query.eraId}`:"")}${(vm.query.areaId ? `&areaId=${vm.query.areaId}`:"")}`;
-        let sortByPart = (vm.query.sortBy ? `&sortBy=${vm.query.sortBy}`:"");
-        let sortAscPart = (vm.query.sortAsc ? `&sortAsc=${vm.query.sortAsc}`:"");
-        let baseUrl = "/quests/index.html?";
-        let searchBaseUrl = baseUrl + searchPart;
-        let categoryBaseUrl = searchBaseUrl + categoryPart;
-        let sortBaseUrl = categoryBaseUrl + sortByPart + sortAscPart;
-        %>
-        <link href="https://www.legendhub.org<%-sortBaseUrl%>&page=<%-vm.page%>" rel="canonical">
+        <link href="https://www.legendhub.org<%=vm.urls.canonical%>" rel="canonical">
         <meta name="robots" content="noindex">
     </head>
     <body>
@@ -27,12 +17,12 @@
                         <ul class="categoryList">
                             <%for (let i = 0; i < vm.categories.length; ++i) {%>
                             <li> 
-                                <a<%-(vm.categoryId == vm.categories[i].id && !vm.subcategoryId) ? ' class="active"' : ''%> href="<%-`${searchBaseUrl}&eraId=${vm.categories[i].id}`%>"><%=vm.categories[i].name%></a>
+                                <a<%-(vm.categoryId == vm.categories[i].id && !vm.subcategoryId) ? ' class="active"' : ''%> href="<%=vm.urls.category(vm.categories[i].id)%>"><%=vm.categories[i].name%></a>
                                 <%if(vm.categoryId == vm.categories[i].id) {%>
                                 <ul>
                                     <%for (let j = 0; j < vm.categories[i].subcategories.length; ++j) {%>
                                     <li>
-                                        <a<%-(vm.subcategoryId == vm.categories[i].subcategories[j].id) ? ' class="active"':''%> href="<%-`${searchBaseUrl}&eraId=${vm.categories[i].id}&areaId=${vm.categories[i].subcategories[j].id}`%>"><%=vm.categories[i].subcategories[j].name%></a>
+                                        <a<%-(vm.subcategoryId == vm.categories[i].subcategories[j].id) ? ' class="active"':''%> href="<%=vm.urls.category(vm.categories[i].id, vm.categories[i].subcategories[j].id)%>"><%=vm.categories[i].subcategories[j].name%></a>
                                     </li>
                                     <%}%>
                                 </ul>
@@ -47,12 +37,12 @@
                             <h1 class="col-12">Quests</h1>
                         </div>
                         <div class="px-0 px-md-5">
-                            <form action="<%-baseUrl%>">
+                            <form action="<%=vm.urls.form%>">
                                 <%if (vm.categoryId) {%>
-                                <input type="hidden" name="eraId" value="<%-vm.categoryId%>">
+                                <input type="hidden" name="eraId" value="<%=vm.categoryId%>">
                                 <%}%>
                                 <%if (vm.subcategoryId) {%>
-                                <input type="hidden" name="areaId" value="<%-vm.subcategoryId%>">
+                                <input type="hidden" name="areaId" value="<%=vm.subcategoryId%>">
                                 <%}%>
                                 <div class="row">
                                     <div class="input-group col-12">
@@ -61,10 +51,10 @@
                                         </div>
                                         <%if (vm.activeCategory) {%>
                                         <div class="input-group-prepend">
-                                            <a class="btn btn-outline-primary" role="button" href="<%-searchBaseUrl%>"><%=vm.activeCategory%>&nbsp;&nbsp;<i class="fas fa-times"></i></a>
+                                            <a class="btn btn-outline-primary" role="button" href="<%=vm.urls.search%>"><%=vm.activeCategory%>&nbsp;&nbsp;<i class="fas fa-times"></i></a>
                                         </div>
                                         <%}%>
-                                        <input type="text" name="search" value="<%-vm.query.search%>" class="form-control" placeholder="Search by title, whois, area, or content..." autofocus>
+                                        <input type="text" name="search" value="<%=vm.query.search ?? ""%>" class="form-control" placeholder="Search by title, whois, area, or content..." autofocus>
                                         <div class="input-group-append">
                                             <label for="statCheckbox" class="btn btn-outline-primary custom-control custom-checkbox mb-0" style="padding-left:2rem">
                                                 <input type="checkbox" name="stat" value="true"<%-(vm.query.stat?" checked" : "")%> class="custom-control-input" id="statCheckbox">
@@ -79,7 +69,7 @@
                             </form>
                         </div>
                         <br />
-                        <%-include("../shared/pagination", {baseUrl: sortBaseUrl, page: vm.page, rows: vm.rows, resultLength: vm.results.length, moreResults: vm.moreResults})-%>
+                        <%-include("../shared/pagination", {pageUrl: vm.urls.page, page: vm.page, rows: vm.rows, resultLength: vm.results.length, moreResults: vm.moreResults})-%>
                         <div class="row">
                             <div class="col-12">
                                 <div class="card">
@@ -97,14 +87,14 @@
                                                 <tr>
                                                     <% let sortClass = function(sortBy) {
                  if (vm.query.sortBy === sortBy)
-                 return vm.query.sortAsc === "true" ? "fas fa-sort-up" : "fas fa-sort-down";
+                 return vm.query.sortAsc ? "fas fa-sort-up" : "fas fa-sort-down";
                  else if (!vm.query.sortBy)
                  return "fas fa-sort";
                  else
                  return "";
                  };%>
-                 <th scope="col" class="text-center" nowrap><a class="text-reset" href="<%-`${categoryBaseUrl}&sortBy=title&sortAsc=${(vm.query.sortBy==="title"?!(vm.query.sortAsc==="true"):true)}`%>">Title&nbsp;<i class="<%-sortClass('title')%>" aria-hidden="true"></i></a></th>
-                 <th scope="col" class="text-center" nowrap><a class="text-reset" href="<%-`${categoryBaseUrl}&sortBy=areaName&sortAsc=${(vm.query.sortBy==="areaName"?!(vm.query.sortAsc==="true"):true)}`%>">Area&nbsp;<i class="<%-sortClass('areaName')%>" aria-hidden="true"></i></a></th>
+                 <th scope="col" class="text-center" nowrap><a class="text-reset" href="<%=vm.urls.sort("title", vm.query.sortBy === "title" ? !vm.query.sortAsc : true)%>">Title&nbsp;<i class="<%=sortClass('title')%>" aria-hidden="true"></i></a></th>
+                 <th scope="col" class="text-center" nowrap><a class="text-reset" href="<%=vm.urls.sort("areaName", vm.query.sortBy === "areaName" ? !vm.query.sortAsc : true)%>">Area&nbsp;<i class="<%=sortClass('areaName')%>" aria-hidden="true"></i></a></th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -124,7 +114,7 @@
                             </div>
                         </div>
                         <br>
-                        <%-include("../shared/pagination", {baseUrl: sortBaseUrl, page: vm.page, rows: vm.rows, resultLength: vm.results.length, moreResults: vm.moreResults})-%>
+                        <%-include("../shared/pagination", {pageUrl: vm.urls.page, page: vm.page, rows: vm.rows, resultLength: vm.results.length, moreResults: vm.moreResults})-%>
                         <br><br>
                     </div>
                 </div>

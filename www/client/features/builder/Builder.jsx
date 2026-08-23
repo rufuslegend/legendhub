@@ -5,7 +5,7 @@ import {graphqlRequest} from "../../lib/graphql-request.js";
 import CharacterPanel from "./CharacterPanel.jsx";
 import EquipmentPanel from "./EquipmentPanel.jsx";
 import StatsPanel from "./StatsPanel.jsx";
-import ImportExportDialog from "./ImportExportDialog.jsx";
+import ImportExportDialog, {BuilderModal} from "./ImportExportDialog.jsx";
 import BuilderListsDialog from "./BuilderListsDialog.jsx";
 import {deriveItemRestrictions, deriveRuneCharmStats} from "./builder-derivations.js";
 import {decodeBuilderEntries, decodeBuilderLists, encodeBuilderLists, encodeBuilderVariant} from "./builder-encoding.js";
@@ -72,8 +72,7 @@ export default function Builder({itemStatCategories = [], selectedColumns = []})
                 if (cancelled) return;
                 const list = {name: "Untitled", variants: [createDefaultVariant("Original")]};
                 const fallbackStatInfo = itemStatCategories.flatMap(category => category.getItemStatInfo || []).map(stat => ({...stat, showColumn: selectedColumns.includes(stat.short) || Boolean(stat.showColumnDefault)}));
-                dispatch({type: "ui/patch", value: {allLists: [list], selectedListIndex: 0, selectedListVariantIndex: 0, selectedList: list.variants[0], statInfo: fallbackStatInfo, defaultStatInfo: fallbackStatInfo, initialized: true, requestStatus: "error", requestError: error.message || "Builder data could not be loaded. Try refreshing the page."}});
-                hydrated.current = true;
+                dispatch({type: "ui/patch", value: {allLists: [list], selectedListIndex: 0, selectedListVariantIndex: 0, selectedList: list.variants[0], statInfo: fallbackStatInfo, defaultStatInfo: fallbackStatInfo, initialized: true, requestStatus: "error", requestError: error.message || "Builder data could not be loaded. Try refreshing the page.", exceptionEncountered: true}});
             }
         }
         load();
@@ -97,6 +96,16 @@ export default function Builder({itemStatCategories = [], selectedColumns = []})
         dispatch(value);
     }
     const close = useCallback(function() { dispatch({type: "ui/patch", value: {currentDialog: null, currentItem: null, isRuneCrafting: false}}); }, []);
+    const closeConfirmation = useCallback(function() { dispatch({type: "dialog/close"}); }, []);
+    function requestToggleLocks() {
+        const action = selected.items.every(item => item.locked) ? "unlock" : "lock";
+        dispatch({type: "dialog/confirm", message: `Are you sure you want to ${action} all items?`, action: {type: "items/toggle-lock"}});
+    }
+    function confirmAction() {
+        if (state.confirmAction)
+            dispatch(state.confirmAction);
+        closeConfirmation();
+    }
     const resetColumns = useCallback(function() { dispatch({type: "columns/reset"}); }, []);
     const toggleColumn = useCallback(function(short) { dispatch({type: "column/toggle", stat: short}); }, []);
     const openDialog = useCallback(function(currentDialog) {
@@ -174,5 +183,5 @@ export default function Builder({itemStatCategories = [], selectedColumns = []})
     function pickItem(item, rune) { if (rune) { const charm = state.charmSelectors.join(""); dispatch({type: "rune/update", index: state.currentItemIndex, charm, runeId: RUNE_CHARM_ID, runeStats: deriveRuneCharmStats(charm)}); } else dispatch({type: "item/select", index: state.currentItemIndex, item}); close(); }
     if (state.requestStatus === "pending" && !state.initialized) return <main className="container-fluid"><p role="status">Loading Builder…</p></main>;
     if (!selected) return null;
-    return <main className="container-fluid"><div className="row"><CharacterPanel state={state} columnsOpen={state.currentDialog === "columns"} columnsTriggerRef={columnsTriggerRef} onAction={action} onDialog={openDialog} /><StatsPanel state={state} onAction={action} /></div>{state.requestError && <p role="alert" className="text-danger">{state.requestError} <button type="button" className="btn btn-link p-0" onClick={() => window.location.reload()}>Retry</button></p>}<EquipmentPanel state={state} totals={totals} restrictions={restrictions} statRestrictions={statRestrictions} onAction={action} onOpen={openItem} onPick={pickItem} onClose={close} />{state.currentDialog === "export" && <ImportExportDialog mode="export" value={exportValue()} onClose={close} />}{state.currentDialog === "import" && <ImportExportDialog mode="import" value={state.importModel || {input: "", lists: [], message: "", loading: false}} onChange={importChange} onClose={close} onSubmit={submitImport} />}{state.currentDialog === "columns" && <ColumnsDialog categories={itemStatCategories} open onClose={close} onReset={resetColumns} onToggle={toggleColumn} selectedColumns={state.statInfo.filter(stat => stat.showColumn).map(stat => stat.short)} triggerRef={columnsTriggerRef} />}{state.currentDialog && !["columns", "import", "export"].includes(state.currentDialog) && <BuilderListsDialog dialog={state.currentDialog} state={state} onClose={close} onSubmit={listsDialog} />}</main>;
+    return <main className="container-fluid"><div className="row"><CharacterPanel state={state} columnsOpen={state.currentDialog === "columns"} columnsTriggerRef={columnsTriggerRef} onAction={action} onDialog={openDialog} /><StatsPanel state={state} onAction={action} /></div>{state.requestError && <p role="alert" className="text-danger">{state.requestError} <button type="button" className="btn btn-link p-0" onClick={() => window.location.reload()}>Retry</button></p>}<EquipmentPanel state={state} totals={totals} restrictions={restrictions} statRestrictions={statRestrictions} onAction={action} onToggleLocks={requestToggleLocks} onOpen={openItem} onPick={pickItem} onClose={close} />{state.currentDialog === "export" && <ImportExportDialog mode="export" value={exportValue()} onClose={close} />}{state.currentDialog === "import" && <ImportExportDialog mode="import" value={state.importModel || {input: "", lists: [], message: "", loading: false}} onChange={importChange} onClose={close} onSubmit={submitImport} />}{state.currentDialog === "columns" && <ColumnsDialog categories={itemStatCategories} open onClose={close} onReset={resetColumns} onToggle={toggleColumn} selectedColumns={state.statInfo.filter(stat => stat.showColumn).map(stat => stat.short)} triggerRef={columnsTriggerRef} />}{state.currentDialog && !["columns", "import", "export"].includes(state.currentDialog) && <BuilderListsDialog dialog={state.currentDialog} state={state} onClose={close} onSubmit={listsDialog} />}{state.confirmMessage && <BuilderModal label={`Confirm ${state.confirmMessage.includes("unlock") ? "unlock" : "lock"} all items`} onClose={closeConfirmation}><div className="modal-body"><p>{state.confirmMessage}</p><button className="btn btn-primary" type="button" onClick={confirmAction}>Yes</button></div></BuilderModal>}</main>;
 }
