@@ -1,5 +1,6 @@
 let router = require("express").Router();
 let apiUtils = require("./api/utils");
+let {renderMarkdown} = require("../markdown");
 
 router.get(["/", "/index.html"], async function(req, res, next) {
     let page = req.query.page === undefined ? 1 : Number(req.query.page);
@@ -116,7 +117,8 @@ router.get(["/details.html"], async function(req, res, next) {
 
     let wikiPage = data.getWikiPageById;
     let vm = {
-        wikiPage
+        wikiPage,
+        wikiContentHtml: renderMarkdown(wikiPage.content)
     };
     let title = wikiPage.title;
     res.locals.breadcrumbs = [
@@ -187,6 +189,7 @@ router.get(["/history.html"], async function(req, res, next) {
     let wikiPage = data.getWikiPageHistoryById.wikiPage;
     let vm = {
         wikiPage,
+        wikiContentHtml: renderMarkdown(wikiPage.content),
         historyId: req.query.id
     };
     let title = `History for ${wikiPage.title}`;

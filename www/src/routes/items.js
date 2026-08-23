@@ -1,6 +1,7 @@
 let router = require("express").Router();
 let itemApi = require("./api/items");
 let apiUtils = require("./api/utils");
+let {renderMarkdown} = require("../markdown");
 
 router.get(["/", "/index.html"], async function(req, res, next) {
     let page = req.query.page === undefined ? 1 : Number(req.query.page);
@@ -147,6 +148,7 @@ router.get(["/details.html"], async function(req, res, next) {
 
     let vm = {
         item,
+        itemNotesHtml: renderMarkdown(item.notes),
         statCategories,
         constants: itemApi.constants,
     }
@@ -214,6 +216,7 @@ router.get(["/history.html"], async function(req, res, next) {
 
     let vm = {
         item,
+        itemNotesHtml: renderMarkdown(item.notes),
         statCategories,
         constants: itemApi.constants,
         historyId: req.query.id

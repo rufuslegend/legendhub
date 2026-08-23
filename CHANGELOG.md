@@ -13,6 +13,7 @@ with version 2.6.0.
 
 ### Changed
 
+- Made item, mob, quest, and wiki details show their notes and guides immediately, including when JavaScript is unavailable.
 - Made the shared navigation, theme chooser, notification menu, and cookie banner work without the legacy browser framework while keeping all nine themes and saved preferences intact.
 - Made the Mobs, Quests, and Wiki lists easier to navigate: names and sortable headings are now ordinary links, while the separate new-tab details action remains available. Their mobile area and category menus now work with keyboard controls and return you to the menu button after closing.
 - Made notification preferences and password changes easier to use with a keyboard, kept focus in the active account workflow, and improved clarity for assistive technology while preserving secure sign-in renewal.

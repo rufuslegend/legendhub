@@ -1,6 +1,7 @@
 let router = require("express").Router();
 let itemApi = require("./api/items");
 let apiUtils = require("./api/utils");
+let {renderMarkdown} = require("../markdown");
 
 router.get(["/", "/index.html"], async function(req, res, next) {
     let page = req.query.page === undefined ? 1 : Number(req.query.page);
@@ -131,6 +132,7 @@ router.get(["/details.html"], async function(req, res, next) {
     let mob = data.getMobById;
     let vm = {
         mob,
+        mobNotesHtml: renderMarkdown(mob.notes),
         constants: itemApi.constants
     }
     let title = mob.name;
@@ -213,6 +215,7 @@ router.get(["/history.html"], async function(req, res, next) {
     let mob = data.getMobHistoryById.mob;
     let vm = {
         mob,
+        mobNotesHtml: renderMarkdown(mob.notes),
         constants: itemApi.constants,
         historyId: req.query.id
     };
