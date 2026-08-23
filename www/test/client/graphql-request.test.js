@@ -236,3 +236,39 @@ test("GraphQL request redirects unauthorized responses to the existing error pag
     await assert.rejects(graphqlRequest({query: "query { settings }"}), /Authorization required\./);
     assert.equal(redirect, "/error/401.html");
 });
+
+test("GraphQL request redirects HTTP-200 authorization errors to the existing error page", async function(t) {
+    const originalFetch = globalThis.fetch;
+    const originalWindow = globalThis.window;
+    t.after(function() {
+        globalThis.fetch = originalFetch;
+        globalThis.window = originalWindow;
+    });
+    let redirect;
+    globalThis.window = {location: {assign: function(path) { redirect = path; }}};
+    const {graphqlRequest, GraphQLRequestError} = await loadModule();
+
+    for (const code of [401, 403]) {
+        redirect = undefined;
+        globalThis.fetch = async function() {
+            return response({
+                data: {updatePassword: null},
+                errors: [{
+                    message: "Invalid token",
+                    path: ["updatePassword"],
+                    code
+                }]
+            });
+        };
+
+        await assert.rejects(
+            graphqlRequest({query: "mutation UpdatePassword { updatePassword }"}),
+            function(error) {
+                assert.ok(error instanceof GraphQLRequestError);
+                assert.equal(error.message, "Authorization required.");
+                return true;
+            }
+        );
+        assert.equal(redirect, "/error/401.html");
+    }
+});

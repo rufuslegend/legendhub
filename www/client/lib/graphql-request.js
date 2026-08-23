@@ -48,6 +48,12 @@ export async function graphqlRequest({query, variables, signal}) {
     if (!body || typeof body !== "object")
         throw new GraphQLRequestError("The server returned an invalid response.");
     if (Array.isArray(body.errors) && body.errors.length > 0) {
+        if (body.errors.some(function(error) {
+            return error?.code === 401 || error?.code === 403;
+        })) {
+            redirectToUnauthorizedPage();
+            throw new GraphQLRequestError("Authorization required.");
+        }
         const errors = body.errors.map(normalizeGraphQLError);
         throw new GraphQLRequestError(errors[0].message, errors);
     }
