@@ -365,8 +365,12 @@ test("Items Columns and Filters dialogs preserve picker controls and ordering", 
     await expect(page.getByRole("heading", {name: "Select visible columns"})).toBeVisible();
     expect(await page.getByRole("dialog", {name: "Select visible columns"}).locator("h6").allTextContents()).toEqual(["Basic", "Main", "Limits", "Ranged", "Regen", "Tank", "Melee", "Mage", "Weapon", "Future"]);
     expect(await page.getByRole("dialog", {name: "Select visible columns"}).locator(".columns-picker-option").allTextContents()).toEqual(["Name", "Slot", "Light", "Main Stat", "Limits Stat", "Ranged Stat", "Regen Stat", "Tank Stat", "Melee Stat", "Mage Stat", "Weapon Stat", "Future Stat"]);
-    await page.getByRole("button", {name: "Slot", exact: true}).click(); await page.getByRole("button", {name: "Reset to defaults", exact: true}).click();
-    await expect(page.getByRole("button", {name: "Slot", exact: true}).locator("svg.text-danger")).toBeVisible();
+    const slotColumn = page.getByRole("button", {name: "Slot", exact: true});
+    await expect(slotColumn).toHaveAttribute("aria-pressed", "false");
+    await slotColumn.click(); await expect(slotColumn).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", {name: "Reset to defaults", exact: true}).click();
+    await expect(slotColumn).toHaveAttribute("aria-pressed", "false");
+    await expect(slotColumn.locator("svg.text-danger")).toBeVisible();
     await page.keyboard.press("Escape"); await page.getByRole("button", {name: "Filters", exact: true}).click();
     await expect(page.getByRole("heading", {name: "Select search filters"})).toBeVisible();
     expect(await page.getByRole("dialog", {name: "Select search filters"}).locator("h6").allTextContents()).toEqual(["Basic", "Main", "Limits", "Ranged", "Regen", "Tank", "Melee", "Mage", "Weapon", "Future"]);

@@ -30,6 +30,7 @@ with version 2.6.0.
 
 ### Fixed
 
+- Restored the Builder's categorized, theme-aware column chooser with clear shown/hidden icons, compact grouping, and per-character choices.
 - Restored the Builder's repeated equipment totals, keyboard-accessible stat cells, mobile Character actions, and per-character columns after deleting a character.
 - Protected saved Builder lists when item details are temporarily unavailable, with a visible Retry action that restores normal items, faux objects, rune charms, and missing-item markers without discarding the original list.
 - Restored complete Builder list-name validation, in-picker item unlocking, accessible warning associations, and compact Character/Stats spacing in every Glass theme.

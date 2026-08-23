@@ -1,5 +1,6 @@
 import {useCallback, useEffect, useMemo, useReducer, useRef} from "react";
 import gameStats from "../../../src/public/js/services/game-stats.js";
+import ColumnsDialog from "../../components/ColumnsDialog.jsx";
 import {graphqlRequest} from "../../lib/graphql-request.js";
 import CharacterPanel from "./CharacterPanel.jsx";
 import EquipmentPanel from "./EquipmentPanel.jsx";
@@ -26,6 +27,7 @@ async function hydrateLists(lists, fragment) {
 
 export default function Builder({itemStatCategories = [], selectedColumns = []}) {
     const [state, dispatch] = useReducer(builderReducer, undefined, createInitialBuilderState);
+    const columnsTriggerRef = useRef(null);
     const hydrated = useRef(false);
     const selected = state.selectedList;
     const totals = useMemo(() => Object.fromEntries(state.statInfo.map(stat => [stat.var, selected && (stat.type === "int" || stat.var === "alignRestriction") ? selectStatTotal({selectedList: selected}, stat.var) : ""])), [state.statInfo, selected]);
@@ -95,6 +97,8 @@ export default function Builder({itemStatCategories = [], selectedColumns = []})
         dispatch(value);
     }
     const close = useCallback(function() { dispatch({type: "ui/patch", value: {currentDialog: null, currentItem: null, isRuneCrafting: false}}); }, []);
+    const resetColumns = useCallback(function() { dispatch({type: "columns/reset"}); }, []);
+    const toggleColumn = useCallback(function(short) { dispatch({type: "column/toggle", stat: short}); }, []);
     const openDialog = useCallback(function(currentDialog) {
         dispatch({type: "ui/patch", value: {currentDialog, dialogError: "", importModel: currentDialog === "import" ? {input: "", lists: [], message: "", loading: false} : state.importModel, dialogName: currentDialog === "edit-character" ? state.allLists[state.selectedListIndex].name : currentDialog === "edit-variant" ? selected.name : ""}});
     }, [selected, state.allLists, state.importModel, state.selectedListIndex]);
@@ -170,5 +174,5 @@ export default function Builder({itemStatCategories = [], selectedColumns = []})
     function pickItem(item, rune) { if (rune) { const charm = state.charmSelectors.join(""); dispatch({type: "rune/update", index: state.currentItemIndex, charm, runeId: RUNE_CHARM_ID, runeStats: deriveRuneCharmStats(charm)}); } else dispatch({type: "item/select", index: state.currentItemIndex, item}); close(); }
     if (state.requestStatus === "pending" && !state.initialized) return <main className="container-fluid"><p role="status">Loading Builder…</p></main>;
     if (!selected) return null;
-    return <main className="container-fluid"><div className="row"><CharacterPanel state={state} onAction={action} onDialog={openDialog} /><StatsPanel state={state} onAction={action} /></div>{state.requestError && <p role="alert" className="text-danger">{state.requestError} <button type="button" className="btn btn-link p-0" onClick={() => window.location.reload()}>Retry</button></p>}<EquipmentPanel state={state} totals={totals} restrictions={restrictions} statRestrictions={statRestrictions} onAction={action} onOpen={openItem} onPick={pickItem} onClose={close} />{state.currentDialog === "export" && <ImportExportDialog mode="export" value={exportValue()} onClose={close} />}{state.currentDialog === "import" && <ImportExportDialog mode="import" value={state.importModel || {input: "", lists: [], message: "", loading: false}} onChange={importChange} onClose={close} onSubmit={submitImport} />}{state.currentDialog && !["import", "export"].includes(state.currentDialog) && <BuilderListsDialog dialog={state.currentDialog} state={state} onClose={close} onSubmit={listsDialog} onColumns={short => short ? dispatch({type: "column/toggle", stat: short}) : dispatch({type: "columns/reset"})} />}</main>;
+    return <main className="container-fluid"><div className="row"><CharacterPanel state={state} columnsOpen={state.currentDialog === "columns"} columnsTriggerRef={columnsTriggerRef} onAction={action} onDialog={openDialog} /><StatsPanel state={state} onAction={action} /></div>{state.requestError && <p role="alert" className="text-danger">{state.requestError} <button type="button" className="btn btn-link p-0" onClick={() => window.location.reload()}>Retry</button></p>}<EquipmentPanel state={state} totals={totals} restrictions={restrictions} statRestrictions={statRestrictions} onAction={action} onOpen={openItem} onPick={pickItem} onClose={close} />{state.currentDialog === "export" && <ImportExportDialog mode="export" value={exportValue()} onClose={close} />}{state.currentDialog === "import" && <ImportExportDialog mode="import" value={state.importModel || {input: "", lists: [], message: "", loading: false}} onChange={importChange} onClose={close} onSubmit={submitImport} />}{state.currentDialog === "columns" && <ColumnsDialog categories={itemStatCategories} open onClose={close} onReset={resetColumns} onToggle={toggleColumn} selectedColumns={state.statInfo.filter(stat => stat.showColumn).map(stat => stat.short)} triggerRef={columnsTriggerRef} />}{state.currentDialog && !["columns", "import", "export"].includes(state.currentDialog) && <BuilderListsDialog dialog={state.currentDialog} state={state} onClose={close} onSubmit={listsDialog} />}</main>;
 }

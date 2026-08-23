@@ -1,7 +1,6 @@
 import {BuilderModal} from "./ImportExportDialog.jsx";
 
-export default function BuilderListsDialog({dialog, state, onClose, onSubmit, onColumns}) {
-    if (dialog === "columns") return <BuilderModal label="Select visible columns" onClose={onClose}><div className="modal-body">{state.statInfo.map(stat => <label className="d-block" key={stat.var}><input type="checkbox" checked={Boolean(stat.showColumn)} onChange={() => onColumns(stat.short)} /> {stat.display}</label>)}<button className="btn btn-primary" type="button" onClick={() => onColumns(null)}>Reset to defaults</button></div></BuilderModal>;
+export default function BuilderListsDialog({dialog, state, onClose, onSubmit}) {
     const title = dialog === "clear" ? "Are you sure?" : dialog === "delete-character" || dialog === "delete-variant" ? "Are you sure?" : dialog === "add-character" ? "Add Character" : dialog === "add-variant" ? "Add Variant" : dialog === "edit-character" ? "Edit Character" : "Edit Variant";
     const confirmation = dialog === "clear" ? `Are you sure you want to clear all of ${state.selectedList.name}'s items? Only locked items will remain.` : dialog === "delete-character" ? `Are you sure you want to delete ${state.allLists[state.selectedListIndex].name}?` : dialog === "delete-variant" ? "Are you sure you want to delete the current list variant?" : null;
     if (confirmation) return <BuilderModal label={title} onClose={onClose}><div className="modal-body"><p>{confirmation}</p><button className="btn btn-primary" type="button" onClick={onSubmit}>Yes</button></div></BuilderModal>;

@@ -24,6 +24,18 @@ const itemStatInfo = [
     {display: "Rent", short: "Rent", var: "rent", type: "int", showColumnDefault: true},
     {display: "Light", short: "Light", var: "isLight", type: "bool", showColumnDefault: true}
 ];
+const itemStatCategories = [
+    {name: "Basic", getItemStatInfo: [itemStatInfo[0]]},
+    {name: "Main", getItemStatInfo: [itemStatInfo[1]]},
+    {name: "Limits", getItemStatInfo: [itemStatInfo[2]]},
+    {name: "Ranged", getItemStatInfo: [itemStatInfo[3]]},
+    {name: "Regen", getItemStatInfo: [itemStatInfo[4]]},
+    {name: "Tank", getItemStatInfo: [itemStatInfo[5]]},
+    {name: "Melee", getItemStatInfo: [itemStatInfo[6]]},
+    {name: "Mage", getItemStatInfo: [itemStatInfo[7]]},
+    {name: "Weapon", getItemStatInfo: [itemStatInfo[8]]},
+    {name: "Future", getItemStatInfo: [itemStatInfo[9]]}
+];
 const hydratedItems = [
     {id: 41, name: "Brass lantern", slot: 0, strength: 2, isLight: 1},
     {id: 42, name: "Faux moonlight", slot: 0, strength: 4, hp: 20, fauxObject: 1, isLight: 1},
@@ -87,7 +99,11 @@ test.beforeAll(async function() {
     const app = loadAppWithoutDatabaseMetadataQuery();
     const apiUtils = require("../src/routes/api/utils");
     const originalPostAsync = apiUtils.postAsync;
-    apiUtils.postAsync = publicPageData;
+    apiUtils.postAsync = function(query) {
+        if (query.includes("getItemStatCategories"))
+            return Promise.resolve({getItemStatCategories: itemStatCategories, getItemStatInfo: itemStatInfo});
+        return publicPageData(query);
+    };
     restorePostAsync = function() { apiUtils.postAsync = originalPostAsync; };
     server = await new Promise(function(resolve) {
         const listeningServer = app.listen(0, "127.0.0.1", function() {
@@ -493,6 +509,59 @@ test("Builder exports and copies all three exact values", async function({page})
     }
 });
 
+// Catches Builder falling back to its former flat checkbox list instead of the
+// same categorized, themed Columns picker used by Item Search.
+test("Builder Columns preserves the shared visual and interaction contract in every theme", async function({context, page}) {
+    const themes = ["light", "dark", "solarized-dark", "high-contrast", "glass-blue", "glass-emerald", "glass-ruby", "glass-amethyst", "glass-amber"];
+    for (const theme of themes) {
+        await context.addCookies([
+            {name: "theme", value: theme, url: baseUrl},
+            {name: "sc-Hero", value: "Name-Str-Hit", url: baseUrl}
+        ]);
+        await page.goto(`${baseUrl}/builder/`);
+        await expect(page.locator("link#theme")).toHaveAttribute("href", new RegExp(`bootstrap-${theme}\\.min\\.css`));
+        const trigger = page.getByRole("button", {name: "Hide/Show Columns", exact: true});
+        await trigger.focus();
+        await trigger.press("Enter");
+
+        const dialog = page.getByRole("dialog", {name: "Select visible columns"});
+        await expect(dialog).toBeVisible();
+        await expect(dialog.getByRole("heading", {name: "Select visible columns", exact: true})).toBeVisible();
+        await expect(dialog.locator(".modal-dialog")).toHaveClass(/modal-xl/);
+        await expect(dialog.locator(".columns-picker-toolbar")).toContainText("Select columns to show and hide from the following:");
+        await expect(dialog.getByRole("button", {name: "Reset to defaults", exact: true})).toHaveClass(/columns-picker-reset/);
+        await expect(dialog.locator(".columns-picker-grid")).toHaveCount(1);
+        await expect(dialog.locator(".columns-picker-stack")).toHaveCount(5);
+        await expect(dialog.locator(".columns-picker-category")).toHaveCount(10);
+        expect(await dialog.locator(".columns-picker-category-title").allTextContents()).toEqual(["Basic", "Main", "Limits", "Ranged", "Regen", "Tank", "Melee", "Mage", "Weapon", "Future"]);
+        expect(await dialog.locator(".columns-picker-option").allTextContents()).toEqual(["Name", "Strength", "Hit", "Damage", "Hit Points", "Mana", "Movement", "Armor Class", "Rent", "Light"]);
+        expect(await dialog.locator(".columns-picker-option").evaluateAll(options => options.map(option => option.tagName))).toEqual(["BUTTON", "BUTTON", "BUTTON", "BUTTON", "BUTTON", "BUTTON", "BUTTON", "BUTTON", "BUTTON", "BUTTON"]);
+        await expect(dialog.getByRole("checkbox")).toHaveCount(0);
+
+        const name = dialog.getByRole("button", {name: "Name", exact: true});
+        const hitPoints = dialog.getByRole("button", {name: "Hit Points", exact: true});
+        await expect(name).toHaveClass(/columns-picker-option/);
+        await expect(name).toHaveAttribute("aria-pressed", "true");
+        await expect(name.locator("svg.columns-picker-visibility-icon.text-success")).toBeVisible();
+        await expect(hitPoints).toHaveAttribute("aria-pressed", "false");
+        await expect(hitPoints.locator("svg.columns-picker-visibility-icon.text-danger")).toBeVisible();
+        expect(await page.getByLabel("Character", {exact: true}).evaluate(element => element.closest("[inert]") != null)).toBe(true);
+
+        await name.click();
+        await expect(name).toHaveAttribute("aria-pressed", "false");
+        await expect(name.locator("svg.columns-picker-visibility-icon.text-danger")).toBeVisible();
+        await expect.poll(async () => (await context.cookies()).find(cookie => cookie.name === "sc-Hero")?.value).toBe("Str-Hit-");
+        await dialog.getByRole("button", {name: "Reset to defaults", exact: true}).click();
+        await expect(name).toHaveAttribute("aria-pressed", "true");
+        await expect(name.locator("svg.columns-picker-visibility-icon.text-success")).toBeVisible();
+        await expect.poll(async () => (await context.cookies()).find(cookie => cookie.name === "sc-Hero")?.value).toBe("Name-Str-Hit-Dam-HP-Ma-Mv-AC-Rent-Light-");
+
+        await page.keyboard.press("Escape");
+        await expect(dialog).toBeHidden();
+        await expect(trigger).toBeFocused();
+    }
+});
+
 // Catches per-character column state falling back, migrating, deleting, or
 // reloading through the wrong cookie key.
 test("Builder preserves global and per-character columns across lifecycle changes", async function({context, page}) {
@@ -504,16 +573,16 @@ test("Builder preserves global and per-character columns across lifecycle change
     await expect.poll(async () => (await context.cookies()).find(cookie => cookie.name === "sc-Hero")?.value).toBe("Name-Str-Hit-");
     await page.getByRole("button", {name: "Hide/Show Columns", exact: true}).click();
     let dialog = page.getByRole("dialog", {name: "Select visible columns"});
-    await expect(dialog.getByLabel("Strength", {exact: true})).toBeChecked();
-    await expect(dialog.getByLabel("Hit", {exact: true})).toBeChecked();
-    await expect(dialog.getByLabel("Hit Points", {exact: true})).not.toBeChecked();
+    await expect(dialog.getByRole("button", {name: "Strength", exact: true})).toHaveAttribute("aria-pressed", "true");
+    await expect(dialog.getByRole("button", {name: "Hit", exact: true})).toHaveAttribute("aria-pressed", "true");
+    await expect(dialog.getByRole("button", {name: "Hit Points", exact: true})).toHaveAttribute("aria-pressed", "false");
     await page.keyboard.press("Escape");
     await page.getByLabel("Character", {exact: true}).selectOption({label: "Scout"});
     await page.getByRole("button", {name: "Hide/Show Columns", exact: true}).click();
     dialog = page.getByRole("dialog", {name: "Select visible columns"});
-    await expect(dialog.getByLabel("Strength", {exact: true})).not.toBeChecked();
-    await expect(dialog.getByLabel("Hit Points", {exact: true})).toBeChecked();
-    await dialog.getByLabel("Strength", {exact: true}).check();
+    await expect(dialog.getByRole("button", {name: "Strength", exact: true})).toHaveAttribute("aria-pressed", "false");
+    await expect(dialog.getByRole("button", {name: "Hit Points", exact: true})).toHaveAttribute("aria-pressed", "true");
+    await dialog.getByRole("button", {name: "Strength", exact: true}).click();
     await page.keyboard.press("Escape");
     await expect.poll(() => page.evaluate(() => document.cookie)).toContain("sc-Scout=");
     await expect.poll(async () => (await context.cookies()).find(cookie => cookie.name === "sc-Scout")?.value).toContain("Str");
@@ -531,17 +600,17 @@ test("Builder preserves global and per-character columns across lifecycle change
     await expect(page.getByLabel("Character", {exact: true})).toHaveValue("0");
     await page.getByRole("button", {name: "Hide/Show Columns", exact: true}).click();
     dialog = page.getByRole("dialog", {name: "Select visible columns"});
-    await expect(dialog.getByLabel("Strength", {exact: true})).toBeChecked();
-    await expect(dialog.getByLabel("Hit", {exact: true})).toBeChecked();
-    await expect(dialog.getByLabel("Hit Points", {exact: true})).not.toBeChecked();
+    await expect(dialog.getByRole("button", {name: "Strength", exact: true})).toHaveAttribute("aria-pressed", "true");
+    await expect(dialog.getByRole("button", {name: "Hit", exact: true})).toHaveAttribute("aria-pressed", "true");
+    await expect(dialog.getByRole("button", {name: "Hit Points", exact: true})).toHaveAttribute("aria-pressed", "false");
     await page.keyboard.press("Escape");
     await expect.poll(async () => (await context.cookies()).find(cookie => cookie.name === "sc-Hero")?.value).toBe("Name-Str-Hit-");
     await page.reload();
     await page.getByRole("button", {name: "Hide/Show Columns", exact: true}).click();
     dialog = page.getByRole("dialog", {name: "Select visible columns"});
-    await expect(dialog.getByLabel("Strength", {exact: true})).toBeChecked();
-    await expect(dialog.getByLabel("Hit", {exact: true})).toBeChecked();
-    await expect(dialog.getByLabel("Hit Points", {exact: true})).not.toBeChecked();
+    await expect(dialog.getByRole("button", {name: "Strength", exact: true})).toHaveAttribute("aria-pressed", "true");
+    await expect(dialog.getByRole("button", {name: "Hit", exact: true})).toHaveAttribute("aria-pressed", "true");
+    await expect(dialog.getByRole("button", {name: "Hit Points", exact: true})).toHaveAttribute("aria-pressed", "false");
     await expect.poll(async () => (await context.cookies()).find(cookie => cookie.name === "sc-Hero")?.value).toBe("Name-Str-Hit-");
 });
 
