@@ -12,6 +12,7 @@ with version 2.6.0.
 ### Fixed
 
 - Hardened sign-in renewal so private session data is not written to server diagnostics.
+- Hardened item search so editable result data is loaded safely into the interactive page.
 
 ## [2.9.0] - 2026-08-22
 

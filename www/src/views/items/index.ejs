@@ -15,7 +15,7 @@
 <body>
     <%- include('../shared/header') %>
     <div data-react-root="items"></div>
-    <script type="application/json" data-react-props="items"><%- JSON.stringify({
+    <script type="application/json" data-react-props="items"><%- serializeJsonForHtml({
         categories: vm.itemStatCategories,
         constants: vm.constants,
         moreResults: vm.moreResults,
@@ -25,7 +25,7 @@
         selectedColumns: vm.selectedColumns,
         statInfo: vm.itemStatInfo,
         user: Boolean(locals.user)
-    }).replace(/</g, '\\u003c') %></script>
+    }) %></script>
     <%- include('../shared/footer') %>
     <%- include('../shared/scripts') %>
     <script type="module" src="/build/items.js?v=<%-locals.version%>"></script>
