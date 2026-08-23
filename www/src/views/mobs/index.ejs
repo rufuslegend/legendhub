@@ -14,15 +14,15 @@
     <%-include("../shared/meta")-%>
     <link href="https://www.legendhub.org<%-sortBaseUrl%>&page=<%-vm.page%>" rel="canonical">
 </head>
-<body ng-app="legendwiki-app" ng-controller="mobs" ng-class="{'modal-open': categoryActive}">
+<body>
     <%-include("../shared/header")-%>
     
 	<div class="container-fluid">
 		<div class="px-0">
 			<div class="row">
-                <div class="categoryListBackground" ng-class="{active: categoryActive}" ng-click="categoryActive = false" style="cursor:default">
-                    <div class="categoryListContainer" lh-isolate-click>
-                        <div class="categoryListClose" ng-click="categoryActive = !categoryActive"><i class="fas fa-times"></i></div>
+                <div id="mobs-categories" class="categoryListBackground" data-category-list>
+                    <nav class="categoryListContainer" aria-label="Mob areas">
+                        <button class="categoryListClose" type="button" data-category-list-close aria-label="Close areas"><i class="fas fa-times" aria-hidden="true"></i></button>
                         <h2>Areas</h2>
                         <ul class="categoryList">
                             <%for (let i = 0; i < vm.categories.length; ++i) {%>
@@ -40,7 +40,7 @@
                             </li>
                             <%}%>
                         </ul>
-                    </div>
+                    </nav>
                 </div>
 				<div class="col">
 					<div class="row text-center">
@@ -57,14 +57,14 @@
 							<div class="row">
 								<div class="input-group col-12">
 									<div class="input-group-prepend d-block d-md-none">
-										<button class="btn btn-outline-primary" type="button" ng-click="categoryActive = true">&nbsp;<i class="fas fa-caret-right"></i>&nbsp;
+                                        <button class="btn btn-outline-primary" type="button" data-category-list-open aria-controls="mobs-categories" aria-expanded="false" aria-label="Open areas">&nbsp;<i class="fas fa-caret-right" aria-hidden="true"></i>&nbsp;
 									</div>
                                     <%if (vm.activeCategory) {%>
                                     <div class="input-group-prepend">
                                         <a class="btn btn-outline-primary" role="button" href="<%-searchBaseUrl%>"><%=vm.activeCategory%>&nbsp;&nbsp;<i class="fas fa-times"></i></a>
                                     </div>
                                     <%}%>
-                                    <input type="text" name="search" value="<%-vm.searchString%>" class="form-control" placeholder="Search by name..." lh-autofocus>
+                                    <input type="text" name="search" value="<%-vm.searchString%>" class="form-control" placeholder="Search by name..." autofocus>
 									<div class="input-group-append">
 										<button class="btn btn-primary" type="submit"><span class="d-none d-md-inline-block">Search</span><i class="d-inline-block d-md-none fas fa-search"></i></button>
 									</div>
@@ -106,17 +106,17 @@
                  else
                  return "";
                  };%>
-                 <th scope="col" class="text-center"ng-click="onColumnHeaderClicked('<%-categoryBaseUrl+"&sortBy=name&sortAsc=" + (vm.query.sortBy ==="name"?!(vm.query.sortAsc === "true"):true)%>')" nowrap>Name&nbsp;<i class="<%-sortClass('name')%>"></i></th>
-												<th scope="col" class="text-center"ng-click="onColumnHeaderClicked('<%-categoryBaseUrl+"&sortBy=areaName&sortAsc=" + (vm.query.sortBy ==="areaName"?!(vm.query.sortAsc === "true"):true)%>')" nowrap>Area&nbsp;<i class="<%-sortClass('areaName')%>"></i></th>
-												<th scope="col" class="text-center"ng-click="onColumnHeaderClicked('<%-categoryBaseUrl+"&sortBy=xp&sortAsc=" + (vm.query.sortBy ==="xp"?!(vm.query.sortAsc === "true"):false)%>')" nowrap>Experience&nbsp;<i class="<%-sortClass('xp')%>"></i></th>
-												<th scope="col" class="text-center"ng-click="onColumnHeaderClicked('<%-categoryBaseUrl+"&sortBy=gold&sortAsc=" + (vm.query.sortBy ==="gold"?!(vm.query.sortAsc === "true"):false)%>')" nowrap>Gold&nbsp;<i class="<%-sortClass('gold')%>"></i></th>
-												<th scope="col" class="text-center"ng-click="onColumnHeaderClicked('<%-categoryBaseUrl+"&sortBy=aggro&sortAsc=" + (vm.query.sortBy ==="aggro"?!(vm.query.sortAsc === "true"):false)%>')" nowrap>Agg&nbsp;<i class="<%-sortClass('aggro')%>"></i></th>
+                 <th scope="col" class="text-center" nowrap><a class="text-reset" href="<%-categoryBaseUrl+"&sortBy=name&sortAsc=" + (vm.query.sortBy ==="name"?!(vm.query.sortAsc === "true"):true)%>">Name&nbsp;<i class="<%-sortClass('name')%>" aria-hidden="true"></i></a></th>
+												<th scope="col" class="text-center" nowrap><a class="text-reset" href="<%-categoryBaseUrl+"&sortBy=areaName&sortAsc=" + (vm.query.sortBy ==="areaName"?!(vm.query.sortAsc === "true"):true)%>">Area&nbsp;<i class="<%-sortClass('areaName')%>" aria-hidden="true"></i></a></th>
+												<th scope="col" class="text-center" nowrap><a class="text-reset" href="<%-categoryBaseUrl+"&sortBy=xp&sortAsc=" + (vm.query.sortBy ==="xp"?!(vm.query.sortAsc === "true"):false)%>">Experience&nbsp;<i class="<%-sortClass('xp')%>" aria-hidden="true"></i></a></th>
+												<th scope="col" class="text-center" nowrap><a class="text-reset" href="<%-categoryBaseUrl+"&sortBy=gold&sortAsc=" + (vm.query.sortBy ==="gold"?!(vm.query.sortAsc === "true"):false)%>">Gold&nbsp;<i class="<%-sortClass('gold')%>" aria-hidden="true"></i></a></th>
+												<th scope="col" class="text-center" nowrap><a class="text-reset" href="<%-categoryBaseUrl+"&sortBy=aggro&sortAsc=" + (vm.query.sortBy ==="aggro"?!(vm.query.sortAsc === "true"):false)%>">Agg&nbsp;<i class="<%-sortClass('aggro')%>" aria-hidden="true"></i></a></th>
 											</tr>
 										</thead>
 										<tbody>
                                             <%for (let i = 0; i < vm.results.length; ++i) {%>
-                                            <tr ng-click="onMobClicked(<%-vm.results[i].id%>)">
-                                                <th scope="row" class="text-primary"><%=vm.results[i].name%><a class="float-right" href="/mobs/details.html?id=<%-vm.results[i].id%>" target="_blank" ng-click="$event.stopPropagation()" aria-label="Open details for <%=vm.results[i].name%> in a new tab"><i class="fas fa-external-link-alt fa-lg" aria-hidden="true"></i></a></th>
+                                            <tr>
+                                                <th scope="row"><a class="text-primary" href="/mobs/details.html?id=<%-vm.results[i].id%>"><%=vm.results[i].name%></a><a class="float-right" href="/mobs/details.html?id=<%-vm.results[i].id%>" target="_blank" rel="noopener" aria-label="Open details for <%=vm.results[i].name%> in a new tab"><i class="fas fa-external-link-alt fa-lg" aria-hidden="true"></i></a></th>
                                                 <td><%if(vm.results[i].eraName){%><span class="text-info">(<%=vm.results[i].eraName%>)</span> <%}%><%=vm.results[i].areaName%></td>
                                                 <td class="text-center"><%=vm.results[i].xp%></td>
                                                 <td class="text-center"><%=vm.results[i].gold%></td>
@@ -144,16 +144,5 @@
 	</div>
     <%-include("../shared/footer")-%>
     <%-include("../shared/scripts")-%>
-    <script>
-        app.controller("mobs", ["$scope", function($scope) {
-            $scope.onMobClicked = function(id) {
-                window.location = "/mobs/details.html?id=" + id;
-            };
-
-            $scope.onColumnHeaderClicked = function(url) {
-                window.location = url;
-            };
-        }]);
-    </script>
 </body>
 </html>

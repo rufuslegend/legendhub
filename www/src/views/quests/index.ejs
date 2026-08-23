@@ -15,14 +15,14 @@
         <link href="https://www.legendhub.org<%-sortBaseUrl%>&page=<%-vm.page%>" rel="canonical">
         <meta name="robots" content="noindex">
     </head>
-    <body ng-app="legendwiki-app" ng-controller="quests" ng-class="{'modal-open': categoryActive}">
+    <body>
         <%-include("../shared/header")-%>
         <div class="container-fluid">
             <div class="px-0">
                 <div class="row">
-                    <div class="categoryListBackground" ng-class="{active: categoryActive}" ng-click="categoryActive = false" style="cursor:default">
-                      <div class="categoryListContainer" lh-isolate-click>
-                        <div class="categoryListClose" ng-click="categoryActive = !categoryActive"><i class="fas fa-times"></i></div>
+                    <div id="quests-categories" class="categoryListBackground" data-category-list>
+                      <nav class="categoryListContainer" aria-label="Quest areas">
+                        <button class="categoryListClose" type="button" data-category-list-close aria-label="Close areas"><i class="fas fa-times" aria-hidden="true"></i></button>
                         <h2>Areas</h2>
                         <ul class="categoryList">
                             <%for (let i = 0; i < vm.categories.length; ++i) {%>
@@ -40,7 +40,7 @@
                             </li>
                             <%}%>
                         </ul>
-                      </div>
+                      </nav>
                     </div>
                     <div class="col">
                         <div class="row text-center">
@@ -57,14 +57,14 @@
                                 <div class="row">
                                     <div class="input-group col-12">
                                         <div class="input-group-prepend d-block d-md-none">
-                                            <button class="btn btn-outline-primary" type="button" ng-click="categoryActive = true">&nbsp;<i class="fas fa-caret-right"></i>&nbsp;
+                                            <button class="btn btn-outline-primary" type="button" data-category-list-open aria-controls="quests-categories" aria-expanded="false" aria-label="Open areas">&nbsp;<i class="fas fa-caret-right" aria-hidden="true"></i>&nbsp;
                                         </div>
                                         <%if (vm.activeCategory) {%>
                                         <div class="input-group-prepend">
                                             <a class="btn btn-outline-primary" role="button" href="<%-searchBaseUrl%>"><%=vm.activeCategory%>&nbsp;&nbsp;<i class="fas fa-times"></i></a>
                                         </div>
                                         <%}%>
-                                        <input type="text" name="search" value="<%-vm.query.search%>" class="form-control" placeholder="Search by title, whois, area, or content..." lh-autofocus>
+                                        <input type="text" name="search" value="<%-vm.query.search%>" class="form-control" placeholder="Search by title, whois, area, or content..." autofocus>
                                         <div class="input-group-append">
                                             <label for="statCheckbox" class="btn btn-outline-primary custom-control custom-checkbox mb-0" style="padding-left:2rem">
                                                 <input type="checkbox" name="stat" value="true"<%-(vm.query.stat?" checked" : "")%> class="custom-control-input" id="statCheckbox">
@@ -103,14 +103,14 @@
                  else
                  return "";
                  };%>
-                 <th scope="col" class="text-center" ng-click="onColumnHeaderClicked('<%-`${categoryBaseUrl}&sortBy=title&sortAsc=${(vm.query.sortBy==="title"?!(vm.query.sortAsc==="true"):true)}`%>')" nowrap>Title&nbsp;<i class="<%-sortClass('title')%>"></i></th>
-                 <th scope="col" class="text-center" ng-click="onColumnHeaderClicked('<%-`${categoryBaseUrl}&sortBy=areaName&sortAsc=${(vm.query.sortBy==="areaName"?!(vm.query.sortAsc==="true"):true)}`%>')" nowrap>Area&nbsp;<i class="<%-sortClass('areaName')%>"></i></th>
+                 <th scope="col" class="text-center" nowrap><a class="text-reset" href="<%-`${categoryBaseUrl}&sortBy=title&sortAsc=${(vm.query.sortBy==="title"?!(vm.query.sortAsc==="true"):true)}`%>">Title&nbsp;<i class="<%-sortClass('title')%>" aria-hidden="true"></i></a></th>
+                 <th scope="col" class="text-center" nowrap><a class="text-reset" href="<%-`${categoryBaseUrl}&sortBy=areaName&sortAsc=${(vm.query.sortBy==="areaName"?!(vm.query.sortAsc==="true"):true)}`%>">Area&nbsp;<i class="<%-sortClass('areaName')%>" aria-hidden="true"></i></a></th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 <%for (let i = 0; i < vm.results.length; ++i) {%>
-                                                <tr ng-click="onQuestClicked('<%-vm.results[i].id%>')">
-                                                    <td scope="row" class="font-weight-bold text-primary"><%=vm.results[i].title%><a class="float-right" href="/quests/details.html?id=<%-vm.results[i].id%>" target="_blank" ng-click="$event.stopPropagation()" aria-label="Open details for <%=vm.results[i].title%> in a new tab"><i class="fas fa-external-link-alt fa-lg" aria-hidden="true"></i></a></td>
+                                                <tr>
+                                                    <th scope="row" class="font-weight-bold"><a class="text-primary" href="/quests/details.html?id=<%-vm.results[i].id%>"><%=vm.results[i].title%></a><a class="float-right" href="/quests/details.html?id=<%-vm.results[i].id%>" target="_blank" rel="noopener" aria-label="Open details for <%=vm.results[i].title%> in a new tab"><i class="fas fa-external-link-alt fa-lg" aria-hidden="true"></i></a></th>
                                                     <td>
                                                         <%_if(vm.results[i].eraName) {%><span class="text-info">(<%=vm.results[i].eraName%>)</span><%}_%>
                                                         <%=vm.results[i].areaName_%>
@@ -132,16 +132,5 @@
         </div>
         <%-include("../shared/footer")-%>
         <%-include("../shared/scripts")-%>
-        <script>
-            app.controller("quests", ["$scope", function($scope) {
-                $scope.onQuestClicked = function(id) {
-                    window.location = "/quests/details.html?id=" + id;
-                };
-
-                $scope.onColumnHeaderClicked = function(url) {
-                    window.location = url;
-                };
-            }]);
-        </script>
     </body>
 </html>

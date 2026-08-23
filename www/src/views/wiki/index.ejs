@@ -15,14 +15,14 @@
         <link href="https://www.legendhub.org<%-sortBaseUrl%>&page=<%-vm.page%>" rel="canonical">
         <meta name="robots" content="noindex">
     </head>
-    <body ng-app="legendwiki-app" ng-controller="wiki" ng-class="{'modal-open': categoryActive}">
+    <body>
         <%-include("../shared/header")-%>
         <div class="container-fluid">
             <div class="px-0">
                 <div class="row">
-                    <div class="categoryListBackground" ng-class="{active: categoryActive}" ng-click="categoryActive = false" style="cursor:default">
-                      <div class="categoryListContainer" lh-isolate-click>
-                        <div class="categoryListClose" ng-click="categoryActive = !categoryActive"><i class="fas fa-times"></i></div>
+                    <div id="wiki-categories" class="categoryListBackground" data-category-list>
+                      <nav class="categoryListContainer" aria-label="Wiki categories">
+                        <button class="categoryListClose" type="button" data-category-list-close aria-label="Close categories"><i class="fas fa-times" aria-hidden="true"></i></button>
                         <h2>Categories</h2>
                         <ul class="categoryList">
                             <%for (let i = 0; i < vm.categories.length; ++i) {%>
@@ -40,7 +40,7 @@
                             </li>
                             <%}%>
                         </ul>
-                      </div>
+                      </nav>
                     </div>
                     <div class="col">
                         <div class="row text-center">
@@ -57,14 +57,14 @@
                                 <div class="row">
                                     <div class="input-group col-12">
                                         <div class="input-group-prepend d-block d-md-none">
-                                            <button class="btn btn-outline-primary" type="button" ng-click="categoryActive = true">&nbsp;<i class="fas fa-caret-right"></i>&nbsp;
+                                            <button class="btn btn-outline-primary" type="button" data-category-list-open aria-controls="wiki-categories" aria-expanded="false" aria-label="Open categories">&nbsp;<i class="fas fa-caret-right" aria-hidden="true"></i>&nbsp;
                                         </div>
                                         <%if (vm.activeCategory) {%>
                                         <div class="input-group-prepend">
                                             <a class="btn btn-outline-primary" role="button" href="<%-searchBaseUrl%>"><%=vm.activeCategory%>&nbsp;&nbsp;<i class="fas fa-times"></i></a>
                                         </div>
                                         <%}%>
-                                        <input type="text" name="search" value="<%-vm.query.search%>" class="form-control" placeholder="Search by title, tags, or content..." lh-autofocus>
+                                        <input type="text" name="search" value="<%-vm.query.search%>" class="form-control" placeholder="Search by title, tags, or content..." autofocus>
                                         <div class="input-group-append">
                                             <button class="btn btn-primary" type="submit"><span class="d-none d-md-inline-block">Search</span><i class="d-inline-block d-md-none fas fa-search"></i></button>
                                         </div>
@@ -97,9 +97,9 @@
                  else
                  return "";
                  };%>
-                 <th scope="col" class="text-center" style="width:1%;min-width:150px" ng-click="onColumnHeaderClicked('<%-`${categoryBaseUrl}&sortBy=subcategoryName&sortAsc=${(vm.query.sortBy==="subcategoryName"?!(vm.query.sortAsc==="true"):true)}`%>')" nowrap>Subcategory&nbsp;<i class="<%-sortClass('subcategoryName')%>"></i></th>
-                 <th scope="col" class="text-center" ng-click="onColumnHeaderClicked('<%-`${categoryBaseUrl}&sortBy=title&sortAsc=${(vm.query.sortBy==="title"?!(vm.query.sortAsc==="true"):true)}`%>')" nowrap>Title&nbsp;<i class="<%-sortClass('title')%>"></i></th>
-                 <th scope="col" class="text-center" ng-click="onColumnHeaderClicked('<%-`${categoryBaseUrl}&sortBy=categoryName&sortAsc=${(vm.query.sortBy==="categoryName"?!(vm.query.sortAsc==="true"):true)}`%>')" nowrap>Category&nbsp;<i class="<%-sortClass('categoryName')%>"></i></th>
+                 <th scope="col" class="text-center" style="width:1%;min-width:150px" nowrap><a class="text-reset" href="<%-`${categoryBaseUrl}&sortBy=subcategoryName&sortAsc=${(vm.query.sortBy==="subcategoryName"?!(vm.query.sortAsc==="true"):true)}`%>">Subcategory&nbsp;<i class="<%-sortClass('subcategoryName')%>" aria-hidden="true"></i></a></th>
+                 <th scope="col" class="text-center" nowrap><a class="text-reset" href="<%-`${categoryBaseUrl}&sortBy=title&sortAsc=${(vm.query.sortBy==="title"?!(vm.query.sortAsc==="true"):true)}`%>">Title&nbsp;<i class="<%-sortClass('title')%>" aria-hidden="true"></i></a></th>
+                 <th scope="col" class="text-center" nowrap><a class="text-reset" href="<%-`${categoryBaseUrl}&sortBy=categoryName&sortAsc=${(vm.query.sortBy==="categoryName"?!(vm.query.sortAsc==="true"):true)}`%>">Category&nbsp;<i class="<%-sortClass('categoryName')%>" aria-hidden="true"></i></a></th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -109,9 +109,9 @@
                                                         pinned = true;
                                                     if (!vm.noSearch && vm.results[i].pinnedSearch)
                                                         pinned = true;%>
-                                                <tr ng-click="onWikiClicked('<%-vm.results[i].id%>')">
+                                                <tr>
                                                     <td class="text-center text-nowrap px-3"><%=vm.results[i].subcategoryName_%></td>
-                                                    <td scope="row text-nowrap" class="font-weight-bold <%-(pinned ? "text-success":"text-primary")%>"><%-(vm.results[i].locked?"<i class='fas fa-lock'></i>&nbsp;":"")%><%=vm.results[i].title%><a class="float-right" href="/wiki/details.html?id=<%-vm.results[i].id%>" target="_blank" ng-click="$event.stopPropagation()" aria-label="Open details for <%=vm.results[i].title%> in a new tab"><i class="fas fa-external-link-alt fa-lg" aria-hidden="true"></i></a></td>
+                                                    <th scope="row" class="text-nowrap font-weight-bold <%-(pinned ? "text-success":"text-primary")%>"><%-(vm.results[i].locked?"<i class='fas fa-lock'></i>&nbsp;":"")%><a class="<%-(pinned ? "text-success":"text-primary")%>" href="/wiki/details.html?id=<%-vm.results[i].id%>"><%=vm.results[i].title%></a><a class="float-right" href="/wiki/details.html?id=<%-vm.results[i].id%>" target="_blank" rel="noopener" aria-label="Open details for <%=vm.results[i].title%> in a new tab"><i class="fas fa-external-link-alt fa-lg" aria-hidden="true"></i></a></th>
                                                     <td class="text-center text-nowrap"><%=vm.results[i].categoryName_%></td>
                                                 </tr>
                                                 <%}%>
@@ -130,16 +130,5 @@
         </div>
         <%-include("../shared/footer")-%>
         <%-include("../shared/scripts")-%>
-        <script>
-            app.controller("wiki", ["$scope", function($scope) {
-                $scope.onWikiClicked = function(id) {
-                    window.location = "/wiki/details.html?id=" + id;
-                };
-
-                $scope.onColumnHeaderClicked = function(url) {
-                    window.location = url;
-                };
-            }]);
-        </script>
     </body>
 </html>

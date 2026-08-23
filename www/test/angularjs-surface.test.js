@@ -26,10 +26,8 @@ const allowedAngularFiles = [
     "views/items/modify.ejs",
     "views/login.ejs",
     "views/mobs/display.ejs",
-    "views/mobs/index.ejs",
     "views/mobs/modify.ejs",
     "views/quests/display.ejs",
-    "views/quests/index.ejs",
     "views/quests/modify.ejs",
     "views/shared/columnsModal.ejs",
     "views/shared/displayChangelog.ejs",
@@ -39,7 +37,6 @@ const allowedAngularFiles = [
     "views/shared/mobModal.ejs",
     "views/shared/questModal.ejs",
     "views/wiki/display.ejs",
-    "views/wiki/index.ejs",
     "views/wiki/modify.ejs"
 ];
 
