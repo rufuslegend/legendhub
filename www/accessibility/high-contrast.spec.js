@@ -311,6 +311,59 @@ test("Items search aborts obsolete requests and renders only the newest results"
     await expect(page.getByText("Old result", {exact: true})).toHaveCount(0);
 });
 
+// Catches history traversal that changes the URL but leaves React displaying the newer query.
+test("Items search keeps Back and Forward results synchronized with canonical URLs", async function({ page }) {
+    const itemsPage = pages.find(pageUnderTest => pageUnderTest.name === "items");
+    await page.route(`${baseUrl}/api`, async route => {
+        const search = JSON.parse(route.request().postData()).variables.searchString;
+        await route.fulfill({contentType: "application/json", body: JSON.stringify({data: {getItems: {moreResults: false, items: [{id: search === "alpha" ? 21 : 22, name: search === "alpha" ? "Alpha result" : "Beta result", slot: 0, isLight: true}]}}})});
+    });
+    await expectHighContrastPage(page, itemsPage);
+    const input = page.getByPlaceholder("Search by name...");
+    await input.fill("alpha"); await input.press("Enter"); await expect(page.getByText("Alpha result", {exact: true})).toBeVisible();
+    await input.fill("beta"); await input.press("Enter"); await expect(page.getByText("Beta result", {exact: true})).toBeVisible();
+    await page.goBack(); await expect(page).toHaveURL(/search=alpha/); await expect(page.getByText("Alpha result", {exact: true})).toBeVisible();
+    await page.goForward(); await expect(page).toHaveURL(/search=beta/); await expect(page.getByText("Beta result", {exact: true})).toBeVisible();
+});
+
+// Catches React Columns preferences that write without consent or drift from the established sc2 cookie contract.
+test("Items Columns persists consented toggle and reset choices through the real cookie path", async function({context, page}) {
+    const itemsPage = pages.find(pageUnderTest => pageUnderTest.name === "items");
+    await expectHighContrastPage(page, itemsPage);
+    await page.getByRole("button", {name: "Columns", exact: true}).click();
+    await page.getByRole("button", {name: "Slot", exact: true}).click();
+    expect((await context.cookies(baseUrl)).find(cookie => cookie.name === "sc2")).toBeUndefined();
+    await page.keyboard.press("Escape");
+    await context.addCookies([{name: "cookie-consent", value: "true", url: baseUrl}]);
+    await page.reload();
+    await page.waitForTimeout(50);
+    expect(await page.evaluate(() => document.cookie.includes("cookie-consent=true"))).toBe(true);
+    await page.getByRole("button", {name: "Columns", exact: true}).click();
+    await page.getByRole("button", {name: "Slot", exact: true}).click();
+    await page.getByRole("button", {name: "Reset to defaults", exact: true}).click();
+    await expect(page.getByRole("button", {name: "Slot", exact: true}).locator("svg.text-danger")).toBeVisible();
+    await context.addCookies([{name: "sc2", value: "Name-Slot", domain: "127.0.0.1", path: "/", sameSite: "Lax", secure: true, expires: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365 * 20}]);
+    await page.getByRole("button", {name: "Slot", exact: true}).click();
+    await page.reload(); await page.getByRole("button", {name: "Columns", exact: true}).click();
+    await expect(page.getByRole("button", {name: "Slot", exact: true}).locator("svg.text-success")).toBeVisible();
+});
+
+// Catches missing React modal behavior for reset/defaults, filter buttons, filter selections, and filter reset.
+test("Items Columns and Filters dialogs preserve picker controls and ordering", async function({page}) {
+    const itemsPage = pages.find(pageUnderTest => pageUnderTest.name === "items");
+    await expectHighContrastPage(page, itemsPage);
+    await page.getByRole("button", {name: "Columns", exact: true}).click();
+    await expect(page.getByRole("heading", {name: "Select visible columns"})).toBeVisible();
+    await page.getByRole("button", {name: "Slot", exact: true}).click(); await page.getByRole("button", {name: "Reset to defaults", exact: true}).click();
+    await expect(page.getByRole("button", {name: "Slot", exact: true}).locator("svg.text-danger")).toBeVisible();
+    await page.keyboard.press("Escape"); await page.getByRole("button", {name: "Filters", exact: true}).click();
+    await expect(page.getByRole("heading", {name: "Select search filters"})).toBeVisible();
+    const filtersDialog = page.getByRole("dialog", {name: "Select search filters"});
+    const light = filtersDialog.getByRole("button", {name: "Light", exact: true}); await light.click(); await expect(light).toHaveAttribute("aria-pressed", "true");
+    await page.getByLabel("Slot").selectOption("0"); await expect(page.getByLabel("Slot")).toHaveValue("0");
+    await page.getByRole("button", {name: "Reset to defaults", exact: true}).click(); await expect(light).toHaveAttribute("aria-pressed", "false"); await expect(page.getByLabel("Slot")).toHaveValue("");
+});
+
 test("Builder collapsible section supports keyboard access without detectable violations", async function({ page }) {
     const builderPage = pages.find(function(pageUnderTest) {
         return pageUnderTest.name === "builder";

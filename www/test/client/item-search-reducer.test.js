@@ -128,6 +128,14 @@ test("item search preserves the existing cookie and canonical query-string forma
     }), "/items/index.html?filters=slot_3,isLight&search=ember+blade&sortBy=name&sortAsc=true&page=2");
 });
 
+// Catches pagination that turns the server's absent-search recent-items mode into an empty named search.
+test("item search preserves absent search through initial state and canonical URLs", async function() {
+    const {createInitialItemSearchState, searchUrl} = await loadSearch();
+    const state = createInitialItemSearchState(initial({query: {page: "2"}}));
+    assert.equal(state.criteria.search, null);
+    assert.equal(searchUrl(state.criteria), "/items/index.html?page=2");
+});
+
 // Catches a client search that interpolates player text into GraphQL source instead of variables.
 test("item search sends criteria as GraphQL variables and returns page results", async function() {
     const {loadItems} = await loadApi();

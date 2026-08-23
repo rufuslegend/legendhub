@@ -16,7 +16,7 @@ export async function loadItems(criteria, statInfo, signal) {
             }
         }`,
         variables: {
-            searchString: criteria.search,
+            searchString: criteria.search == null ? null : criteria.search,
             filterString: filterString(criteria.filters) || null,
             sortBy: criteria.sortBy,
             sortAsc: criteria.sortBy ? criteria.sortAsc : null,

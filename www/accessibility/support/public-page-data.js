@@ -8,6 +8,12 @@ function itemStatInfo() {
         showColumnDefault: true,
         type: "string",
         var: "name"
+    }, {
+        display: "Slot", filterString: "= {0}", short: "Slot", showColumnDefault: false,
+        type: "select", var: "slot"
+    }, {
+        display: "Light", filterString: "= {0}", short: "Light", showColumnDefault: false,
+        type: "bool", var: "isLight"
     }];
 }
 
@@ -16,7 +22,7 @@ function itemMetadata() {
     return {
         getItemStatCategories: [{
             getItemStatInfo: stats,
-            name: "Identity"
+            name: "Basic"
         }],
         getItemStatInfo: stats
     };
@@ -60,7 +66,7 @@ module.exports = async function publicPageData(query) {
         return {
             ...itemMetadata(),
             getItems: {
-                items: [{ id: 101, name: "Brass lantern" }],
+                items: [{ id: 101, name: "Brass lantern", slot: 0, isLight: true }],
                 moreResults: false
             }
         };

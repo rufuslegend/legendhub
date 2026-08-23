@@ -34,7 +34,8 @@ export function searchUrl(criteria) {
     }).join(",");
     if (filters)
         query.push(`filters=${encodeURIComponent(filters).replace(/%2C/gi, ",")}`);
-    query.push(`search=${encodeURIComponent(criteria.search || "").replace(/%20/g, "+")}`);
+    if (criteria.search != null)
+        query.push(`search=${encodeURIComponent(criteria.search).replace(/%20/g, "+")}`);
     if (criteria.sortBy)
         query.push(`sortBy=${encodeURIComponent(criteria.sortBy)}`);
     if (criteria.sortBy)
@@ -47,7 +48,7 @@ export function searchUrl(criteria) {
 export function createInitialItemSearchState(props) {
     const query = props.query || {};
     const criteria = {
-        search: query.search || "",
+        search: Object.hasOwn(query, "search") ? query.search : null,
         filters: parseFilters(query.filters),
         sortBy: query.sortBy || null,
         sortAsc: query.sortAsc === "true",

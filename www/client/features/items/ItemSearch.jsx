@@ -22,24 +22,34 @@ export default function ItemSearch(props) {
     const columnsTriggerRef = useRef(null);
     const filtersTriggerRef = useRef(null);
     const requestIdRef = useRef(0);
-    const initialColumns = useRef(true);
     const closeColumns = useCallback(function() { setColumnsOpen(false); }, []);
     const closeFilters = useCallback(function() { setFiltersOpen(false); }, []);
 
     useEffect(() => () => abortRef.current?.abort(), []);
     useEffect(function() {
-        if (initialColumns.current) { initialColumns.current = false; return; }
+        function restoreFromHistory() {
+            const params = new URLSearchParams(window.location.search);
+            runSearch({
+                search: params.has("search") ? params.get("search") : null,
+                filters: Object.fromEntries((params.get("filters") || "").split(",").filter(Boolean).map(value => { const [field, ...values] = value.split("_"); return [field, values]; })),
+                sortBy: params.get("sortBy"), sortAsc: params.get("sortAsc") === "true", page: Math.max(1, Number(params.get("page")) || 1)
+            }, false);
+        }
+        window.addEventListener("popstate", restoreFromHistory);
+        return () => window.removeEventListener("popstate", restoreFromHistory);
+    }, []);
+    function persistColumns(columns) {
         if (parseCookieHeader(document.cookie)["cookie-consent"] !== "true") return;
         const expires = new Date(); expires.setFullYear(expires.getFullYear() + 20);
-        document.cookie = formatCookie("sc2", state.selectedColumns.join("-"), {expires});
-    }, [state.selectedColumns]);
+        document.cookie = formatCookie("sc2", columns.join("-"), {expires});
+    }
 
-    async function runSearch(criteria) {
+    async function runSearch(criteria, updateHistory = true) {
         abortRef.current?.abort();
         const controller = new AbortController(); abortRef.current = controller;
         const requestId = requestIdRef.current + 1; requestIdRef.current = requestId;
         dispatch({type: "search/requested", requestId, criteria});
-        window.history.pushState({}, "", searchUrl(criteria));
+        if (updateHistory) window.history.pushState({}, "", searchUrl(criteria));
         try {
             const next = await loadItems(criteria, state.metadata.statInfo, controller.signal);
             dispatch({type: "search/succeeded", requestId, results: next.items, moreResults: next.moreResults});
@@ -53,14 +63,14 @@ export default function ItemSearch(props) {
         <div className="container-fluid"><div className="px-0"><div className="row"><div className="col-12"><div className="row text-center"><h1 className="col-12">Items</h1></div><div className="px-0 px-md-5">
             {Object.keys(state.nextCriteria.filters).length > 0 && <p className="text-info">Filters: {state.metadata.statInfo.filter(stat => Object.hasOwn(state.nextCriteria.filters, stat.var)).map(stat => <button type="button" key={stat.var} className="badge badge-pill badge-info border-0" onClick={() => dispatch({type: "filter/remove", field: stat.var})}>{stat.display}&nbsp;<i className="fas fa-times" aria-hidden="true" /></button>)}</p>}
             {state.filtersDirty && <p className="text-danger">You have updated your selection of filters. Please search again to apply them.</p>}
-            <form onSubmit={event => { event.preventDefault(); runSearch(state.nextCriteria); }}><div className="row"><div className="input-group col-12"><input type="text" className="form-control" placeholder="Search by name..." value={state.nextCriteria.search} autoFocus onChange={event => dispatch({type: "search/text", search: event.target.value})} /><div className="input-group-append"><button ref={columnsTriggerRef} className="btn btn-outline-primary" type="button" aria-haspopup="dialog" aria-expanded={columnsOpen} onClick={() => setColumnsOpen(true)}><span className="d-none d-md-inline-block">Columns</span><i className="d-inline-block d-md-none fas fa-columns" /></button><button ref={filtersTriggerRef} className="btn btn-outline-primary" type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}><span className="d-none d-md-inline-block">Filters</span><i className="d-inline-block d-md-none fas fa-filter" /></button><button className="btn btn-primary" type="submit"><span className="d-none d-md-inline-block">{state.status === "pending" ? "Searching…" : "Search"}</span><i className="d-inline-block d-md-none fas fa-search" /></button></div></div></div></form>
+            <form onSubmit={event => { event.preventDefault(); runSearch(state.nextCriteria); }}><div className="row"><div className="input-group col-12"><input type="text" className="form-control" placeholder="Search by name..." value={state.nextCriteria.search ?? ""} autoFocus onChange={event => dispatch({type: "search/text", search: event.target.value})} /><div className="input-group-append"><button ref={columnsTriggerRef} className="btn btn-outline-primary" type="button" aria-haspopup="dialog" aria-expanded={columnsOpen} onClick={() => setColumnsOpen(true)}><span className="d-none d-md-inline-block">Columns</span><i className="d-inline-block d-md-none fas fa-columns" /></button><button ref={filtersTriggerRef} className="btn btn-outline-primary" type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}><span className="d-none d-md-inline-block">Filters</span><i className="d-inline-block d-md-none fas fa-filter" /></button><button className="btn btn-primary" type="submit"><span className="d-none d-md-inline-block">{state.status === "pending" ? "Searching…" : "Search"}</span><i className="d-inline-block d-md-none fas fa-search" /></button></div></div></div></form>
         </div><br />
         {state.status === "error" && <p role="alert" className="text-danger">{state.error}</p>}
         <Pagination criteria={state.criteria} moreResults={state.moreResults} resultLength={state.results.length} onNavigate={runSearch} />
-        <div className="row"><div className="col-12"><div className="card"><div className="card-header"><strong className="float-left">{props.noSearch ? "Recently Modified" : "Search Results"}</strong><span className="float-right clickable"><a href={addHref} aria-label="Add item"><i className="fas fa-plus" aria-hidden="true" /></a></span></div><div className="table-responsive"><table className="table table-sm table-md table-hover table-striped table-bordered mb-0"><thead className="thead-dark"><tr>{state.metadata.statInfo.filter(visible).map(stat => <th key={stat.short} className="text-center" title={stat.display} noWrap="" onClick={() => runSearch({...state.criteria, sortBy: stat.var, sortAsc: state.criteria.sortBy === stat.var ? !state.criteria.sortAsc : false, page: 1})} style={{cursor: "pointer"}}>{stat.short}&nbsp;{state.criteria.sortBy === stat.var ? <i className={`fas fa-sort-${state.criteria.sortAsc ? "up" : "down"}`} /> : !state.criteria.sortBy && <i className="fas fa-sort" />}</th>)}</tr></thead><tbody>{state.results.map(item => <tr key={item.id} onClick={() => { window.location.href = `/items/details.html?id=${item.id}`; }} style={{cursor: "pointer"}}>{state.metadata.statInfo.filter(visible).map(stat => <td key={stat.short} className={stat.var === "name" ? "text-primary font-weight-bold text-nowrap" : stat.var === "alignRestriction" ? "text-center text-monospace" : "text-center"}>{resultValue(item, stat, state.metadata.constants)}{stat.var === "name" && <a className="float-right" href={`/items/details.html?id=${item.id}`} target="_blank" rel="noreferrer" onClick={event => event.stopPropagation()} aria-label={`Open details for ${item.name} in a new tab`}><i className="fas fa-external-link-alt fa-lg" aria-hidden="true" /></a>}</td>)}</tr>)}</tbody></table></div></div></div></div><br />
+        <div className="row"><div className="col-12"><div className="card"><div className="card-header"><strong className="float-left">{state.criteria.search == null && Object.keys(state.criteria.filters).length === 0 ? "Recently Modified" : "Search Results"}</strong><span className="float-right clickable"><a href={addHref} aria-label="Add item"><i className="fas fa-plus" aria-hidden="true" /></a></span></div><div className="table-responsive"><table className="table table-sm table-md table-hover table-striped table-bordered mb-0"><thead className="thead-dark"><tr>{state.metadata.statInfo.filter(visible).map(stat => <th key={stat.short} className="text-center" title={stat.display} noWrap="" onClick={() => runSearch({...state.criteria, sortBy: stat.var, sortAsc: state.criteria.sortBy === stat.var ? !state.criteria.sortAsc : false, page: 1})} style={{cursor: "pointer"}}>{stat.short}&nbsp;{state.criteria.sortBy === stat.var ? <i className={`fas fa-sort-${state.criteria.sortAsc ? "up" : "down"}`} /> : !state.criteria.sortBy && <i className="fas fa-sort" />}</th>)}</tr></thead><tbody>{state.results.map(item => <tr key={item.id} onClick={() => { window.location.href = `/items/details.html?id=${item.id}`; }} style={{cursor: "pointer"}}>{state.metadata.statInfo.filter(visible).map(stat => <td key={stat.short} className={stat.var === "name" ? "text-primary font-weight-bold text-nowrap" : stat.var === "alignRestriction" ? "text-center text-monospace" : "text-center"}>{resultValue(item, stat, state.metadata.constants)}{stat.var === "name" && <a className="float-right" href={`/items/details.html?id=${item.id}`} target="_blank" rel="noreferrer" onClick={event => event.stopPropagation()} aria-label={`Open details for ${item.name} in a new tab`}><i className="fas fa-external-link-alt fa-lg" aria-hidden="true" /></a>}</td>)}</tr>)}</tbody></table></div></div></div></div><br />
         <Pagination criteria={state.criteria} moreResults={state.moreResults} resultLength={state.results.length} onNavigate={runSearch} /><br /><br />
         </div></div></div></div>
-        <ColumnsDialog categories={state.metadata.categories} open={columnsOpen} onClose={closeColumns} onToggle={short => dispatch({type: "column/toggle", short})} onReset={() => dispatch({type: "column/reset"})} selectedColumns={state.selectedColumns} triggerRef={columnsTriggerRef} />
+        <ColumnsDialog categories={state.metadata.categories} open={columnsOpen} onClose={closeColumns} onToggle={short => { const columns = state.selectedColumns.includes(short) ? state.selectedColumns.filter(value => value !== short) : [...state.selectedColumns, short]; persistColumns(columns); dispatch({type: "column/toggle", short}); }} onReset={() => { const columns = state.metadata.statInfo.filter(stat => stat.showColumnDefault).map(stat => stat.short); persistColumns(columns); dispatch({type: "column/reset"}); }} selectedColumns={state.selectedColumns} triggerRef={columnsTriggerRef} />
         <FiltersDialog categories={state.metadata.categories} constants={state.metadata.constants} filters={state.nextCriteria.filters} open={filtersOpen} onClose={closeFilters} onToggle={field => dispatch({type: "filter/toggle", field})} onValue={(field, value) => dispatch({type: "filter/value", field, value})} onReset={() => dispatch({type: "filter/reset"})} triggerRef={filtersTriggerRef} />
     </>;
 }
