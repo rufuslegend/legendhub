@@ -458,7 +458,7 @@
       <li>Node · Express · GraphQL</li>
       <li>MySQL 5.7</li>
       <li>Python cron workers</li>
-      <li>EJS + AngularJS client</li>
+      <li>EJS + React/Vite client</li>
     </ul>
 
     <nav class="toolbar" aria-label="Diagram flow controls">
@@ -487,8 +487,8 @@
       <div class="architecture">
         <section class="zone external">
           <div class="zone-title"><span>Clients + edge</span><span>outside compose</span></div>
-          <button class="node" id="browser" data-title="Web browser" data-summary="Receives server-rendered EJS pages and static assets. AngularJS adds richer client-side behavior where needed, especially in the builder." data-tech="HTML · CSS · JavaScript · AngularJS 1.x">
-            <strong>Web browser</strong><small>EJS pages + client behavior</small>
+          <button class="node" id="browser" data-title="Web browser" data-summary="Receives server-rendered EJS pages and static assets. Page-scoped React components add interactive behavior where needed, especially in the builder." data-tech="HTML · CSS · JavaScript · React · Vite">
+            <strong>Web browser</strong><small>EJS pages + React behavior</small>
           </button>
           <button class="node" id="edge" data-title="Deployment edge" data-summary="The production reverse-proxy and Cloudflare layer terminates public traffic before forwarding it to the application. It is part of deployment, not this Compose file." data-tech="Cloudflare · reverse proxy · outside repository runtime">
             <strong>Cloudflare / proxy</strong><small>Production deployment edge</small>
@@ -521,8 +521,8 @@
                 <button class="node" id="pages" data-title="Server-rendered page routes" data-summary="Routes for items, mobs, quests, wiki, builder, changelog, notifications, and account render EJS views. Some route handlers call the local GraphQL endpoint." data-tech="Express routers · EJS · internal fetch to /api">
                   <strong>Page routers</strong><small>EJS views for product areas</small>
                 </button>
-                <button class="node" id="static" data-title="Static web client" data-summary="The www service serves compiled CSS, browser JavaScript, images, and AngularJS-powered interactive features." data-tech="Express static · compiled Sass · AngularJS 1.x">
-                  <strong>Static + AngularJS</strong><small>Assets and client interactions</small>
+                <button class="node" id="static" data-title="Static web client" data-summary="The www service serves compiled CSS, browser JavaScript, images, and page-scoped React/Vite bundles for interactive features." data-tech="Express static · compiled Sass · React · Vite">
+                  <strong>Static + React/Vite</strong><small>Assets and client interactions</small>
                 </button>
                 <button class="node" id="auth" data-title="Authentication context" data-summary="Cookie middleware validates the login token, loads permissions and notifications, then exposes the user context to downstream page routes and templates." data-tech="loginToken cookie · AuthTokens · permissions">
                   <strong>Cookie auth context</strong><small>Token, permissions, locals</small>

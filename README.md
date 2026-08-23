@@ -72,9 +72,10 @@ There is also a custom authentication middleware to handle authenticating every 
 [EJS](https://ejs.co/) is used for view templating.
 
 ### Website Client-Side Code
-[AngularJS v1.x](https://angularjs.org/) is used for the client-side code. This framework is outdated and has entered LTS. This should not be a huge issue and there are [alternatives](https://xlts.dev/angularjs).
-
-Most of this AngularJS code is in the `www/src/public/js` directory under `apps` or `controllers`, though there is still some lingering code that exists in the views. See TODO List.
+Express routes render EJS pages and provide inert, page-specific props. Interactive
+pages mount focused React components from `www/client`, bundled by Vite into
+versioned browser assets. This keeps the public routes, cookies, themes, and
+workflows intact while giving each page a maintained client foundation.
 
 ### CSS
 Bootstrap is used as the primary CSS tool. Bootstrap and custom bootstrap styles are written in [SCSS](https://sass-lang.com/).
@@ -266,15 +267,8 @@ The `{0}` is automatically replaced with the chosen item in the dropdown from th
 > There were a number of things I still wanted to do with LegendHUB to clean it up, improve it.
 These aren't necessarily major features, but things that should be noted.
 
-* Update builder to use better AngularJS standards as seen at the bottom of the `www/src/views/items/modify.ejs` file
-    * This style is taken from [johnpapa's AngularJS Style Guide](https://github.com/johnpapa/angular-styleguide/blob/master/a1/README.md) which has the added benefit of ensuring minification works without issues.
-* Move AngularJS code to separate files
-    *Dependent on webpack to avoid longer loading times
 * Add webpack or similar tool to combine and minify related JavaScript files for each page to ensure faster loading and cleaner code organization
-    *Would also allow the `www/src/js/apps/legendwiki-app.js` file to be split up into a more logical file structure
-    *Minification is problematic with certain snippets of current AngularJS code, as it is not adhering to best standards, yet
 * Update builder to store lists in the database instead of in localStorage
     *Might require merging/overwriting support to allow people to upload their lists from separate computers which may contain conflicts
 * Use LegendMUD logins instead of a separate LegendHUB login to provide better security and account help.
 * Use websockets to provide more immediate feedback for new notifications. (would require changes to python service most likely.)
-* Move AngularJS to a more recent Javascript framework, preferrably one that is component-driven.

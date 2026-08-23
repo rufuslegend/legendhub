@@ -57,8 +57,6 @@
         "@axe-core/playwright": "^4.13.0",
         "@playwright/test": "^1.62.1",
         "@vitejs/plugin-react": "^6.1.0",
-        "angular": "1.8.0",
-        "angular-cookies": "1.8.0",
         "bootstrap": "4.3.1",
         "dompurify": "3.4.14",
         "jquery": "3.7.1",

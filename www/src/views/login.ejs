@@ -4,7 +4,7 @@
     <%- include('./shared/meta') %>
     <link href="https://www.legendhub.org/login.html" rel="canonical">
 </head>
-<body ng-app="legendwiki-app" ng-controller="login" style="height: 100%;">
+<body style="height: 100%;">
     <%-include("./shared/header")-%>
 	<div class="container">
 		<div class="row h-100 align-items-center">
@@ -91,7 +91,6 @@
 	</div>
     <%-include("./shared/footer")-%>
     <%-include("./shared/scripts")-%>
-    <script src="/js/controllers/login.js?v=<%-locals.version%>"></script>
     <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 </body>
 </html>

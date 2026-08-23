@@ -14,14 +14,6 @@ const scripts = new Map([
     [
         "https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js",
         "bootstrap/dist/js/bootstrap.min.js"
-    ],
-    [
-        "https://ajax.googleapis.com/ajax/libs/angularjs/1.8.0/angular.min.js",
-        "angular/angular.min.js"
-    ],
-    [
-        "https://ajax.googleapis.com/ajax/libs/angularjs/1.8.0/angular-cookies.min.js",
-        "angular-cookies/angular-cookies.min.js"
     ]
 ].map(function([url, modulePath]) {
     return [url, fs.readFileSync(require.resolve(modulePath))];

@@ -3,6 +3,12 @@
 All notable user-facing changes to LegendHUB are documented here beginning
 with version 2.6.0.
 
+## [Unreleased]
+
+### Changed
+
+- Modernized the client foundation behind LegendHUB's pages while preserving the familiar sign-in, account, search, list, editing, Builder, theme, and saved-preference workflows.
+
 ## [2.9.0] - 2026-08-22
 
 ### Added
