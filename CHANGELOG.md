@@ -18,6 +18,7 @@ with version 2.6.0.
 - Kept renewed sign-ins working after account changes even when optional cookie consent is not enabled.
 - Made notification and item-search actions keyboard-accessible, prevented duplicate mark-read requests, and added an Items recovery prompt when the interactive page cannot render.
 - Restored the Builder's compact equipment table, hover and keyboard-focus explanations for red warning cells, and scrolling inside long item-selection windows.
+- Restored centered Builder equipment headers and totals at both ends of the table.
 
 ## [2.9.0] - 2026-08-22
 

@@ -216,6 +216,24 @@ test("Builder equipment footer repeats totals and stat cells use real controls",
     await expect(page.getByRole("dialog", {name: "Choose Item"})).toBeVisible();
 });
 
+// Catches the React table dropping the centered alignment used by the legacy
+// Builder for both repeated header rows and both repeated total rows.
+test("Builder centers repeated equipment headers and totals", async function({page}) {
+    await page.goto(`${baseUrl}/builder/`);
+    const table = equipmentTable(page);
+    await expect(table).toBeVisible();
+
+    const topHeaderAlignment = await table.locator("thead tr").first().locator("th").evaluateAll(cells => cells.map(cell => getComputedStyle(cell).textAlign));
+    const topTotalAlignment = await table.locator("tbody tr").first().locator("th, td").evaluateAll(cells => cells.map(cell => getComputedStyle(cell).textAlign));
+    const bottomHeaderAlignment = await table.locator("tfoot tr").first().locator("th").evaluateAll(cells => cells.map(cell => getComputedStyle(cell).textAlign));
+    const bottomTotalAlignment = await table.locator("tfoot tr").nth(1).locator("th, td").evaluateAll(cells => cells.map(cell => getComputedStyle(cell).textAlign));
+
+    expect(topHeaderAlignment).toEqual(["center", "center", "center", "center", "center", "center", "center", "center", "center", "center", "center", "center"]);
+    expect(topTotalAlignment).toEqual(["center", "center", "center", "center", "center", "center", "center", "center", "center", "center", "center", "center"]);
+    expect(bottomHeaderAlignment).toEqual(["center", "center", "center", "center", "center", "center", "center", "center", "center", "center", "center", "center"]);
+    expect(bottomTotalAlignment).toEqual(["center", "center", "center", "center", "center", "center", "center", "center", "center", "center", "center", "center"]);
+});
+
 // Catches the Glass theme turning compact equipment-table actions into
 // rounded, bordered buttons inside already-bordered cells.
 test("Builder Glass table actions stay visually integrated and keyboard visible", async function({context, page}) {

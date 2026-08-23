@@ -116,7 +116,7 @@ function DetailsLink({ item }) {
 
 function EquipmentHeaderRow({ stats, className = "" }) {
   return (
-    <tr className={className}>
+    <tr className={`${className} text-center`.trim()}>
       <th scope="col">Slot</th>
       <th scope="col">Lock</th>
       <th scope="col">Name</th>
@@ -137,7 +137,7 @@ function EquipmentTotalRow({
   onToggleLocks,
 }) {
   return (
-    <tr className="bg-secondary text-white">
+    <tr className="bg-secondary text-white text-center">
       <td />
       <td>
         <button
