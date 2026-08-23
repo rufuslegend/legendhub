@@ -70,6 +70,110 @@ function loadAppWithoutDatabaseMetadataQuery() {
 
 function detailFixture(query) {
     const timestamp = "2026-08-22T12:00:00.000Z";
+    if (query.includes("getItemHistoryById")) {
+        return {
+            getItemHistoryById: {
+                item: {
+                    ac: 0,
+                    alignRestriction: 0,
+                    constitution: 0,
+                    dexterity: 0,
+                    getHistories: [{
+                        id: 2101,
+                        item: {modifiedBy: "Archivist", modifiedOn: timestamp}
+                    }],
+                    getMob: null,
+                    getQuest: null,
+                    id: 101,
+                    mind: 0,
+                    modifiedBy: "Archivist",
+                    modifiedOn: timestamp,
+                    name: "Ember lantern",
+                    netStat: 0,
+                    notes: "# Historic ember notes\n\n<script>history-unsafe</script>",
+                    perception: 0,
+                    rent: 5,
+                    slot: 0,
+                    spirit: 0,
+                    strength: 0,
+                    uniqueWear: false,
+                    value: 0,
+                    weight: 1
+                }
+            },
+            getItemStatCategories: []
+        };
+    }
+    if (query.includes("getMobHistoryById")) {
+        return {
+            getMobHistoryById: {
+                mob: {
+                    aggro: false,
+                    areaId: 11,
+                    areaName: "Thebes",
+                    eraId: 1,
+                    eraName: "Ancient",
+                    getHistories: [{
+                        id: 2201,
+                        mob: {modifiedBy: "Archivist", modifiedOn: timestamp}
+                    }],
+                    getItems: [],
+                    gold: 12,
+                    id: 201,
+                    modifiedBy: "Archivist",
+                    modifiedOn: timestamp,
+                    name: "Test sentry",
+                    notes: "# Historic sentry notes\n\n<script>history-unsafe</script>",
+                    xp: 450
+                }
+            }
+        };
+    }
+    if (query.includes("getQuestHistoryById")) {
+        return {
+            getQuestHistoryById: {
+                quest: {
+                    areaId: 11,
+                    areaName: "Thebes",
+                    eraId: 1,
+                    eraName: "Ancient",
+                    getHistories: [{
+                        id: 2301,
+                        quest: {modifiedBy: "Archivist", modifiedOn: timestamp}
+                    }],
+                    getItems: [],
+                    id: 301,
+                    modifiedBy: "Archivist",
+                    modifiedOn: timestamp,
+                    stat: false,
+                    title: "A representative quest",
+                    whoises: "Sentry",
+                    content: "# Historic quest briefing\n\n<script>history-unsafe</script>"
+                }
+            }
+        };
+    }
+    if (query.includes("getWikiPageHistoryById")) {
+        return {
+            getWikiPageHistoryById: {
+                wikiPage: {
+                    categoryId: 4,
+                    categoryName: "Guides",
+                    content: "# Historic guide text\n\n<script>history-unsafe</script>",
+                    getHistories: [{
+                        id: 2401,
+                        wikiPage: {modifiedBy: "Archivist", modifiedOn: timestamp}
+                    }],
+                    id: 401,
+                    modifiedBy: "Archivist",
+                    modifiedOn: timestamp,
+                    subcategoryId: 41,
+                    subcategoryName: "Getting Started",
+                    title: "A representative wiki page"
+                }
+            }
+        };
+    }
     if (query.includes("getItemById")) {
         return {
             getItemById: {
@@ -214,5 +318,53 @@ test("detail pages contain rendered Markdown and history links without JavaScrip
         assert.match(html, new RegExp(`/history\\.html\\?id=${page.historyId}`), page.path);
         assert.match(html, new RegExp(`aria-label="${page.historyLabel}"`), page.path);
         assert.doesNotMatch(html, /<body\b[^>]*\bng-app=/i, page.path);
+    }
+});
+
+// Catches history routes that skip safe Markdown rendering or lose their active revision/latest-version output.
+test("history pages render sanitized revision Markdown and active revision navigation", async function(t) {
+    const app = loadAppWithoutDatabaseMetadataQuery();
+    const apiUtils = require("../src/routes/api/utils");
+    const originalPostAsync = apiUtils.postAsync;
+    apiUtils.postAsync = async function(query) {
+        return detailFixture(query);
+    };
+    t.after(function() {
+        apiUtils.postAsync = originalPostAsync;
+    });
+
+    const server = await new Promise(function(resolve) {
+        const listeningServer = app.listen(0, "127.0.0.1", function() {
+            resolve(listeningServer);
+        });
+    });
+    t.after(function() {
+        return new Promise(function(resolve, reject) {
+            server.close(function(error) {
+                if (error)
+                    reject(error);
+                else
+                    resolve();
+            });
+        });
+    });
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const pages = [
+        {activeId: 2101, entityId: 101, heading: "Historic ember notes", path: "/items/history.html?id=2101", route: "items"},
+        {activeId: 2201, entityId: 201, heading: "Historic sentry notes", path: "/mobs/history.html?id=2201", route: "mobs"},
+        {activeId: 2301, entityId: 301, heading: "Historic quest briefing", path: "/quests/history.html?id=2301", route: "quests"},
+        {activeId: 2401, entityId: 401, heading: "Historic guide text", path: "/wiki/history.html?id=2401", route: "wiki"}
+    ];
+
+    for (const page of pages) {
+        const response = await fetch(`${baseUrl}${page.path}`);
+        const html = await response.text();
+
+        assert.equal(response.status, 200, page.path);
+        assert.match(html, new RegExp(`<h1>${page.heading}</h1>`), page.path);
+        assert.match(html, new RegExp(`href="/${page.route}/details\\.html\\?id=${page.entityId}"[^>]*>view latest version`), page.path);
+        assert.match(html, new RegExp(`href="/${page.route}/history\\.html\\?id=${page.activeId}" class="[^"]*list-group-item-action active"`), page.path);
+        assert.match(html, /&lt;script&gt;history-unsafe&lt;\/script&gt;/, page.path);
+        assert.doesNotMatch(html, /<script>history-unsafe<\/script>/, page.path);
     }
 });
