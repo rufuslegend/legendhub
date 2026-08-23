@@ -62,6 +62,20 @@ docker compose down
 docker compose up --build -d
 ```
 
+## Page-scoped client build workflow
+
+Run the page-scoped client build alongside Express in two terminals while
+working on React page entries:
+
+```sh
+cd www
+npm run dev:client
+
+# second terminal
+cd www
+npm start
+```
+
 To intentionally recreate the local database from the seed:
 
 ```sh

@@ -19,6 +19,7 @@ python/**/*$py.class
 node_modules/
 www/playwright-report/
 www/test-results/
+www/src/public/build/
 
 # mysql
 mysql/backup.sql

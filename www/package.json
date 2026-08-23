@@ -3,15 +3,19 @@
     "version": "2.9.0",
     "description": "A resource hub for LegendMUD",
     "scripts": {
+        "build:client": "vite build",
+        "dev:client": "vite build --watch",
+        "pretest": "npm run build:client",
         "test": "node --test",
         "test:characterization": "node --test test/characterization.test.js",
         "test:migrations:integration": "MYSQL_MIGRATION_INTEGRATION=1 node --test test/migrations.integration.test.js",
         "test:smoke": "node --test test/smoke.test.js",
+        "pretest:a11y": "npm run build:client",
         "test:a11y": "playwright test",
         "start": "node src/app.js"
     },
     "engines": {
-        "node": ">=22"
+        "node": ">=22.12"
     },
     "repository": {
         "type": "git",
@@ -52,10 +56,14 @@
     "devDependencies": {
         "@axe-core/playwright": "^4.13.0",
         "@playwright/test": "^1.62.1",
+        "@vitejs/plugin-react": "^6.1.0",
         "angular": "1.8.0",
         "angular-cookies": "1.8.0",
         "bootstrap": "4.3.1",
         "jquery": "3.7.1",
-        "popper.js": "1.14.7"
+        "popper.js": "1.14.7",
+        "react": "^19.2.8",
+        "react-dom": "^19.2.8",
+        "vite": "^8.2.2"
     }
 }
