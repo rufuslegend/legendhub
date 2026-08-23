@@ -109,6 +109,8 @@ export function createInitialBuilderState() {
 
 export function builderReducer(state, action) {
     switch (action.type) {
+        case "ui/patch":
+            return {...state, ...action.value};
         case "lists/load":
             return {
                 ...state,

@@ -413,17 +413,14 @@ test("natural stat dependency lookup is isolated from callers", function() {
     assert.deepEqual(gameStats.getNaturalStatDependencies("unknown"), []);
 });
 
-test("browser loading registers the game-stat module with AngularJS", function() {
-    let registeredGameStats;
+test("browser loading no longer registers game stats with AngularJS", function() {
+    let called = false;
     const browserContext = {
         angular: {
             module: function(moduleName) {
-                assert.equal(moduleName, "legendwiki-app");
+                called = true;
                 return {
-                    factory: function(factoryName, createFactory) {
-                        assert.equal(factoryName, "gameStats");
-                        registeredGameStats = createFactory();
-                    }
+                    factory: function() {}
                 };
             }
         }
@@ -436,17 +433,5 @@ test("browser loading registers the game-stat module with AngularJS", function()
     ), "utf8");
     vm.runInNewContext(source, browserContext);
 
-    assert.equal(typeof registeredGameStats.calculateNaturalStatBonus, "function");
-    assert.equal(typeof registeredGameStats.calculateHitrollEquipmentCap, "function");
-    assert.equal(registeredGameStats.calculateHitrollEquipmentCap(100), 40);
-    assert.equal(typeof registeredGameStats.calculateDamrollEquipmentCap, "function");
-    assert.equal(registeredGameStats.calculateDamrollEquipmentCap(100), 40);
-    assert.equal(typeof registeredGameStats.calculateRegenEquipmentCap, "function");
-    assert.equal(registeredGameStats.calculateRegenEquipmentCap(100), 15);
-    assert.equal(typeof registeredGameStats.normalizeQuestResourceBonus, "function");
-    assert.equal(registeredGameStats.normalizeQuestResourceBonus(4.9), 4);
-    assert.equal(
-        registeredGameStats.calculateNaturalStatBonus("ma", {mind: 30}, []),
-        446
-    );
+    assert.equal(called, false);
 });

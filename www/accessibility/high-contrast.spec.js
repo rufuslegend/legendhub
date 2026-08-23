@@ -403,10 +403,8 @@ test("Builder collapsible section supports keyboard access without detectable vi
     });
     await expectHighContrastPage(page, builderPage);
 
-    await expect(page.locator('select[ng-model="selectedListIndex"]'))
-        .toHaveAccessibleName("Character");
-    await expect(page.locator('select[ng-model="selectedListVariantIndex"]'))
-        .toHaveAccessibleName("Variant");
+    await expect(page.getByLabel("Character", {exact: true})).toBeVisible();
+    await expect(page.getByLabel("Variant", {exact: true})).toBeVisible();
 
     const toggle = page.getByRole("button", { name: "KSM Swap/Quest Mods" });
     await toggle.focus();
@@ -414,7 +412,7 @@ test("Builder collapsible section supports keyboard access without detectable vi
     await page.keyboard.press("Enter");
 
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
-    await expect(page.locator("#ksmQuestMods")).toHaveClass(/(^|\s)show(\s|$)/);
+    await expect(page.locator("#ksmQuestMods")).toBeVisible();
     await expect(toggle).toBeFocused();
     await expectNoWcagViolations(page);
 

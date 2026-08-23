@@ -15,11 +15,9 @@ const angularPatterns = [
 
 const allowedAngularFiles = [
     "public/js/apps/legendwiki-app.js",
-    "public/js/controllers/builder/main.js",
     "public/js/controllers/login.js",
     "public/js/ng-showdown.js",
     "public/js/showdown.min.js",
-    "views/builder/index.ejs",
     "views/login.ejs",
     "views/shared/columnsModal.ejs",
     "views/shared/markdown.ejs",

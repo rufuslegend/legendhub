@@ -1,0 +1,7 @@
+import gameStats from "../../../src/public/js/services/game-stats.js";
+import {ERA_ABILITY_ERAS} from "./item-constants.js";
+
+export default function EraAbilitiesPanel({collapsed, onCollapsed, selectedList, onStat}) {
+    const abilities = gameStats.getEraAbilities();
+    return <div className="border-top mt-3 pt-2"><h2 className="h5 mb-0"><button className="btn btn-link btn-block h5 text-left px-0 py-1" type="button" aria-expanded={String(!collapsed)} aria-controls="eraAbilities" onClick={onCollapsed}>Era Abilities</button></h2>{!collapsed && <div id="eraAbilities" className="row">{ERA_ABILITY_ERAS.map(era => <div className="col-12 col-md-4 mb-3" key={era}><h3 className="h6 mt-1">{era}</h3><table className="table table-sm table-bordered era-abilities-table mb-0"><tbody>{abilities.filter(ability => ability.era === era).map(ability => <tr key={ability.key}><th scope="row" className="font-weight-normal py-1"><label className="mb-0" htmlFor={`eraAbility-${ability.key}`}>{ability.name}</label></th><td className="py-1"><select className="custom-select custom-select-sm" id={`eraAbility-${ability.key}`} value={selectedList.eraAbilities[ability.key]} onChange={event => onStat("eraAbilities", ability.key, Number(event.target.value))}><option value="0">None</option>{ability.ranks.map(rank => <option key={rank} value={rank}>Rank {rank}</option>)}</select></td></tr>)}</tbody></table></div>)}</div>}</div>;
+}

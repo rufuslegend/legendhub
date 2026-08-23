@@ -51,6 +51,20 @@ test("builder initial state owns list, equipment, search, dialog, and request st
     });
 });
 
+// Catches the React page's transient UI state leaking into a second owner instead of the Builder reducer.
+test("builder reducer owns transient React dialog and request state", async function() {
+    const {builderReducer, createInitialBuilderState} = await loadReducer();
+    const initial = createInitialBuilderState();
+    const next = builderReducer(initial, {
+        type: "ui/patch",
+        value: {currentDialog: "export", requestError: "Could not load items."}
+    });
+
+    assert.equal(next.currentDialog, "export");
+    assert.equal(next.requestError, "Could not load items.");
+    assert.equal(initial.currentDialog, undefined);
+});
+
 // Catches selection transitions that mutate the prior state or leave selectedList detached from its canonical variant.
 test("builder reducer selects characters and variants from canonical list state", async function() {
     const {builderReducer, createDefaultVariant, createInitialBuilderState} = await loadReducer();

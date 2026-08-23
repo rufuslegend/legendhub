@@ -1,18 +1,11 @@
-(function(root, factory) {
+(function(factory) {
     const gameStats = factory();
 
     if (typeof module === "object" && module.exports) {
         module.exports = gameStats;
     }
 
-    if (root && root.angular) {
-        root.angular
-            .module("legendwiki-app")
-            .factory("gameStats", function() {
-                return gameStats;
-            });
-    }
-})(typeof globalThis !== "undefined" ? globalThis : this, function() {
+})(function() {
     "use strict";
 
     const MAX_QUEST_RESOURCE_BONUS = 238327;
