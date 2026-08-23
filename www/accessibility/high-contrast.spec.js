@@ -52,11 +52,11 @@ test.beforeAll(async function() {
         apiUtils.postAsync = originalPostAsync;
     };
     server = await new Promise(function(resolve) {
-        const listeningServer = app.listen(0, "127.0.0.1", function() {
+        const listeningServer = app.listen(0, "localhost", function() {
             resolve(listeningServer);
         });
     });
-    baseUrl = `http://127.0.0.1:${server.address().port}`;
+    baseUrl = `http://localhost:${server.address().port}`;
 });
 
 test.afterAll(async function() {
@@ -342,8 +342,11 @@ test("Items Columns persists consented toggle and reset choices through the real
     await page.getByRole("button", {name: "Slot", exact: true}).click();
     await page.getByRole("button", {name: "Reset to defaults", exact: true}).click();
     await expect(page.getByRole("button", {name: "Slot", exact: true}).locator("svg.text-danger")).toBeVisible();
-    await context.addCookies([{name: "sc2", value: "Name-Slot", domain: "127.0.0.1", path: "/", sameSite: "Lax", secure: true, expires: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365 * 20}]);
+    await expect.poll(async () => (await context.cookies(baseUrl)).find(cookie => cookie.name === "sc2")?.value).toBe("Name");
+    const saved = (await context.cookies(baseUrl)).find(cookie => cookie.name === "sc2");
+    expect(saved.path).toBe("/"); expect(saved.sameSite).toBe("Lax"); expect(saved.secure).toBe(true); expect(saved.expires).toBeGreaterThan(Date.now() / 1000 + 60 * 60 * 24 * 365);
     await page.getByRole("button", {name: "Slot", exact: true}).click();
+    await expect.poll(async () => (await context.cookies(baseUrl)).find(cookie => cookie.name === "sc2")?.value).toBe("Name-Slot");
     await page.reload(); await page.getByRole("button", {name: "Columns", exact: true}).click();
     await expect(page.getByRole("button", {name: "Slot", exact: true}).locator("svg.text-success")).toBeVisible();
 });
@@ -354,14 +357,30 @@ test("Items Columns and Filters dialogs preserve picker controls and ordering", 
     await expectHighContrastPage(page, itemsPage);
     await page.getByRole("button", {name: "Columns", exact: true}).click();
     await expect(page.getByRole("heading", {name: "Select visible columns"})).toBeVisible();
+    expect(await page.getByRole("dialog", {name: "Select visible columns"}).locator("h6").allTextContents()).toEqual(["Basic", "Main", "Limits", "Ranged", "Regen", "Tank", "Melee", "Mage", "Weapon", "Future"]);
     await page.getByRole("button", {name: "Slot", exact: true}).click(); await page.getByRole("button", {name: "Reset to defaults", exact: true}).click();
     await expect(page.getByRole("button", {name: "Slot", exact: true}).locator("svg.text-danger")).toBeVisible();
     await page.keyboard.press("Escape"); await page.getByRole("button", {name: "Filters", exact: true}).click();
     await expect(page.getByRole("heading", {name: "Select search filters"})).toBeVisible();
+    expect(await page.getByRole("dialog", {name: "Select search filters"}).locator("h6").allTextContents()).toEqual(["Basic", "Main", "Limits", "Ranged", "Regen", "Tank", "Melee", "Mage", "Weapon", "Future"]);
     const filtersDialog = page.getByRole("dialog", {name: "Select search filters"});
     const light = filtersDialog.getByRole("button", {name: "Light", exact: true}); await light.click(); await expect(light).toHaveAttribute("aria-pressed", "true");
     await page.getByLabel("Slot").selectOption("0"); await expect(page.getByLabel("Slot")).toHaveValue("0");
     await page.getByRole("button", {name: "Reset to defaults", exact: true}).click(); await expect(light).toHaveAttribute("aria-pressed", "false"); await expect(page.getByLabel("Slot")).toHaveValue("");
+});
+
+test("Items React dialogs retain their interaction classes in every supported theme", async function({context, page}) {
+    const itemsPage = pages.find(pageUnderTest => pageUnderTest.name === "items");
+    for (const theme of ["light", "dark", "solarized-dark", "high-contrast", "glass-blue", "glass-emerald", "glass-ruby", "glass-amethyst", "glass-amber"]) {
+        await context.addCookies([{name: "theme", value: theme, url: baseUrl}]);
+        await page.goto(`${baseUrl}${itemsPage.path}`);
+        await expect(page.locator("link#theme")).toHaveAttribute("href", new RegExp(`bootstrap-${theme}\\.min\\.css`));
+        await page.getByRole("button", {name: "Columns", exact: true}).click();
+        await expect(page.getByRole("dialog", {name: "Select visible columns"}).locator(".columns-picker-option").first()).toBeVisible();
+        await page.keyboard.press("Escape"); await page.getByRole("button", {name: "Filters", exact: true}).click();
+        await expect(page.getByRole("dialog", {name: "Select search filters"}).locator(".filters-picker-option").first()).toBeVisible();
+        await page.keyboard.press("Escape");
+    }
 });
 
 test("Builder collapsible section supports keyboard access without detectable violations", async function({ page }) {

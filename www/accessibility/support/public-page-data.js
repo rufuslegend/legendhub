@@ -20,10 +20,12 @@ function itemStatInfo() {
 function itemMetadata() {
     const stats = itemStatInfo();
     return {
-        getItemStatCategories: [{
-            getItemStatInfo: stats,
-            name: "Basic"
-        }],
+        getItemStatCategories: [
+            {name: "Basic", getItemStatInfo: stats},
+            ...["Main", "Limits", "Ranged", "Regen", "Tank", "Melee", "Mage", "Weapon", "Future"].map((name, index) => ({
+                name, getItemStatInfo: [{display: `${name} Stat`, filterString: "= {0}", short: `${name} Stat`, showColumnDefault: false, type: "int", var: `stat${index}`}]
+            }))
+        ],
         getItemStatInfo: stats
     };
 }
