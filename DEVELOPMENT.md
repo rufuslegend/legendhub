@@ -35,6 +35,54 @@ The first startup is slower because MySQL imports the development seed. Docker
 waits for the database health check before starting the other services. The web
 service then applies the numbered migrations automatically.
 
+## Production-shaped local HTTPS stack
+
+The local overlay runs the same four core services behind Nginx at
+`https://localhost`. It builds the web application into its image instead of
+bind-mounting the source tree, so browser checks exercise the production client
+bundle and real `Secure` cookie behavior.
+
+Install and trust the local certificate authority once:
+
+```sh
+mkcert -install
+```
+
+Prepare persistent local-only state with a recent Dunwich database snapshot,
+then build and start the stack:
+
+```sh
+./scripts/prepare-local-stack.sh /path/to/dunwich-latest.sql.gz
+./scripts/local-stack.sh up --build -d
+```
+
+The setup command stores the snapshot, local TLS certificate, private local
+environment, and generated credentials beneath the ignored
+`data/local-stack/` directory. MySQL imports the snapshot only when its Compose
+volume is first created. Re-running the setup command with a newer snapshot
+does not change an existing database volume.
+
+Use the wrapper for normal Compose operations:
+
+```sh
+./scripts/local-stack.sh ps
+./scripts/local-stack.sh logs -f www nginx
+./scripts/local-stack.sh up --build -d
+./scripts/local-stack.sh down
+```
+
+To intentionally replace the local database with the currently stored
+snapshot, remove only this local project's volumes and start it again:
+
+```sh
+./scripts/local-stack.sh down --volumes
+./scripts/local-stack.sh up --build -d
+```
+
+The `--volumes` command permanently deletes the local Compose database and
+generated backup volumes. It does not delete the stored snapshot under
+`data/local-stack/`.
+
 ## Feedback configuration
 
 Anonymous feedback is submitted as a public Issue in
