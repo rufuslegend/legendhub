@@ -11,6 +11,14 @@ function redirectToUnauthorizedPage() {
         window.location.assign("/error/401.html");
 }
 
+function normalizeGraphQLError(error) {
+    return {
+        message: typeof error?.message === "string" && error.message
+            ? error.message
+            : "The request could not be completed."
+    };
+}
+
 export async function graphqlRequest({query, variables, signal}) {
     const response = await fetch("/api", {
         method: "POST",
@@ -27,14 +35,20 @@ export async function graphqlRequest({query, variables, signal}) {
     if (response.status < 200 || response.status >= 300)
         throw new GraphQLRequestError("The request could not be completed.");
 
-    const body = await response.json();
+    let body;
+    try {
+        body = await response.json();
+    }
+    catch (error) {
+        if (error?.name === "AbortError")
+            throw error;
+        throw new GraphQLRequestError("The server returned an invalid response.");
+    }
 
     if (!body || typeof body !== "object")
         throw new GraphQLRequestError("The server returned an invalid response.");
     if (Array.isArray(body.errors) && body.errors.length > 0) {
-        const errors = body.errors.map(function(error) {
-            return {message: error.message || "The request could not be completed."};
-        });
+        const errors = body.errors.map(normalizeGraphQLError);
         throw new GraphQLRequestError(errors[0].message, errors);
     }
     if (!Object.hasOwn(body, "data"))

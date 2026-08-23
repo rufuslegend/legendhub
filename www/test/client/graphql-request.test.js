@@ -159,6 +159,55 @@ test("GraphQL request normalizes GraphQL and unexpected response errors", async 
     );
 });
 
+test("GraphQL request normalizes malformed JSON responses", async function(t) {
+    const originalFetch = globalThis.fetch;
+    t.after(function() { globalThis.fetch = originalFetch; });
+    const {graphqlRequest, GraphQLRequestError} = await loadModule();
+
+    globalThis.fetch = async function() {
+        return {
+            status: 200,
+            json: async function() {
+                throw new SyntaxError("Unexpected token '<'");
+            }
+        };
+    };
+
+    await assert.rejects(
+        graphqlRequest({query: "query { settings }"}),
+        function(error) {
+            assert.ok(error instanceof GraphQLRequestError);
+            assert.equal(error.message, "The server returned an invalid response.");
+            assert.deepEqual(error.errors, []);
+            return true;
+        }
+    );
+});
+
+test("GraphQL request normalizes malformed GraphQL error entries", async function(t) {
+    const originalFetch = globalThis.fetch;
+    t.after(function() { globalThis.fetch = originalFetch; });
+    const {graphqlRequest, GraphQLRequestError} = await loadModule();
+
+    globalThis.fetch = async function() {
+        return response({errors: [null, {}, {message: "A valid error."}]});
+    };
+
+    await assert.rejects(
+        graphqlRequest({query: "query { settings }"}),
+        function(error) {
+            assert.ok(error instanceof GraphQLRequestError);
+            assert.equal(error.message, "The request could not be completed.");
+            assert.deepEqual(error.errors, [
+                {message: "The request could not be completed."},
+                {message: "The request could not be completed."},
+                {message: "A valid error."}
+            ]);
+            return true;
+        }
+    );
+});
+
 test("GraphQL request preserves abort errors", async function(t) {
     const originalFetch = globalThis.fetch;
     t.after(function() { globalThis.fetch = originalFetch; });
