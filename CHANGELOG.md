@@ -9,6 +9,10 @@ with version 2.6.0.
 
 - Modernized the client foundation behind LegendHUB's pages while preserving the familiar sign-in, account, search, list, editing, Builder, theme, and saved-preference workflows.
 
+### Fixed
+
+- Hardened sign-in renewal so private session data is not written to server diagnostics.
+
 ## [2.9.0] - 2026-08-22
 
 ### Added

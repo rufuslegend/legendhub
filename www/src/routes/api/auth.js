@@ -129,8 +129,6 @@ let authToken = function(token, ip, renew, shouldGetPermissions) {
                                         function(error, deleteResults, fields) {});
                                 });
 
-                            console.log(`${newSelector}-${newToken}`);
-
                             response.token = `${newSelector}-${newToken}`;
                             response.expires = stayLoggedIn ? futureDate : null;
                         }
