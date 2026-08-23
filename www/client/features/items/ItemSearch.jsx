@@ -2,8 +2,9 @@ import {useCallback, useEffect, useReducer, useRef, useState} from "react";
 import ColumnsDialog from "../../components/ColumnsDialog.jsx";
 import FiltersDialog from "../../components/FiltersDialog.jsx";
 import Pagination from "../../components/Pagination.jsx";
-import {formatCookie, parseCookieHeader} from "../../lib/cookies.js";
+import {parseCookieHeader} from "../../lib/cookies.js";
 import {loadItems} from "./item-search-api.js";
+import {columnsPreferenceCookie} from "./item-search-cookie.js";
 import {createInitialItemSearchState, itemSearchReducer, searchUrl} from "./item-search-reducer.js";
 
 function resultValue(item, stat, constants) {
@@ -40,8 +41,7 @@ export default function ItemSearch(props) {
     }, []);
     function persistColumns(columns) {
         if (parseCookieHeader(document.cookie)["cookie-consent"] !== "true") return;
-        const expires = new Date(); expires.setFullYear(expires.getFullYear() + 20);
-        document.cookie = formatCookie("sc2", columns.join("-"), {expires});
+        document.cookie = columnsPreferenceCookie(columns);
     }
 
     async function runSearch(criteria, updateHistory = true) {

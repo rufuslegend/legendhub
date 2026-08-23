@@ -334,17 +334,23 @@ test("Items Columns persists consented toggle and reset choices through the real
     await page.getByRole("button", {name: "Slot", exact: true}).click();
     expect((await context.cookies(baseUrl)).find(cookie => cookie.name === "sc2")).toBeUndefined();
     await page.keyboard.press("Escape");
-    await context.addCookies([{name: "cookie-consent", value: "true", url: baseUrl}]);
+    await page.getByRole("button", {name: "Agree", exact: true}).click();
     await page.reload();
     await page.waitForTimeout(50);
     expect(await page.evaluate(() => document.cookie.includes("cookie-consent=true"))).toBe(true);
     await page.getByRole("button", {name: "Columns", exact: true}).click();
     await page.getByRole("button", {name: "Slot", exact: true}).click();
+    const toggleWrittenAt = Date.now() / 1000;
+    await expect.poll(async () => (await context.cookies(baseUrl)).find(cookie => cookie.name === "sc2")?.value).toBe("Name-Slot");
+    const toggled = (await context.cookies(baseUrl)).find(cookie => cookie.name === "sc2");
+    expect(toggled.path).toBe("/"); expect(toggled.sameSite).toBe("Lax"); expect(toggled.secure).toBe(true); expect(toggled.expires).toBeGreaterThan(toggleWrittenAt + 399 * 24 * 60 * 60); expect(toggled.expires).toBeLessThan(toggleWrittenAt + 401 * 24 * 60 * 60);
+    const resetWrittenAt = Date.now() / 1000;
     await page.getByRole("button", {name: "Reset to defaults", exact: true}).click();
     await expect(page.getByRole("button", {name: "Slot", exact: true}).locator("svg.text-danger")).toBeVisible();
     await expect.poll(async () => (await context.cookies(baseUrl)).find(cookie => cookie.name === "sc2")?.value).toBe("Name");
     const saved = (await context.cookies(baseUrl)).find(cookie => cookie.name === "sc2");
-    expect(saved.path).toBe("/"); expect(saved.sameSite).toBe("Lax"); expect(saved.secure).toBe(true); expect(saved.expires).toBeGreaterThan(Date.now() / 1000 + 60 * 60 * 24 * 365);
+    // Chromium clamps persistent-cookie lifetime to 400 days, after the production serializer requested its twenty-year expiry.
+    expect(saved.path).toBe("/"); expect(saved.sameSite).toBe("Lax"); expect(saved.secure).toBe(true); expect(saved.expires).toBeGreaterThan(resetWrittenAt + 399 * 24 * 60 * 60); expect(saved.expires).toBeLessThan(resetWrittenAt + 401 * 24 * 60 * 60);
     await page.getByRole("button", {name: "Slot", exact: true}).click();
     await expect.poll(async () => (await context.cookies(baseUrl)).find(cookie => cookie.name === "sc2")?.value).toBe("Name-Slot");
     await page.reload(); await page.getByRole("button", {name: "Columns", exact: true}).click();
@@ -358,11 +364,13 @@ test("Items Columns and Filters dialogs preserve picker controls and ordering", 
     await page.getByRole("button", {name: "Columns", exact: true}).click();
     await expect(page.getByRole("heading", {name: "Select visible columns"})).toBeVisible();
     expect(await page.getByRole("dialog", {name: "Select visible columns"}).locator("h6").allTextContents()).toEqual(["Basic", "Main", "Limits", "Ranged", "Regen", "Tank", "Melee", "Mage", "Weapon", "Future"]);
+    expect(await page.getByRole("dialog", {name: "Select visible columns"}).locator(".columns-picker-option").allTextContents()).toEqual(["Name", "Slot", "Light", "Main Stat", "Limits Stat", "Ranged Stat", "Regen Stat", "Tank Stat", "Melee Stat", "Mage Stat", "Weapon Stat", "Future Stat"]);
     await page.getByRole("button", {name: "Slot", exact: true}).click(); await page.getByRole("button", {name: "Reset to defaults", exact: true}).click();
     await expect(page.getByRole("button", {name: "Slot", exact: true}).locator("svg.text-danger")).toBeVisible();
     await page.keyboard.press("Escape"); await page.getByRole("button", {name: "Filters", exact: true}).click();
     await expect(page.getByRole("heading", {name: "Select search filters"})).toBeVisible();
     expect(await page.getByRole("dialog", {name: "Select search filters"}).locator("h6").allTextContents()).toEqual(["Basic", "Main", "Limits", "Ranged", "Regen", "Tank", "Melee", "Mage", "Weapon", "Future"]);
+    expect(await page.getByRole("dialog", {name: "Select search filters"}).locator(".filters-picker-option").evaluateAll(elements => elements.map(element => element.tagName === "SELECT" ? element.getAttribute("aria-label") : element.textContent.trim()))).toEqual(["Name", "Slot", "Light", "Main Stat", "Limits Stat", "Ranged Stat", "Regen Stat", "Tank Stat", "Melee Stat", "Mage Stat", "Weapon Stat", "Future Stat"]);
     const filtersDialog = page.getByRole("dialog", {name: "Select search filters"});
     const light = filtersDialog.getByRole("button", {name: "Light", exact: true}); await light.click(); await expect(light).toHaveAttribute("aria-pressed", "true");
     await page.getByLabel("Slot").selectOption("0"); await expect(page.getByLabel("Slot")).toHaveValue("0");
@@ -375,11 +383,13 @@ test("Items React dialogs retain their interaction classes in every supported th
         await context.addCookies([{name: "theme", value: theme, url: baseUrl}]);
         await page.goto(`${baseUrl}${itemsPage.path}`);
         await expect(page.locator("link#theme")).toHaveAttribute("href", new RegExp(`bootstrap-${theme}\\.min\\.css`));
-        await page.getByRole("button", {name: "Columns", exact: true}).click();
-        await expect(page.getByRole("dialog", {name: "Select visible columns"}).locator(".columns-picker-option").first()).toBeVisible();
-        await page.keyboard.press("Escape"); await page.getByRole("button", {name: "Filters", exact: true}).click();
-        await expect(page.getByRole("dialog", {name: "Select search filters"}).locator(".filters-picker-option").first()).toBeVisible();
-        await page.keyboard.press("Escape");
+        const columnsTrigger = page.getByRole("button", {name: "Columns", exact: true});
+        await columnsTrigger.click();
+        const columns = page.getByRole("dialog", {name: "Select visible columns"}); const slot = columns.getByRole("button", {name: "Slot", exact: true});
+        await expect(columns).toBeVisible(); await expect(slot).toHaveClass(/columns-picker-option/); await slot.click(); await expect(slot.locator("svg.text-success")).toBeVisible(); await columns.getByRole("button", {name: "Reset to defaults", exact: true}).click(); await expect(slot.locator("svg.text-danger")).toBeVisible(); await page.keyboard.press("Escape"); await expect(columns).not.toBeVisible(); await expect(columnsTrigger).toBeFocused();
+        const filtersTrigger = page.getByRole("button", {name: "Filters", exact: true});
+        await filtersTrigger.click(); const filters = page.getByRole("dialog", {name: "Select search filters"}); const light = filters.getByRole("button", {name: "Light", exact: true});
+        await expect(filters).toBeVisible(); await expect(light).toHaveClass(/filters-picker-option/); await light.click(); await expect(light).toHaveAttribute("aria-pressed", "true"); await filters.getByLabel("Slot").selectOption("0"); await expect(filters.getByLabel("Slot")).toHaveValue("0"); await filters.getByRole("button", {name: "Reset to defaults", exact: true}).click(); await expect(light).toHaveAttribute("aria-pressed", "false"); await expect(filters.getByLabel("Slot")).toHaveValue(""); await page.keyboard.press("Escape"); await expect(filters).not.toBeVisible(); await expect(filtersTrigger).toBeFocused();
     }
 });
 

@@ -11,6 +11,10 @@ async function loadApi() {
     return import("../../client/features/items/item-search-api.js");
 }
 
+async function loadCookie() {
+    return import("../../client/features/items/item-search-cookie.js");
+}
+
 const metadata = {
     categories: [{name: "Basic", getItemStatInfo: [{display: "Name", short: "Name", var: "name", type: "string", showColumnDefault: true}]}],
     constants: {selectShortOptions: {slot: ["Light"]}},
@@ -126,6 +130,16 @@ test("item search preserves the existing cookie and canonical query-string forma
     assert.equal(searchUrl({
         search: "ember blade", filters: {slot: ["3"], isLight: []}, sortBy: "name", sortAsc: true, page: 2
     }), "/items/index.html?filters=slot_3,isLight&search=ember+blade&sortBy=name&sortAsc=true&page=2");
+});
+
+// Catches a Columns toggle/reset preference that requests a one-, ten-, or nineteen-year expiry instead of the deployed twenty-year contract.
+test("item search Columns preference serialization requests exactly twenty calendar years", async function() {
+    const {columnsPreferenceCookie} = await loadCookie();
+    const writtenAt = new Date("2026-08-23T14:15:16.000Z");
+    assert.equal(
+        columnsPreferenceCookie(["Name", "Slot"], writtenAt),
+        "sc2=Name-Slot; Path=/; SameSite=Lax; Secure; Expires=Thu, 23 Aug 2046 14:15:16 GMT"
+    );
 });
 
 // Catches pagination that turns the server's absent-search recent-items mode into an empty named search.
