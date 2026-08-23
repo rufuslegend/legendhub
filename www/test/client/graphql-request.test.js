@@ -1,0 +1,189 @@
+"use strict";
+
+const assert = require("node:assert/strict");
+const test = require("node:test");
+
+async function loadModule() {
+    return import("../../client/lib/graphql-request.js");
+}
+
+async function loadRootModule() {
+    return import("../../client/lib/mount-react-root.js");
+}
+
+function response(body, status = 200) {
+    return {
+        status,
+        json: async function() { return body; }
+    };
+}
+
+test("React root props require exactly one named root", async function() {
+    const {readRootProps} = await loadRootModule();
+    const root = {getAttribute: function() { return "account-settings"; }};
+    const props = {
+        getAttribute: function() { return "account-settings"; },
+        textContent: '{"enabled":true}'
+    };
+    const document = {
+        querySelectorAll: function(selector) {
+            if (selector === "[data-react-root]") return [root];
+            if (selector === "[data-react-props]") return [props];
+            assert.fail(`unexpected selector ${selector}`);
+        }
+    };
+
+    assert.deepEqual(readRootProps({name: "account-settings", document}), {
+        root,
+        props: {enabled: true}
+    });
+    assert.throws(function() {
+        readRootProps({
+            name: "account-settings",
+            document: {querySelectorAll: function() { return []; }}
+        });
+    }, /Missing React root/);
+    assert.throws(function() {
+        readRootProps({
+            name: "account-settings",
+            document: {
+                querySelectorAll: function(selector) {
+                    return selector === "[data-react-root]" ? [root, root] : [];
+                }
+            }
+        });
+    }, /Duplicate React root/);
+});
+
+test("React root props default to an empty object and reject duplicate or invalid JSON", async function() {
+    const {readRootProps} = await loadRootModule();
+    const root = {getAttribute: function() { return "account-settings"; }};
+    const document = {
+        querySelectorAll: function(selector) {
+            return selector === "[data-react-root]" ? [root] : [];
+        }
+    };
+
+    assert.deepEqual(readRootProps({name: "account-settings", document}), {root, props: {}});
+    assert.throws(function() {
+        readRootProps({
+            name: "account-settings",
+            document: {
+                querySelectorAll: function(selector) {
+                    if (selector === "[data-react-root]") return [root];
+                    return [
+                        {getAttribute: function() { return "account-settings"; }},
+                        {getAttribute: function() { return "account-settings"; }}
+                    ];
+                }
+            }
+        });
+    }, /Duplicate React props/);
+    assert.throws(function() {
+        readRootProps({
+            name: "account-settings",
+            document: {
+                querySelectorAll: function(selector) {
+                    if (selector === "[data-react-root]") return [root];
+                    return [{
+                        getAttribute: function() { return "account-settings"; },
+                        textContent: "not JSON"
+                    }];
+                }
+            }
+        });
+    }, /Invalid React props/);
+});
+
+test("GraphQL request POSTs same-origin JSON and returns data", async function(t) {
+    const originalFetch = globalThis.fetch;
+    t.after(function() { globalThis.fetch = originalFetch; });
+    let request;
+    globalThis.fetch = async function(url, options) {
+        request = {url, options};
+        return response({data: {saved: true}});
+    };
+    const {graphqlRequest} = await loadModule();
+
+    const data = await graphqlRequest({
+        query: "query Save($name: String!) { save(name: $name) }",
+        variables: {name: "Aster"}
+    });
+
+    assert.deepEqual(data, {saved: true});
+    assert.equal(request.url, "/api");
+    assert.deepEqual(request.options, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        credentials: "same-origin",
+        signal: undefined,
+        body: JSON.stringify({
+            query: "query Save($name: String!) { save(name: $name) }",
+            variables: {name: "Aster"}
+        })
+    });
+});
+
+test("GraphQL request normalizes GraphQL and unexpected response errors", async function(t) {
+    const originalFetch = globalThis.fetch;
+    t.after(function() { globalThis.fetch = originalFetch; });
+    const {graphqlRequest, GraphQLRequestError} = await loadModule();
+
+    globalThis.fetch = async function() {
+        return response({errors: [{message: "The saved setting is invalid."}]});
+    };
+    await assert.rejects(
+        graphqlRequest({query: "query { settings }"}),
+        function(error) {
+            assert.ok(error instanceof GraphQLRequestError);
+            assert.equal(error.message, "The saved setting is invalid.");
+            assert.deepEqual(error.errors, [{message: "The saved setting is invalid."}]);
+            return true;
+        }
+    );
+
+    globalThis.fetch = async function() { return response({}); };
+    await assert.rejects(
+        graphqlRequest({query: "query { settings }"}),
+        /The server returned an invalid response\./
+    );
+
+    globalThis.fetch = async function() { return response(null); };
+    await assert.rejects(
+        graphqlRequest({query: "query { settings }"}),
+        function(error) {
+            assert.ok(error instanceof GraphQLRequestError);
+            assert.equal(error.message, "The server returned an invalid response.");
+            return true;
+        }
+    );
+});
+
+test("GraphQL request preserves abort errors", async function(t) {
+    const originalFetch = globalThis.fetch;
+    t.after(function() { globalThis.fetch = originalFetch; });
+    const abortError = new DOMException("The operation was aborted.", "AbortError");
+    globalThis.fetch = async function() { throw abortError; };
+    const {graphqlRequest} = await loadModule();
+
+    await assert.rejects(graphqlRequest({query: "query { settings }"}), function(error) {
+        assert.equal(error, abortError);
+        return true;
+    });
+});
+
+test("GraphQL request redirects unauthorized responses to the existing error page", async function(t) {
+    const originalFetch = globalThis.fetch;
+    const originalWindow = globalThis.window;
+    t.after(function() {
+        globalThis.fetch = originalFetch;
+        globalThis.window = originalWindow;
+    });
+    let redirect;
+    globalThis.window = {location: {assign: function(path) { redirect = path; }}};
+    globalThis.fetch = async function() { return response({}, 403); };
+    const {graphqlRequest} = await loadModule();
+
+    await assert.rejects(graphqlRequest({query: "query { settings }"}), /Authorization required\./);
+    assert.equal(redirect, "/error/401.html");
+});
