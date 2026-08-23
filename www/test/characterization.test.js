@@ -47,14 +47,15 @@ test("Glass Blue is the default while saved themes remain unchanged", async func
     }
 });
 
-test("theme chooser exposes the Glass family and preserves standard choices", function() {
-    const source = fs.readFileSync(path.join(
-        __dirname, "../src/public/js/apps/legendwiki-app.js"), "utf8");
-    assert.match(source,
-        /\$scope\.glassThemes = \['Glass Blue', 'Glass Emerald', 'Glass Ruby', 'Glass Amethyst', 'Glass Amber'\]/);
-    assert.match(source,
-        /\$scope\.standardThemes = \['Light', 'Dark', 'Solarized Dark', 'High Contrast'\]/);
-    assert.match(source, /toLowerCase\(\)\.replace\(\/\\s\/g, '-'\)/);
+test("theme chooser exposes the Glass family and preserves standard choices", async function() {
+    const html = await renderHome();
+
+    for (const theme of [
+        "glass-blue", "glass-emerald", "glass-ruby", "glass-amethyst", "glass-amber",
+        "light", "dark", "solarized-dark", "high-contrast"
+    ]) {
+        assert.match(html, new RegExp(`data-theme="${theme}"`));
+    }
 });
 
 test("installable app metadata uses the Glass Blue browser colors", function() {

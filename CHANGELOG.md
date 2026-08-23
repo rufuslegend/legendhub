@@ -13,6 +13,7 @@ with version 2.6.0.
 
 ### Changed
 
+- Made the shared navigation, theme chooser, notification menu, and cookie banner work without the legacy browser framework while keeping all nine themes and saved preferences intact.
 - Made notification preferences and password changes easier to use with a keyboard, kept focus in the active account workflow, and improved clarity for assistive technology while preserving secure sign-in renewal.
 - Compacted the Builder by making KSM swaps, quest modifiers, and era abilities collapsible with directional indicators, aligning era abilities in three responsive columns, and allowing the Character card to size to its contents.
 - Restyled item-search filters to match the compact, responsive column picker with clearer themed category surfaces.

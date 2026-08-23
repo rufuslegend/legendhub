@@ -20,14 +20,7 @@ const allowedAngularFiles = [
     "public/js/controllers/login.js",
     "public/js/ng-showdown.js",
     "public/js/showdown.min.js",
-    "views/account/index.ejs",
     "views/builder/index.ejs",
-    "views/cookies.ejs",
-    "views/error/401.ejs",
-    "views/error/404.ejs",
-    "views/error/500.ejs",
-    "views/feedback.ejs",
-    "views/index.ejs",
     "views/items/display.ejs",
     "views/items/index.ejs",
     "views/items/modify.ejs",
@@ -35,7 +28,6 @@ const allowedAngularFiles = [
     "views/mobs/display.ejs",
     "views/mobs/index.ejs",
     "views/mobs/modify.ejs",
-    "views/notifications/index.ejs",
     "views/quests/display.ejs",
     "views/quests/index.ejs",
     "views/quests/modify.ejs",
@@ -43,10 +35,8 @@ const allowedAngularFiles = [
     "views/shared/displayChangelog.ejs",
     "views/shared/displayChangelogEdit.ejs",
     "views/shared/filtersModal.ejs",
-    "views/shared/header.ejs",
     "views/shared/markdown.ejs",
     "views/shared/mobModal.ejs",
-    "views/shared/notificationWindow.ejs",
     "views/shared/questModal.ejs",
     "views/wiki/display.ejs",
     "views/wiki/index.ejs",
@@ -74,4 +64,16 @@ test("AngularJS surface remains within the migration allowlist", function() {
     }).sort();
 
     assert.deepEqual(activeAngularFiles, allowedAngularFiles);
+});
+
+test("fatal and generic error templates remain outside AngularJS bootstrapping", function() {
+    const viewsRoot = path.join(__dirname, "../src/views/error");
+
+    for (const template of ["fatal.ejs", "generic.ejs"]) {
+        assert.doesNotMatch(
+            fs.readFileSync(path.join(viewsRoot, template), "utf8"),
+            /\bng-app=/,
+            `${template} must remain independent of AngularJS`
+        );
+    }
 });

@@ -110,7 +110,7 @@ async function openAccount(page) {
     expect(response.status()).toBe(200);
     await expect(page.locator('[data-react-root="account-settings"]'))
         .toContainText("Account Settings");
-    await expect(page.locator("body")).toHaveAttribute("ng-app", "legendwiki-app");
+    await expect(page.locator("body")).not.toHaveAttribute("ng-app");
     expect(await page.locator('[data-react-root="account-settings"]').evaluate(function(root) {
         return Array.from(root.querySelectorAll("*")).some(function(element) {
             return Array.from(element.attributes).some(function(attribute) {

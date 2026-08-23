@@ -10,7 +10,8 @@ export default defineConfig({
         outDir: resolve(import.meta.dirname, "src/public/build"),
         rolldownOptions: {
             input: {
-                account: resolve(import.meta.dirname, "client/entries/account.jsx")
+                account: resolve(import.meta.dirname, "client/entries/account.jsx"),
+                shell: resolve(import.meta.dirname, "client/entries/shell.js")
             },
             output: {
                 chunkFileNames: "chunks/[name]-[hash].js",

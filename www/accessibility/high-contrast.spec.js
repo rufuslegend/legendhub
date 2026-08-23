@@ -218,16 +218,17 @@ test("theme chooser supports keyboard access to the Glass theme submenu", async 
     await page.keyboard.press("Tab");
     const glassButton = page.getByRole("button", { name: "Glass", exact: true });
     await expect(glassButton).toBeFocused();
+    const glassThemes = page.getByRole("group", { name: "Glass themes" });
+    await expect(glassThemes).toBeHidden();
     await page.keyboard.press("Enter");
 
     await expect(glassButton).toHaveAttribute("aria-expanded", "true");
-    const glassThemes = page.getByRole("group", { name: "Glass themes" });
     await expect(glassThemes).toBeVisible();
-    await expect(glassThemes.getByRole("link")).toHaveCount(5);
+    await expect(glassThemes.getByRole("button")).toHaveCount(5);
     await expectNoWcagViolations(page);
 
     await page.keyboard.press("Tab");
-    const glassBlue = glassThemes.getByRole("link", { name: "Blue", exact: true });
+    const glassBlue = glassThemes.getByRole("button", { name: "Blue", exact: true });
     await expect(glassBlue).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(page.locator("link#theme")).toHaveAttribute(

@@ -30,7 +30,7 @@ function snapshotFiles(directory, relativeDirectory = "", excluded = () => false
     return snapshot;
 }
 
-test("clean client build emits the account bundle without changing public assets", (t) => {
+test("clean client build emits the account and shared-shell bundles without changing public assets", (t) => {
     fs.rmSync(buildRoot, {recursive: true, force: true});
     t.after(() => fs.rmSync(buildRoot, {recursive: true, force: true}));
     fs.mkdirSync(buildRoot, {recursive: true});
@@ -48,6 +48,8 @@ test("clean client build emits the account bundle without changing public assets
 
     const bundle = path.join(buildRoot, "account.js");
     assert.ok(fs.existsSync(bundle), "client build must create the account bundle");
+    assert.ok(fs.existsSync(path.join(buildRoot, "shell.js")),
+        "client build must create the shared shell bundle");
     assert.equal(fs.existsSync(path.join(buildRoot, "foundation.js")), false,
         "client build must not retain the obsolete foundation bundle");
     assert.deepEqual(snapshotFiles(wwwRoot, "", (relativePath) =>
