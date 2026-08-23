@@ -6,7 +6,6 @@ const childProcess = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const {pathToFileURL} = require("node:url");
 
 const wwwRoot = path.join(__dirname, "..");
 const publicRoot = path.join(wwwRoot, "src", "public");
@@ -31,7 +30,7 @@ function snapshotFiles(directory, relativeDirectory = "", excluded = () => false
     return snapshot;
 }
 
-test("clean client build emits the foundation bundle without changing public assets", (t) => {
+test("clean client build emits the account bundle without changing public assets", (t) => {
     fs.rmSync(buildRoot, {recursive: true, force: true});
     t.after(() => fs.rmSync(buildRoot, {recursive: true, force: true}));
     const before = snapshotFiles(wwwRoot, "", (relativePath) =>
@@ -45,8 +44,10 @@ test("clean client build emits the foundation bundle without changing public ass
         stdio: "pipe"
     });
 
-    const bundle = path.join(buildRoot, "foundation.js");
-    assert.ok(fs.existsSync(bundle), "client build must create the foundation bundle");
+    const bundle = path.join(buildRoot, "account.js");
+    assert.ok(fs.existsSync(bundle), "client build must create the account bundle");
+    assert.equal(fs.existsSync(path.join(buildRoot, "foundation.js")), false,
+        "client build must not retain the obsolete foundation bundle");
     assert.deepEqual(snapshotFiles(wwwRoot, "", (relativePath) =>
         relativePath === "node_modules" ||
         relativePath === path.join("src", "public", "build")), before,
@@ -55,14 +56,4 @@ test("clean client build emits the foundation bundle without changing public ass
         "client build must preserve public CSS");
     assert.deepEqual(snapshotFiles(path.join(publicRoot, "js")), legacyJsBefore,
         "client build must preserve legacy JavaScript");
-});
-
-test("foundation probe does not construct browser objects during module evaluation", () => {
-    const probeUrl = pathToFileURL(path.join(wwwRoot, "client", "entries", "foundation.js"));
-    const result = childProcess.spawnSync(process.execPath, ["--input-type=module", "--eval",
-        `globalThis.Event = class { constructor() { throw new Error("unexpected Event construction"); } }; await import(${JSON.stringify(probeUrl.href)});`], {
-        cwd: wwwRoot,
-        encoding: "utf8"
-    });
-    assert.equal(result.status, 0, result.stderr);
 });

@@ -7,14 +7,10 @@ export default defineConfig({
     publicDir: false,
     build: {
         emptyOutDir: true,
-        lib: {
-            entry: resolve(import.meta.dirname, "client/entries/foundation.js"),
-            formats: ["es"]
-        },
         outDir: resolve(import.meta.dirname, "src/public/build"),
         rolldownOptions: {
             input: {
-                foundation: resolve(import.meta.dirname, "client/entries/foundation.js")
+                account: resolve(import.meta.dirname, "client/entries/account.jsx")
             },
             output: {
                 chunkFileNames: "chunks/[name]-[hash].js",

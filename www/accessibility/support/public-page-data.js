@@ -31,6 +31,31 @@ function eraData() {
 }
 
 module.exports = async function publicPageData(query) {
+    if (query.includes("getNotificationSettings")) {
+        return {
+            getNotificationSettings: {
+                itemAdded: true,
+                itemUpdated: false,
+                mobAdded: false,
+                mobUpdated: true,
+                questAdded: true,
+                questUpdated: false,
+                wikiPageAdded: false,
+                wikiPageUpdated: true,
+                changelogAdded: true
+            }
+        };
+    }
+
+    if (query.includes("getNotifications(")) {
+        return {
+            getNotifications: {
+                moreResults: false,
+                results: []
+            }
+        };
+    }
+
     if (query.includes("getItems(")) {
         return {
             ...itemMetadata(),

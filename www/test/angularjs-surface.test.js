@@ -15,7 +15,6 @@ const angularPatterns = [
 
 const allowedAngularFiles = [
     "public/js/apps/legendwiki-app.js",
-    "public/js/controllers/account/main.js",
     "public/js/controllers/builder/main.js",
     "public/js/controllers/items/main.js",
     "public/js/controllers/login.js",
