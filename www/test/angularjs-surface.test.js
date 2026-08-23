@@ -24,14 +24,11 @@ const allowedAngularFiles = [
     "views/items/index.ejs",
     "views/items/modify.ejs",
     "views/login.ejs",
-    "views/mobs/modify.ejs",
-    "views/quests/modify.ejs",
     "views/shared/columnsModal.ejs",
     "views/shared/filtersModal.ejs",
     "views/shared/markdown.ejs",
     "views/shared/mobModal.ejs",
     "views/shared/questModal.ejs",
-    "views/wiki/modify.ejs"
 ];
 
 function walkFiles(directory) {

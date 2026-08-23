@@ -11,7 +11,10 @@ export default defineConfig({
         rolldownOptions: {
             input: {
                 account: resolve(import.meta.dirname, "client/entries/account.jsx"),
-                shell: resolve(import.meta.dirname, "client/entries/shell.js")
+                "mob-editor": resolve(import.meta.dirname, "client/entries/mob-editor.jsx"),
+                "quest-editor": resolve(import.meta.dirname, "client/entries/quest-editor.jsx"),
+                shell: resolve(import.meta.dirname, "client/entries/shell.js"),
+                "wiki-editor": resolve(import.meta.dirname, "client/entries/wiki-editor.jsx")
             },
             output: {
                 chunkFileNames: "chunks/[name]-[hash].js",
