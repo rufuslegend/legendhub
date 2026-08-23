@@ -22,7 +22,6 @@ const allowedAngularFiles = [
     "public/js/showdown.min.js",
     "views/builder/index.ejs",
     "views/items/index.ejs",
-    "views/items/modify.ejs",
     "views/login.ejs",
     "views/shared/columnsModal.ejs",
     "views/shared/filtersModal.ejs",

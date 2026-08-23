@@ -59,8 +59,40 @@ const editFixtures = {
         subcategoryName: "Advanced",
         tags: "guide;trail",
         title: "A representative wiki page"
+    },
+    item: {
+        accuracy: 0,
+        getMob: {name: "Test sentry"},
+        getQuest: {title: "A representative quest"},
+        id: 101,
+        mobId: 201,
+        name: "Ember blade",
+        notes: "**Warm** steel",
+        questId: 301,
+        rent: 19,
+        slot: 14,
+        weaponType: 1,
+        weight: 2.5
     }
 };
+const itemStatCategories = [
+    {
+        name: "Basic",
+        getItemStatInfo: [
+            {defaultValue: null, display: "Name", editable: true, short: "Name", type: "string", var: "name"},
+            {defaultValue: "14", display: "Slot", editable: true, short: "Slot", type: "select", var: "slot"},
+            {defaultValue: "0", display: "Rent", editable: true, short: "Rent", type: "int", var: "rent"},
+            {defaultValue: "1.25", display: "Weight", editable: true, short: "Weight", type: "decimal", var: "weight"}
+        ]
+    },
+    {
+        name: "Weapon",
+        getItemStatInfo: [
+            {defaultValue: "0", display: "Accuracy", editable: true, short: "Accuracy", type: "int", var: "accuracy"},
+            {defaultValue: "1", display: "Weapon Type", editable: true, short: "Type", type: "select", var: "weaponType"}
+        ]
+    }
+];
 const revertRequests = [];
 let failingRevertField = null;
 
@@ -151,6 +183,10 @@ function editorPageData(query, ip, variables) {
         return {getQuestById: editFixtures.quest, getAreas: areas};
     if (query.includes("getWikiPageById"))
         return {getWikiPageById: editFixtures.wiki, getCategories: categories};
+    if (query.includes("getItemById"))
+        return {getItemById: editFixtures.item, getItemStatCategories: itemStatCategories};
+    if (query.includes("getItemStatCategories"))
+        return {getItemStatCategories: itemStatCategories};
     if (query.includes("getAreas"))
         return {getAreas: areas};
     if (query.includes("getCategories"))
@@ -364,6 +400,136 @@ test("revert routes preserve GraphQL failures without cookies or redirects", asy
         const call = revertRequests.at(-1);
         expect(call.variables).toEqual({authToken: "editor-token", historyId: revert.historyId});
     }
+});
+
+// Catches a React item editor that drops stat validation, relationships, dirty recovery, or item payload fields.
+test("React migration: item editor preserves fields, independent required validation, lookups, and add/edit saves", async function({page}) {
+    const requests = [];
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const body = route.request().postDataJSON();
+        if (body.query.includes("SearchMobs")) {
+            await fulfillMutation(route, {getMobs: {mobs: [{id: 202, name: "Archive guardian"}]}});
+            return;
+        }
+        if (body.query.includes("SearchQuests")) {
+            await fulfillMutation(route, {getQuests: {quests: [{id: 302, title: "An archival errand"}]}});
+            return;
+        }
+        const request = mutationRequest(body);
+        requests.push(request);
+        if (request.field === "insertItem") {
+            await fulfillMutation(route, {
+                insertItem: {
+                    id: 102,
+                    tokenRenewal: {token: "item-add-token", expires: "2030-01-01T00:00:00.000Z"}
+                }
+            });
+            return;
+        }
+        await fulfillMutation(route, {updateItem: {token: "item-edit-token", expires: null}});
+    });
+    await page.route(`${baseUrl}/items/details.html?id=*`, route => route.fulfill({body: "<title>Item</title>"}));
+
+    await openEditor(page, "/items/add.html", "Add Item");
+    const save = page.getByRole("button", {name: "Save", exact: true});
+    await expect(page.locator('select[name="slot"]')).toHaveValue("14");
+    await expect(page.locator('input[name="rent"]')).toHaveValue("0");
+    await expect(page.locator('input[name="weight"]')).toHaveValue("1.25");
+    await expect(page.locator('input[name="accuracy"]')).toHaveValue("0");
+    await expect(page.locator('select[name="weaponType"]')).toHaveValue("1");
+    await expect(save).toBeDisabled();
+    await page.locator('input[name="name"]').fill("Archive blade");
+    await expect(save).toBeEnabled();
+    for (const required of [
+        {clear: () => page.locator('input[name="name"]').fill(""), restore: () => page.locator('input[name="name"]').fill("Archive blade")},
+        {clear: () => page.locator('input[name="rent"]').fill(""), restore: () => page.locator('input[name="rent"]').fill("0")},
+        {clear: () => page.locator('input[name="weight"]').fill(""), restore: () => page.locator('input[name="weight"]').fill("1.25")},
+        {clear: () => page.locator('input[name="accuracy"]').fill(""), restore: () => page.locator('input[name="accuracy"]').fill("0")},
+        {clear: () => page.locator('select[name="weaponType"]').selectOption(""), restore: () => page.locator('select[name="weaponType"]').selectOption("1")}
+    ]) {
+        await required.clear();
+        await expect(save).toBeDisabled();
+        await required.restore();
+        await expect(save).toBeEnabled();
+    }
+    await page.getByRole("button", {name: "Choose a Mob", exact: true}).click();
+    await expect(page.getByLabel("Search for mob")).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", {name: "Choose a Mob", exact: true})).toBeFocused();
+    await page.getByRole("button", {name: "Choose a Mob", exact: true}).click();
+    await page.getByLabel("Search for mob").fill("guardian");
+    await page.getByRole("button", {name: "Search", exact: true}).click();
+    await page.getByRole("button", {name: "Archive guardian", exact: true}).click();
+    await page.getByRole("button", {name: "Choose a Quest", exact: true}).click();
+    await page.getByLabel("Search for quest").fill("errand");
+    await page.getByRole("button", {name: "Search", exact: true}).click();
+    await page.getByRole("button", {name: "An archival errand", exact: true}).click();
+    await page.locator("textarea").fill("**Fresh** steel");
+    await Promise.all([
+        page.waitForURL(`${baseUrl}/items/details.html?id=102`),
+        save.click()
+    ]);
+    expect(requests[0]).toEqual({
+        field: "insertItem",
+        args: {
+            accuracy: 0, authToken: "editor-token", mobId: 202, name: "Archive blade",
+            notes: "**Fresh** steel", questId: 302, rent: 0, slot: 14, weaponType: 1, weight: 1.25
+        }
+    });
+
+    await openEditor(page, "/items/edit.html?id=101", "Edit Item");
+    const editSave = page.getByRole("button", {name: "Save", exact: true});
+    const name = page.locator('input[name="name"]');
+    const notes = page.locator("textarea");
+    await expect(editSave).toBeDisabled();
+    await name.fill("Changed blade");
+    await expect(editSave).toBeEnabled();
+    await name.fill("Ember blade");
+    await expect(editSave).toBeDisabled();
+    await notes.fill("Changed notes");
+    await expect(editSave).toBeEnabled();
+    await notes.fill("**Warm** steel");
+    await expect(editSave).toBeDisabled();
+    await page.locator('input[name="rent"]').fill("20");
+    await Promise.all([
+        page.waitForURL(`${baseUrl}/items/details.html?id=101`),
+        editSave.click()
+    ]);
+    expect(requests[1]).toEqual({
+        field: "updateItem",
+        args: {
+            accuracy: 0, authToken: "item-add-token", id: 101, mobId: 201, name: "Ember blade",
+            notes: "**Warm** steel", questId: 301, rent: 20, slot: 14, weaponType: 1, weight: 2.5
+        }
+    });
+});
+
+// Catches a delayed obsolete lookup result replacing the result for the latest search.
+test("React migration: item lookups cancel obsolete searches before rendering later results", async function({page}) {
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const body = route.request().postDataJSON();
+        if (body.variables?.searchString === "old") {
+            await new Promise(resolve => setTimeout(resolve, 250));
+            try {
+                await fulfillMutation(route, {getMobs: {mobs: [{id: 203, name: "Old guardian"}]}});
+            }
+            catch (_error) {
+                // Fetch cancellation closes this routed request before its stale response can arrive.
+            }
+            return;
+        }
+        await fulfillMutation(route, {getMobs: {mobs: [{id: 204, name: "New guardian"}]}});
+    });
+    await openEditor(page, "/items/add.html", "Add Item");
+    await page.getByRole("button", {name: "Choose a Mob", exact: true}).click();
+    const search = page.getByLabel("Search for mob");
+    await search.fill("old");
+    await page.getByRole("button", {name: "Search", exact: true}).click();
+    await search.fill("new");
+    await page.getByRole("button", {name: "Search", exact: true}).click();
+    await expect(page.getByRole("button", {name: "New guardian", exact: true})).toBeVisible();
+    await page.waitForTimeout(300);
+    await expect(page.getByRole("button", {name: "Old guardian", exact: true})).toHaveCount(0);
 });
 
 test("legacy characterization: mob add and edit preserve initialization, validation, payloads, and redirects", async function({page}) {
@@ -859,6 +1025,12 @@ for (const editor of [
         path: "/wiki/edit.html?id=401",
         field: 'input[name="title"]',
         value: "Failed wiki save"
+    },
+    {
+        entity: "Item",
+        path: "/items/edit.html?id=101",
+        field: 'input[name="name"]',
+        value: "Failed item save"
     }
 ]) {
     test(`React migration: ${editor.entity} save is single-flight and announces request failure`, async function({page}) {
@@ -901,7 +1073,8 @@ test("React migration: mounted editors have no detectable WCAG A or AA violation
     for (const editor of [
         {path: "/mobs/edit.html?id=201", root: "mob-editor"},
         {path: "/quests/edit.html?id=301", root: "quest-editor"},
-        {path: "/wiki/edit.html?id=401", root: "wiki-editor"}
+        {path: "/wiki/edit.html?id=401", root: "wiki-editor"},
+        {path: "/items/edit.html?id=101", root: "item-editor"}
     ]) {
         await page.goto(`${baseUrl}${editor.path}`);
         await expect(page.locator("link#theme")).toHaveAttribute(

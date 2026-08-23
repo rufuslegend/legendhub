@@ -107,6 +107,27 @@ test("field changes update only the draft and clear request errors", async funct
     assert.equal(isEditorDirty(state), false);
 });
 
+// Catches dirty tracking that only restores pristine state for numeric mob fields.
+test("restoring item text and relationship fields returns an edit to pristine state", async function() {
+    const {createInitialEditorState, editorReducer, isEditorDirty} = await loadReducer();
+    let state = createInitialEditorState({
+        id: 101,
+        mobId: 201,
+        name: "Ember blade",
+        notes: "Warm steel"
+    });
+
+    state = editorReducer(state, {type: "field/change", field: "notes", value: "Fresh steel"});
+    assert.equal(isEditorDirty(state), true);
+    state = editorReducer(state, {type: "field/change", field: "notes", value: "Warm steel"});
+    assert.equal(isEditorDirty(state), false);
+
+    state = editorReducer(state, {type: "field/change", field: "mobId", value: 202});
+    assert.equal(isEditorDirty(state), true);
+    state = editorReducer(state, {type: "field/change", field: "mobId", value: 201});
+    assert.equal(isEditorDirty(state), false);
+});
+
 // Catches category changes that retain a subcategory from the prior category.
 test("a category change can atomically clear its dependent subcategory", async function() {
     const {createInitialEditorState, editorReducer} = await loadReducer();

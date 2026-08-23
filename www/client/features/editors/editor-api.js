@@ -162,6 +162,28 @@ const updateWikiPageMutation = `
     }
 `;
 
+const searchMobsQuery = `
+    query SearchMobs($searchString: String) {
+        getMobs(searchString: $searchString) {
+            mobs {
+                id
+                name
+            }
+        }
+    }
+`;
+
+const searchQuestsQuery = `
+    query SearchQuests($searchString: String) {
+        getQuests(searchString: $searchString) {
+            quests {
+                id
+                title
+            }
+        }
+    }
+`;
+
 function integer(value) {
     return value == null || value === "" ? null : Number(value);
 }
@@ -217,6 +239,75 @@ function wikiVariables(wikiPage, document) {
     };
 }
 
+function itemValue(stat, value) {
+    if (stat.type === "bool")
+        return Boolean(value);
+    if (stat.type === "decimal")
+        return value == null || value === "" ? 0 : Number(value);
+    if (stat.type === "int" || stat.type === "select")
+        return integer(value) ?? 0;
+    return value ?? "";
+}
+
+function itemGraphQLType(stat) {
+    if (stat.type === "decimal")
+        return "Float";
+    if (stat.type === "int" || stat.type === "select")
+        return "Int";
+    if (stat.type === "bool")
+        return "Boolean";
+    return "String";
+}
+
+function editableItemStats(itemStatCategories) {
+    return itemStatCategories.flatMap(category => category.getItemStatInfo || [])
+        .filter(stat => stat.editable && !["mobId", "questId", "notes"].includes(stat.var));
+}
+
+function itemMutation(itemStatCategories, edit) {
+    const fields = [
+        {name: "authToken", type: "String", required: true},
+        ...(edit ? [{name: "id", type: "Int", required: true}] : []),
+        {name: "mobId", type: "Int"},
+        {name: "questId", type: "Int"},
+        {name: "notes", type: "String"},
+        ...editableItemStats(itemStatCategories).map(stat => ({
+            name: stat.var,
+            type: itemGraphQLType(stat)
+        }))
+    ];
+    const operation = edit ? "UpdateItem" : "InsertItem";
+    const field = edit ? "updateItem" : "insertItem";
+    const variableDefinitions = fields.map(definition =>
+        `$${definition.name}: ${definition.type}${definition.required ? "!" : ""}`).join("\n");
+    const argumentsList = fields.map(definition => `${definition.name}: $${definition.name}`).join("\n");
+    const response = edit
+        ? "token\nexpires"
+        : "id\ntokenRenewal { token expires }";
+
+    return `
+        mutation ${operation}(${variableDefinitions}) {
+            ${field}(${argumentsList}) {
+                ${response}
+            }
+        }
+    `;
+}
+
+function itemVariables(item, itemStatCategories, document) {
+    const variables = {
+        authToken: currentToken(document),
+        mobId: integer(item.mobId) ?? 0,
+        questId: integer(item.questId) ?? 0,
+        notes: item.notes ?? ""
+    };
+    for (const stat of editableItemStats(itemStatCategories))
+        variables[stat.var] = itemValue(stat, item[stat.var]);
+    if (item.id != null)
+        variables.id = integer(item.id);
+    return variables;
+}
+
 export async function saveMob(mob, document = window.document) {
     const edit = mob.id != null;
     const variables = mobVariables(mob, document);
@@ -257,4 +348,34 @@ export async function saveWikiPage(wikiPage, document = window.document) {
     const id = edit ? variables.id : data.insertWikiPage.id;
     persistTokenRenewal(document, edit ? data.updateWikiPage : data.insertWikiPage.tokenRenewal);
     return {redirectUrl: `/wiki/details.html?id=${id}`};
+}
+
+export async function saveItem(item, itemStatCategories, document = window.document) {
+    const edit = item.id != null;
+    const variables = itemVariables(item, itemStatCategories, document);
+    const data = await graphqlRequest({
+        query: itemMutation(itemStatCategories, edit),
+        variables
+    });
+    const id = edit ? variables.id : data.insertItem.id;
+    persistTokenRenewal(document, edit ? data.updateItem : data.insertItem.tokenRenewal);
+    return {redirectUrl: `/items/details.html?id=${id}`};
+}
+
+export async function searchMobs(searchString, signal) {
+    const data = await graphqlRequest({
+        query: searchMobsQuery,
+        variables: {searchString},
+        signal
+    });
+    return data.getMobs.mobs;
+}
+
+export async function searchQuests(searchString, signal) {
+    const data = await graphqlRequest({
+        query: searchQuestsQuery,
+        variables: {searchString},
+        signal
+    });
+    return data.getQuests.quests;
 }
