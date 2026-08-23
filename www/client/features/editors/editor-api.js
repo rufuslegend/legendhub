@@ -265,6 +265,9 @@ function editableItemStats(itemStatCategories) {
 }
 
 function itemMutation(itemStatCategories, edit) {
+    const requiredInsertStats = new Set([
+        "name", "slot", "alignRestriction", "isLight", "isHeroic"
+    ]);
     const fields = [
         {name: "authToken", type: "String", required: true},
         ...(edit ? [{name: "id", type: "Int", required: true}] : []),
@@ -273,7 +276,8 @@ function itemMutation(itemStatCategories, edit) {
         {name: "notes", type: "String"},
         ...editableItemStats(itemStatCategories).map(stat => ({
             name: stat.var,
-            type: itemGraphQLType(stat)
+            type: itemGraphQLType(stat),
+            required: !edit && requiredInsertStats.has(stat.var)
         }))
     ];
     const operation = edit ? "UpdateItem" : "InsertItem";

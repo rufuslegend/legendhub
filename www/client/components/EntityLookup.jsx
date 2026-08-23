@@ -18,6 +18,7 @@ export default function EntityLookup({
     const [results, setResults] = useState([]);
     const [status, setStatus] = useState("idle");
     const abortRef = useRef(null);
+    const dialogRef = useRef(null);
     const inputRef = useRef(null);
     const requestId = useRef(0);
     const triggerRef = useRef(null);
@@ -25,14 +26,31 @@ export default function EntityLookup({
     useEffect(function() {
         if (!open)
             return undefined;
-        function closeOnEscape(event) {
+        function keepFocusInDialog(event) {
             if (event.key === "Escape")
                 close();
+            if (event.key !== "Tab")
+                return;
+            const focusable = Array.from(dialogRef.current?.querySelectorAll(
+                "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
+            ) || []).filter(element => !element.hidden);
+            if (focusable.length === 0)
+                return;
+            const first = focusable[0];
+            const last = focusable.at(-1);
+            if (event.shiftKey && (document.activeElement === first || !dialogRef.current.contains(document.activeElement))) {
+                event.preventDefault();
+                last.focus();
+            }
+            else if (!event.shiftKey && (document.activeElement === last || !dialogRef.current.contains(document.activeElement))) {
+                event.preventDefault();
+                first.focus();
+            }
         }
-        window.addEventListener("keydown", closeOnEscape);
+        window.addEventListener("keydown", keepFocusInDialog);
         inputRef.current?.focus();
         return function() {
-            window.removeEventListener("keydown", closeOnEscape);
+            window.removeEventListener("keydown", keepFocusInDialog);
             abortRef.current?.abort();
         };
     }, [open]);
@@ -90,7 +108,7 @@ export default function EntityLookup({
                 {buttonLabel}
             </button>
             {open && (
-                <div className="modal d-block" id={modalId} role="dialog" aria-modal="true" aria-labelledby={`${modalId}-title`}>
+                <div ref={dialogRef} className="modal d-block" id={modalId} role="dialog" aria-modal="true" aria-labelledby={`${modalId}-title`}>
                     <div className="modal-dialog" role="document">
                         <div className="modal-content">
                             <div className="modal-header">

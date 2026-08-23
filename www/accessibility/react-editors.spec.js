@@ -103,6 +103,7 @@ let server;
 function editorPageData(query, ip, variables) {
     const timestamp = "2026-08-22T12:00:00.000Z";
     for (const revert of [
+        {field: "revertItem", id: 101, token: "item-revert-token"},
         {field: "revertMob", id: 201, token: "mob-revert-token"},
         {field: "revertQuest", id: 301, token: "quest-revert-token"},
         {field: "revertWikiPage", id: 401, token: "wiki-revert-token"}
@@ -144,6 +145,22 @@ function editorPageData(query, ip, variables) {
                     modifiedOn: timestamp
                 }
             }
+        };
+    }
+    if (query.includes("getItemHistoryById")) {
+        return {
+            getItemHistoryById: {
+                item: {
+                    ...editFixtures.item,
+                    getHistories: [{
+                        id: 1101,
+                        item: {modifiedBy: "Archivist", modifiedOn: timestamp}
+                    }],
+                    modifiedBy: "Archivist",
+                    modifiedOn: timestamp
+                }
+            },
+            getItemStatCategories: itemStatCategories
         };
     }
     if (query.includes("getQuestHistoryById")) {
@@ -305,6 +322,7 @@ async function openEditor(page, path, heading) {
 test("legacy characterization: anonymous add, edit, and revert routes require login", async function({context, page}) {
     await context.clearCookies();
     for (const path of [
+        "/items/add.html", "/items/edit.html?id=101", "/items/revert.html?id=1101",
         "/mobs/add.html", "/mobs/edit.html?id=201", "/mobs/revert.html?id=1201",
         "/quests/add.html", "/quests/edit.html?id=301", "/quests/revert.html?id=1301",
         "/wiki/add.html", "/wiki/edit.html?id=401", "/wiki/revert.html?id=1401"
@@ -319,6 +337,7 @@ test("legacy characterization: anonymous add, edit, and revert routes require lo
 
 test("legacy characterization: authenticated history pages retain their revert entry points", async function({page}) {
     for (const history of [
+        {path: "/items/history.html?id=1101", revert: "/items/revert.html?id=1101"},
         {path: "/mobs/history.html?id=1201", revert: "/mobs/revert.html?id=1201"},
         {path: "/quests/history.html?id=1301", revert: "/quests/revert.html?id=1301"},
         {path: "/wiki/history.html?id=1401", revert: "/wiki/revert.html?id=1401"}
@@ -335,6 +354,13 @@ test("legacy characterization: authenticated history pages retain their revert e
 
 test("revert routes preserve authenticated variables, renewed cookies, and exact redirects", async function({context, page}) {
     const cases = [
+        {
+            field: "revertItem",
+            historyId: 1101,
+            path: "/items/revert.html?id=1101",
+            redirect: "/items/details.html?id=101",
+            token: "item-revert-token"
+        },
         {
             field: "revertMob",
             historyId: 1201,
@@ -368,7 +394,7 @@ test("revert routes preserve authenticated variables, renewed cookies, and exact
         );
     }
 
-    expect(revertRequests).toHaveLength(3);
+    expect(revertRequests).toHaveLength(4);
     for (const [index, revert] of cases.entries()) {
         const call = revertRequests[index];
         expect(call.variables).toEqual({authToken: "editor-token", historyId: revert.historyId});
@@ -383,6 +409,7 @@ test("revert routes preserve authenticated variables, renewed cookies, and exact
 
 test("revert routes preserve GraphQL failures without cookies or redirects", async function({context, page}) {
     const cases = [
+        {field: "revertItem", historyId: 1101, path: "/items/revert.html?id=1101"},
         {field: "revertMob", historyId: 1201, path: "/mobs/revert.html?id=1201"},
         {field: "revertQuest", historyId: 1301, path: "/quests/revert.html?id=1301"},
         {field: "revertWikiPage", historyId: 1401, path: "/wiki/revert.html?id=1401"}
@@ -454,6 +481,14 @@ test("React migration: item editor preserves fields, independent required valida
     }
     await page.getByRole("button", {name: "Choose a Mob", exact: true}).click();
     await expect(page.getByLabel("Search for mob")).toBeFocused();
+    const closeLookup = page.getByRole("button", {name: "Close", exact: true});
+    const addMob = page.getByRole("link", {name: "Add new mob", exact: true});
+    await page.keyboard.press("Shift+Tab");
+    await expect(closeLookup).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(addMob).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(closeLookup).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("button", {name: "Choose a Mob", exact: true})).toBeFocused();
     await page.getByRole("button", {name: "Choose a Mob", exact: true}).click();

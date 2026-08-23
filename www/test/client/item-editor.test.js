@@ -2,7 +2,7 @@
 
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const {Kind, parse} = require("graphql");
+const {Kind, buildSchema, parse, validate} = require("graphql");
 
 const itemStatCategories = [
     {
@@ -10,6 +10,9 @@ const itemStatCategories = [
         getItemStatInfo: [
             {editable: true, type: "string", var: "name"},
             {editable: true, type: "select", var: "slot"},
+            {editable: true, type: "select", var: "alignRestriction"},
+            {editable: true, type: "bool", var: "isLight"},
+            {editable: true, type: "bool", var: "isHeroic"},
             {editable: true, type: "int", var: "rent"},
             {editable: true, type: "decimal", var: "weight"},
             {editable: false, type: "int", var: "netStat"}
@@ -24,6 +27,48 @@ const itemStatCategories = [
         ]
     }
 ];
+
+const productionItemMutationSchema = buildSchema(`
+    type TokenRenewal { token: String expires: String }
+    type IdMutationResponse { id: Int! tokenRenewal: TokenRenewal }
+    type Query { _contract: Boolean }
+    type Mutation {
+        insertItem(
+            authToken: String!
+            mobId: Int
+            questId: Int
+            notes: String
+            name: String!
+            slot: Int!
+            alignRestriction: Int!
+            isLight: Boolean!
+            isHeroic: Boolean!
+            rent: Int
+            weight: Float
+            accuracy: Int
+            uniqueWear: Boolean
+            weaponType: Int
+        ): IdMutationResponse
+        updateItem(
+            authToken: String!
+            id: Int!
+            mobId: Int
+            questId: Int
+            notes: String
+            name: String
+            slot: Int
+            alignRestriction: Int
+            isLight: Boolean
+            isHeroic: Boolean
+            rent: Int
+            weight: Float
+            accuracy: Int
+            uniqueWear: Boolean
+            weaponType: Int
+        ): TokenRenewal
+    }
+    schema { query: Query mutation: Mutation }
+`);
 
 function documentWithToken(cookie = "loginToken=item-token") {
     let value = cookie;
@@ -75,8 +120,8 @@ async function captureRequest(call) {
     }
 }
 
-// Catches dropped stat fields, interpolated user input, relationship IDs, and token-renewal drift.
-test("item add uses GraphQL variables for every editable stat and relationship", async function() {
+// Catches nullable client variables rejected by the production insertItem argument contract.
+test("item add validates against the production required Item mutation arguments", async function() {
     const {saveItem} = await import("../../client/features/editors/editor-api.js");
     const document = documentWithToken();
     const saved = await captureRequest({
@@ -91,6 +136,9 @@ test("item add uses GraphQL variables for every editable stat and relationship",
         run: function() {
             return saveItem({
                 accuracy: "0",
+                alignRestriction: "0",
+                isHeroic: false,
+                isLight: false,
                 mobId: "202",
                 name: "Quoted \"blade\"",
                 notes: "Line one\n${not interpolation}",
@@ -109,16 +157,19 @@ test("item add uses GraphQL variables for every editable stat and relationship",
         operation: "InsertItem",
         field: "insertItem",
         types: {
-            accuracy: "Int", authToken: "String!", mobId: "Int", name: "String",
-            notes: "String", questId: "Int", rent: "Int", slot: "Int", uniqueWear: "Boolean",
+            accuracy: "Int", alignRestriction: "Int!", authToken: "String!", isHeroic: "Boolean!",
+            isLight: "Boolean!", mobId: "Int", name: "String!", notes: "String", questId: "Int",
+            rent: "Int", slot: "Int!", uniqueWear: "Boolean",
             weaponType: "Int", weight: "Float"
         },
         variables: {
-            accuracy: 0, authToken: "item-token", mobId: 202, name: "Quoted \"blade\"",
-            notes: "Line one\n${not interpolation}", questId: 302, rent: 19, slot: 14,
+            accuracy: 0, alignRestriction: 0, authToken: "item-token", isHeroic: false, isLight: false,
+            mobId: 202, name: "Quoted \"blade\"", notes: "Line one\n${not interpolation}", questId: 302, rent: 19, slot: 14,
             uniqueWear: true, weaponType: 1, weight: 2.5
         }
     });
+    const body = JSON.parse(saved.request.options.body);
+    assert.deepEqual(validate(productionItemMutationSchema, parse(body.query)), []);
     assert.deepEqual(saved.result, {redirectUrl: "/items/details.html?id=102"});
     assert.equal(document.cookie,
         "loginToken=item-renewed; Path=/; SameSite=Lax; Secure; Expires=Tue, 01 Jan 2030 00:00:00 GMT");
@@ -131,7 +182,8 @@ test("item edit preserves stat payloads and redirects to the existing item", asy
         response: {data: {updateItem: {token: "item-edit", expires: null}}},
         run: function() {
             return saveItem({
-                accuracy: 0, id: 101, mobId: 201, name: "Ember blade", notes: "Warm steel",
+                accuracy: 0, alignRestriction: 0, id: 101, isHeroic: false, isLight: false,
+                mobId: 201, name: "Ember blade", notes: "Warm steel",
                 questId: 301, rent: 20, slot: 14, uniqueWear: false, weaponType: 1, weight: 2.5
             }, itemStatCategories, documentWithToken());
         }
@@ -142,13 +194,13 @@ test("item edit preserves stat payloads and redirects to the existing item", asy
         operation: "UpdateItem",
         field: "updateItem",
         types: {
-            accuracy: "Int", authToken: "String!", id: "Int!", mobId: "Int", name: "String",
-            notes: "String", questId: "Int", rent: "Int", slot: "Int", uniqueWear: "Boolean",
+            accuracy: "Int", alignRestriction: "Int", authToken: "String!", id: "Int!", isHeroic: "Boolean",
+            isLight: "Boolean", mobId: "Int", name: "String", notes: "String", questId: "Int", rent: "Int", slot: "Int", uniqueWear: "Boolean",
             weaponType: "Int", weight: "Float"
         },
         variables: {
-            accuracy: 0, authToken: "item-token", id: 101, mobId: 201, name: "Ember blade",
-            notes: "Warm steel", questId: 301, rent: 20, slot: 14, uniqueWear: false,
+            accuracy: 0, alignRestriction: 0, authToken: "item-token", id: 101, isHeroic: false, isLight: false,
+            mobId: 201, name: "Ember blade", notes: "Warm steel", questId: 301, rent: 20, slot: 14, uniqueWear: false,
             weaponType: 1, weight: 2.5
         }
     });

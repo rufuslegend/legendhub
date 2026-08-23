@@ -245,8 +245,8 @@ router.get(["/revert.html"], async function(req, res, next) {
         return res.redirect(`/login.html?returnUrl=${encodeURIComponent(res.locals.url.path)}`);
 
     let revertQuery = `
-    mutation {
-        revertItem (authToken:"${req.cookies.loginToken}",historyId:${req.query.id}) {
+    mutation($authToken: String!, $historyId: Int!) {
+        revertItem(authToken: $authToken, historyId: $historyId) {
             id
             tokenRenewal {
                 token
@@ -257,22 +257,27 @@ router.get(["/revert.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(revertQuery, req.ip);
+        var data = await apiUtils.postAsync(revertQuery, req.ip, {
+            authToken: req.cookies.loginToken,
+            historyId: Number(req.query.id)
+        });
     }
     catch (e) {
         return next(e);
     }
 
-    let itemId = data.id;
+    data = data.revertItem;
+    let cookieOptions = {
+        path: "/",
+        secure: true,
+        sameSite: true
+    };
+    if (data.tokenRenewal.expires)
+        cookieOptions.expires = new Date(data.tokenRenewal.expires);
     res.cookie(
         "loginToken",
         data.tokenRenewal.token,
-        {
-            path: "/",
-            expires: data.tokenRenewal.expires,
-            secure: true,
-            sameSite: true
-        }
+        cookieOptions
     );
     res.redirect(`/items/details.html?id=${data.id}`);
 });
