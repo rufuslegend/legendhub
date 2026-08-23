@@ -431,8 +431,242 @@
         }
     }
 
+    function calculateBuilderAlignment(items) {
+        let canUseGood = true;
+        let canUseNeutral = true;
+        let canUseEvil = true;
+
+        for (const item of items || []) {
+            switch (item.alignRestriction) {
+                case 1:
+                    canUseNeutral = false;
+                    canUseEvil = false;
+                    break;
+                case 2:
+                    canUseGood = false;
+                    canUseEvil = false;
+                    break;
+                case 3:
+                    canUseGood = false;
+                    canUseNeutral = false;
+                    break;
+                case 4:
+                    canUseGood = false;
+                    break;
+                case 5:
+                    canUseNeutral = false;
+                    break;
+                case 6:
+                    canUseEvil = false;
+                    break;
+            }
+        }
+
+        if (!canUseGood && !canUseNeutral && !canUseEvil)
+            return "ERROR";
+        return (canUseGood ? "G " : "  ") +
+            (canUseNeutral ? "N " : "  ") +
+            (canUseEvil ? "E" : " ");
+    }
+
+    function calculateStatQuestBonus(statName, baseStats) {
+        const totalBaseStats = [
+            "strength", "mind", "dexterity",
+            "constitution", "perception", "spirit"
+        ].reduce(function(total, stat) {
+            return total + baseStats[stat];
+        }, 0);
+        let bonus = totalBaseStats < 244 ? 3 : 0;
+
+        switch (statName) {
+            case "strength":
+                if (baseStats.amulet == 0 || baseStats.hazelnut == 0)
+                    bonus += 10;
+                if (baseStats.longhouse == 3)
+                    bonus += 5;
+                if (baseStats.longhouse == 2)
+                    bonus += 3;
+                break;
+            case "mind":
+                if (baseStats.amulet == 1 || baseStats.hazelnut == 1)
+                    bonus += 10;
+                if (baseStats.longhouse == 1 || baseStats.longhouse == 8)
+                    bonus += 5;
+                if (baseStats.longhouse == 0)
+                    bonus += 3;
+                if (baseStats.longhouse == 12)
+                    bonus += 10;
+                break;
+            case "dexterity":
+                if (baseStats.amulet == 2 || baseStats.hazelnut == 2)
+                    bonus += 10;
+                if (baseStats.longhouse == 10)
+                    bonus += 8;
+                if (baseStats.longhouse == 4 || baseStats.longhouse == 6)
+                    bonus += 5;
+                if (baseStats.longhouse == 1 || baseStats.longhouse == 7)
+                    bonus += 3;
+                if (baseStats.longhouse == 12)
+                    bonus -= 2;
+                break;
+            case "constitution":
+                if (baseStats.amulet == 3 || baseStats.hazelnut == 3)
+                    bonus += 10;
+                if (baseStats.longhouse == 5)
+                    bonus += 5;
+                if (baseStats.longhouse == 3 || baseStats.longhouse == 6)
+                    bonus += 3;
+                break;
+            case "perception":
+                if (baseStats.amulet == 4 || baseStats.hazelnut == 4)
+                    bonus += 10;
+                if (baseStats.longhouse == 11)
+                    bonus += 8;
+                if (baseStats.longhouse == 2 || baseStats.longhouse == 7)
+                    bonus += 5;
+                if (baseStats.longhouse == 4)
+                    bonus += 3;
+                break;
+            case "spirit":
+                if (baseStats.amulet == 5 || baseStats.hazelnut == 5)
+                    bonus += 10;
+                if (baseStats.longhouse == 0)
+                    bonus += 5;
+                if (baseStats.longhouse == 5 || baseStats.longhouse == 8)
+                    bonus += 3;
+                if (baseStats.longhouse == 9)
+                    bonus += 8;
+                break;
+            default:
+                return 0;
+        }
+        return bonus;
+    }
+
+    function calculateBuilderStatTotal(list, statName) {
+        if (!list)
+            return {value: "", restrictions: []};
+        if (statName === "alignRestriction")
+            return {value: calculateBuilderAlignment(list.items), restrictions: []};
+
+        const baseStats = list.baseStats || {};
+        const ksmStats = list.ksmStats || {};
+        const items = list.items || [];
+        const totals = new Map();
+
+        function calculate(name) {
+            if (totals.has(name))
+                return totals.get(name);
+
+            const restrictions = [];
+            let equipment = 0;
+            for (let index = 0; index < Math.min(24, items.length); ++index)
+                equipment += items[index] && items[index][name] || 0;
+
+            let equipmentMax = null;
+            switch (name) {
+                case "hit":
+                    equipmentMax = calculateHitrollEquipmentCap(calculate("dexterity").numericValue);
+                    break;
+                case "dam":
+                    equipmentMax = calculateDamrollEquipmentCap(calculate("strength").numericValue);
+                    break;
+                case "spelldam":
+                case "spellcrit":
+                    equipmentMax = 40;
+                    break;
+                case "hpr":
+                    equipmentMax = calculateRegenEquipmentCap(calculate("constitution").numericValue);
+                    break;
+                case "mar":
+                    equipmentMax = calculateRegenEquipmentCap(calculate("mind").numericValue);
+                    break;
+                case "mvr":
+                    equipmentMax = calculateRegenEquipmentCap(calculate("dexterity").numericValue);
+                    break;
+            }
+            if (equipmentMax != null && equipment > equipmentMax) {
+                restrictions.push({restriction: "fromItems", amount: equipment, limit: equipmentMax});
+                equipment = equipmentMax;
+            }
+
+            let spells = 0;
+            for (let index = 24; index < items.length; ++index)
+                spells += items[index] && items[index][name] || 0;
+
+            const dependencyStats = {};
+            for (const dependency of getNaturalStatDependencies(name))
+                dependencyStats[dependency] = calculate(dependency).numericValue;
+            dependencyStats.quest_hp = baseStats.quest_hp;
+            dependencyStats.quest_mana = baseStats.quest_mana;
+            dependencyStats.quest_move = baseStats.quest_move;
+
+            let total = (baseStats[name] || 0) +
+                (ksmStats[name] || 0) +
+                calculateStatQuestBonus(name, baseStats) +
+                equipment +
+                spells +
+                calculateNaturalStatBonus(name, dependencyStats, items) +
+                calculateEraAbilityBonus(name, list.eraAbilities);
+
+            let totalMax = null;
+            switch (name) {
+                case "strength":
+                case "mind":
+                case "dexterity":
+                case "constitution":
+                case "perception":
+                case "spirit":
+                    totalMax = 100 + calculateEraAbilityStatCapBonus(list.eraAbilities);
+                    for (const item of items)
+                        totalMax += item && item[`${name}Cap`] || 0;
+                    break;
+                case "manaReduction":
+                    totalMax = 50;
+                    break;
+                case "mitigation":
+                    totalMax = parseInt(
+                        Math.max(Math.min(calculate("constitution").numericValue, 70) - 30, 0) / 2
+                    );
+                    if (hasBattleTraining(items))
+                        totalMax += 10;
+                    break;
+            }
+            if (totalMax != null && total > totalMax) {
+                restrictions.push({restriction: "fromTotalMax", amount: total, limit: totalMax});
+                total = totalMax;
+            }
+            if (name === "ac" && total < -250)
+                restrictions.push({restriction: "fromTotalMin", amount: total, limit: -250});
+
+            const formattedStats = ["dam", "hit", "hpr", "mar", "mvr", "spelldam", "spellcrit"];
+            const result = {
+                value: formattedStats.includes(name) ? `${total} (${equipment})` : total,
+                numericValue: total,
+                restrictions
+            };
+            totals.set(name, result);
+            return result;
+        }
+
+        const result = calculate(statName);
+        return {value: result.value, restrictions: result.restrictions};
+    }
+
+    function calculateBuilderTotals(list, statNames) {
+        const totals = {};
+        for (const statName of statNames) {
+            const total = calculateBuilderStatTotal(list, statName);
+            totals[statName] = total.value;
+        }
+        return totals;
+    }
+
     return {
         calculateDamrollEquipmentCap,
+        calculateBuilderAlignment,
+        calculateBuilderStatTotal,
+        calculateBuilderTotals,
         calculateEraAbilityBonus,
         calculateEraAbilityStatCapBonus,
         calculateHitrollEquipmentCap,

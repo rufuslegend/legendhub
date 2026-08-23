@@ -6,6 +6,16 @@ const vm = require("node:vm");
 const ejs = require("ejs");
 
 const gameStats = require("../src/public/js/services/game-stats");
+const builderEncoding = require("../client/features/builder/builder-encoding.js");
+const builderPersistence = require("../client/features/builder/builder-persistence.js");
+const builderReducer = require("../client/features/builder/builder-reducer.js");
+const builderConstants = require("../client/features/builder/item-constants.js");
+const builderContracts = {
+    ...builderEncoding,
+    ...builderPersistence,
+    ...builderReducer,
+    ...builderConstants
+};
 
 function renderBuilder() {
     return ejs.renderFile(path.join(
@@ -45,7 +55,7 @@ function createEncoder() {
     };
 }
 
-function createBuilderScope() {
+function createBuilderScope(contracts = builderContracts) {
     let builderController;
     const angular = {
         module: function(moduleName) {
@@ -68,6 +78,7 @@ function createBuilderScope() {
         angular,
         console,
         $,
+        legendBuilderContracts: contracts,
         localStorage: {
             getItem: function() {
                 return null;
@@ -125,6 +136,44 @@ function createBuilderScope() {
 
     return scope;
 }
+
+// Catches rollback adapter drift where AngularJS recreates defaults instead of consuming the extracted reducer contract.
+test("AngularJS builder delegates default variants to the ESM contract", function() {
+    let requestedName;
+    const sentinel = {name: "From contract", items: []};
+    const scope = createBuilderScope({
+        ...builderContracts,
+        createDefaultVariant: function(name) {
+            requestedName = name;
+            return sentinel;
+        }
+    });
+
+    assert.equal(scope.getDefaultList("Original"), sentinel);
+    assert.equal(requestedName, "Original");
+});
+
+// Catches the rollback adapter bypassing extracted pure transitions for equipment mutations.
+test("AngularJS builder delegates row locking to the extracted reducer", function() {
+    let receivedAction;
+    const scope = createBuilderScope({
+        ...builderContracts,
+        builderReducer: function(state, action) {
+            receivedAction = action;
+            return state;
+        }
+    });
+    const variant = builderReducer.createDefaultVariant("Original");
+    scope.allLists = [{name: "Hero", variants: [variant]}];
+    scope.selectedListIndex = 0;
+    scope.selectedListVariantIndex = 0;
+    scope.selectedList = variant;
+
+    scope.onRowLockClicked(2);
+
+    assert.equal(receivedAction.type, "item/toggle-lock");
+    assert.equal(receivedAction.index, 2);
+});
 
 function getRestrictions(scope, statName) {
     return Array.from(scope.statRestrictions[statName], function(entry) {
@@ -603,6 +652,21 @@ test("builder matches Hakim's corrected 766 mana profile", function() {
 
     assert.equal(scope.getStatTotal("mind"), 105);
     assert.equal(scope.getStatTotal("ma"), 766);
+});
+
+// Catches framework-neutral extraction that omits the controller's total formatting or restriction payload.
+test("game stats calculates complete builder totals without AngularJS scope", function() {
+    const scope = createBuilderScope();
+    equipStats(scope, {
+        dexterity: 90,
+        equipment: {dexterity: 20, dexterityCap: 4, hit: 55},
+        other: {hit: 5}
+    });
+
+    assert.deepEqual(gameStats.calculateBuilderStatTotal(scope.selectedList, "hit"), {
+        value: "83 (44)",
+        restrictions: [{restriction: "fromItems", amount: 55, limit: 44}]
+    });
 });
 
 test("builder stats block renders the three quest resource inputs", function() {

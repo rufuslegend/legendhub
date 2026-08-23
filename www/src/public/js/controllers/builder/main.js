@@ -1,71 +1,32 @@
 (function() {
     function builderController($scope, $cookies, $http, $q, $timeout, itemConstants, encoder, exceptionService, gameStats) {
+        var builderContracts = globalThis.legendBuilderContracts;
+
         //#region ~~~~~~~~~ INITIALIZATION ~~~~~~~~~
 
         /** Initializes the controller. */
         $scope.initialize = function() {
             $scope.exceptionEncountered = false;
-            $scope.listVer = 6;
+            $scope.listVer = builderContracts.BUILDER_LIST_VERSION;
             exceptionService.addCallback(function (exception, cause) {
                 $scope.exceptionEncountered = true;
             });
 
             $scope.slots = itemConstants.selectShortOptions.slot;
             $scope.selectShortOptions = itemConstants.selectShortOptions;
-            $scope.eraAbilityEras = ["Ancient", "Medieval", "Industrial"];
+            $scope.eraAbilityEras = builderContracts.ERA_ABILITY_ERAS;
             $scope.eraAbilities = gameStats.getEraAbilities();
 
-            $scope.itemsPerPage = 20;
-            $scope.itemsPerPageOptions = [20, 50, 100, 200, 500, 1000];
-
-
-            $scope.slotOrder = [0,1,1,2,2,3,4,5,6,7,8,9,11,12,13,13,14,15,15,16,16,17,18,19,20,21,21,21,21,21,21,21,21,21,21];
-            $scope.longhouseList = ["Bear   -- ( +5 spi - +3 min )",
-                                    "Beaver -- ( +5 min - +3 dex )",
-                                    "Eagle  -- ( +5 per / +3 str )",
-                                    "Moose  -- ( +5 str / +3 con )",
-                                    "Snake  -- ( +5 dex / +3 per )",
-                                    "Turtle -- ( +5 con / +3 spi )",
-                                    "Dragon -- ( +5 dex / +3 con )",
-                                    "Hydra  -- ( +5 per / +3 dex )",
-                                    "Wyvern -- ( +5 min / +3 spi )",
-                                    "Beetle -- ( +8 spi )",
-                                    "Falcon -- ( +8 dex )",
-                                    "Sphinx -- ( +8 per )",
-                                    "Merlin -- ( +10 min / -2 dex )"];
-
-            $scope.amuletList = ["Strength", "Mind", "Dexterity", "Constitution", "Perception", "Spirit"];
-			
-            $scope.hazelnutList = ["Strength", "Mind", "Dexterity", "Constitution", "Perception", "Spirit"]; 
-
-            $scope.charmOptions = {"B": {"id": 'B',"label": "1 str", "name": "Uruz", "stats": [{"statVar": "strength", "value": 1},{"statVar": "rent", "value": 203}]},
-                                   "C": {"id": 'C',"label": "1 min", "name": "Isa", "stats": [{"statVar": "mind", "value": 1},{"statVar": "rent", "value": 203}]},
-                                   "D": {"id": 'D',"label": "1 dex", "name": "Algiz", "stats": [{"statVar": "dexterity", "value": 1},{"statVar": "rent", "value": 203}]},
-                                   "E": {"id": 'E',"label": "1 con", "name": "Ansuz", "stats": [{"statVar": "constitution", "value": 1},{"statVar": "rent", "value": 203}]},
-                                   "F": {"id": 'F',"label": "1 per", "name": "Mannaz", "stats": [{"statVar": "perception", "value": 1},{"statVar": "rent", "value": 203}]},
-                                   "G": {"id": 'G',"label": "1 spi", "name": "Tiwaz", "stats": [{"statVar": "spirit", "value": 1},{"statVar": "rent", "value": 203}]},
-                                   "H": {"id": 'H',"label": "2 hit", "name": "Eihwaz", "stats": [{"statVar": "hit", "value": 2},{"statVar": "rent", "value": 675}]},
-                                   "I": {"id": 'I',"label": "2 dam", "name": "Ehwaz", "stats": [{"statVar": "dam", "value": 2},{"statVar": "rent", "value": 675}]},
-                                   "J": {"id": 'J',"label": "1 hit, 1 dam", "name": "Laguz", "stats": [{"statVar": "hit", "value": 1},{"statVar": "dam", "value": 1},{"statVar": "rent", "value": 675}]},
-                                   "K": {"id": 'K',"label": "10 hp", "name": "Gebo", "stats": [{"statVar": "hp", "value": 10},{"statVar": "rent", "value": 450}]},
-                                   "L": {"id": 'L',"label": "10 ma", "name": "Berkano", "stats": [{"statVar": "ma", "value": 10},{"statVar": "rent", "value": 225}]},
-                                   "M": {"id": 'M',"label": "10 mv", "name": "Raidho", "stats": [{"statVar": "mv", "value": 10},{"statVar": "rent", "value": 450}]},
-                                   "N": {"id": 'N',"label": "5 mvr", "name": "Fehu", "stats": [{"statVar": "mvr", "value": 5},{"statVar": "rent", "value": 450}]},
-                                   "O": {"id": 'O',"label": "2 mar, 1 mvr", "name": "Wunjo", "stats": [{"statVar": "mar", "value": 2},{"statVar": "mvr", "value": 1},{"statVar": "rent", "value": 450}]},
-                                   "P": {"id": 'P',"label": "2 hpr, 1 mvr", "name": "Kenaz", "stats": [{"statVar": "hpr", "value": 2},{"statVar": "mvr", "value": 1},{"statVar": "rent", "value": 450}]},
-                                   "Q": {"id": 'Q',"label": "2 bonus accuracy", "name": "Perthro", "stats": [{"statVar": "rangedAccuracy", "value": 2},{"statVar": "rent", "value": 360}]},
-                                   "R": {"id": 'R',"label": "-3 ac", "name": "Thurisaz", "stats": [{"statVar": "ac", "value": -3},{"statVar": "rent", "value": 95}]},
-                                   "S": {"id": 'S',"label": "2 spell crit", "name": "Hagalaz", "stats": [{"statVar": "spellcrit", "value": 2},{"statVar": "rent", "value": 103}]},
-                                   "T": {"id": 'T',"label": "2 spell dam", "name": "Nauthiz", "stats": [{"statVar": "spelldam", "value": 2},{"statVar": "rent", "value": 675}]},
-                                   "U": {"id": 'U',"label": "2 mana reduction", "name": "Sowilo", "stats": [{"statVar": "manaReduction", "value": 2},{"statVar": "rent", "value": 292}]},
-                                   "V": {"id": 'V',"label": "detect invis", "name": "Jera", "stats": [{"statVar": "rent", "value": 900}]},
-                                   "W": {"id": 'W',"label": "see dark", "name": "Dagaz", "stats": [{"statVar": "rent", "value": 900}]},
-                                   "X": {"id": 'X',"label": "detect illusion", "name": "Othala", "stats": [{"statVar": "rent", "value": 675}]},
-                                   "Y": {"id": 'Y',"label": "sneak", "name": "Ingwaz", "stats": [{"statVar": "rent", "value": 0}]}
-                                   };
+            $scope.itemsPerPage = builderContracts.ITEMS_PER_PAGE_OPTIONS[0];
+            $scope.itemsPerPageOptions = builderContracts.ITEMS_PER_PAGE_OPTIONS;
+            $scope.slotOrder = builderContracts.SLOT_ORDER;
+            $scope.longhouseList = builderContracts.LONGHOUSE_OPTIONS;
+            $scope.amuletList = builderContracts.AMULET_OPTIONS;
+            $scope.hazelnutList = builderContracts.HAZELNUT_OPTIONS;
+            $scope.charmOptions = builderContracts.CHARM_OPTIONS;
 
             $scope.charmSelectors = ['A', 'A', 'A', 'A', 'A'];
-            $scope.runeCharmId = -5;
+            $scope.runeCharmId = builderContracts.RUNE_CHARM_ID;
             $scope.isRuneCrafting = false;
 
             // item searching vars
@@ -122,37 +83,7 @@
          * @param {string} name - the name for the list.
          */
         $scope.getDefaultList = function(name) {
-            list = {};
-            list.name = name;
-
-            // base stats
-            list.baseStats = {
-                "strength": 0,
-                "mind": 0,
-                "dexterity": 0,
-                "constitution": 0,
-                "perception": 0,
-                "spirit": 0,
-                "longhouse": -1,
-                "hazelnut": -1,
-                "amulet": -1,
-                "quest_hp": 0,
-                "quest_mana": 0,
-                "quest_move": 0
-            };
-            list.ksmStats = {"strength": 0, "mind": 0, "dexterity": 0, "constitution": 0, "perception": 0, "spirit": 0};
-            list.eraAbilities = gameStats.getDefaultEraAbilityRanks();
-            
-            // runecraft charms
-            list.runeCharms = {"charm1": "AAAAA", "charm2": "AAAAA", "charm3": "AAAAA", "charm4": "AAAAA"};
-
-            // items
-            list.items = [];
-            for (var i = 0; i < $scope.slotOrder.length; ++i) {
-                list.items.push({"slot": $scope.slotOrder[i], "name": "-"});
-            }
-
-            return list;
+            return builderContracts.createDefaultVariant(name);
         };
 
         //#endregion
@@ -166,24 +97,9 @@
          * @param {array} statInfo - the statInfo array to set the settings in
          */
         var loadSelectedColumns = function(cookie, statInfo) {
-            // wipe initial values
-            for (var i = 0; i < statInfo.length; ++i) {
-                if (cookie)
-                    statInfo[i].showColumn = false;
-                else
-                    statInfo[i].showColumn = statInfo[i].showColumnDefault;
-            }
-
-            if (cookie) {
-                var columns = cookie.split("-");
-                for (var i = 0; i < columns.length; ++i) {
-                    for (var j = 0; j < statInfo.length; ++j) {
-                        if (columns[i] == statInfo[j]["short"]) {
-                            statInfo[j]["showColumn"] = true;
-                        }
-                    }
-                }
-            }
+            var selected = builderContracts.applySelectedColumns(cookie, statInfo);
+            for (var i = 0; i < statInfo.length; ++i)
+                statInfo[i].showColumn = selected[i].showColumn;
         };
 
         /**
@@ -192,338 +108,19 @@
          * @return {array} The array of character lists.
          */
         var loadCharacterLists = function() {
-            var lists = [];
+            if (!$cookies.get("cookie-consent"))
+                return [];
 
-            // load lists and version check
-            if ($cookies.get("cookie-consent")) {
-                var listVersion = -1;
-                var listCookieStr = localStorage.getItem("cln");
-
-                if (listCookieStr) {
-                    var versionIdx = listCookieStr.indexOf("*");
-                    listVersion = Number(listCookieStr.slice(0, versionIdx));
-                    listCookieStr = listCookieStr.slice(versionIdx);
-                }
-                else {
-                    listCookieStr = localStorage.getItem("cl2");
-                    if (listCookieStr) {
-                        listVersion = 2;
-                    }
-                    else {
-                        listCookieStr = localStorage.getItem("cl1");
-                        listVersion = 1;
-                        if (!listCookieStr) 
-                            localStorage.getItem("cl");                                
-                    }
-                }  
-				
-                if (listCookieStr) {
-                    var listStrs = listCookieStr.split("*").filter(function(el) {return el.length != 0});
-                    for (var i = 0; i < listStrs.length; ++i) {
-                        if (listVersion == "cl" || listVersion == 1)
-                            var newList = createListFromString(listStrs[i]);
-                        else
-                            var newList = createListFromStringV2(listStrs[i], listVersion);
-
-                        var found = false;
-                        for (let j = 0; j < lists.length; ++j) {
-                            if (newList.name === lists[j].name) {
-                                foundList = lists[j];
-                                found = true;
-                                break;
-                            }
-                        }
-
-                        if (!found) {
-                            lists.push({name: newList.name, variants: []});
-                            foundList = lists[lists.length - 1];
-                        }
-
-                        foundList.variants.push(newList.variants[0]);
-                    }
-                }
-            }
-
-            console.log("Lists loaded using version", listVersion);
-
-            return lists;
-        };
-
-        var createListFromString = function(listStr) {
-            var each = listStr.split("_");
-
-            var nameParts = each[0].split("!");
-            var name = nameParts[0];
-            if (nameParts.length === 2) {
-                var variantName = nameParts[1];
-            }
-            else {
-                var variantName = "Original";
-            }
-
-            // name
-            newList = {name: variantName};
-            each.shift();
-
-            // base stats
-            newList.baseStats = {};
-            newList.baseStats.strength = each[0] == 'NaN' ? 0 : Number(each[0]);
-            each.shift();
-
-            newList.baseStats.mind = each[0] == 'NaN' ? 0 : Number(each[0]);
-            each.shift();
-
-            newList.baseStats.dexterity = each[0] == 'NaN' ? 0 : Number(each[0]);
-            each.shift();
-
-            newList.baseStats.constitution = each[0] == 'NaN' ? 0 : Number(each[0]);
-            each.shift();
-
-            newList.baseStats.perception = each[0] == 'NaN' ? 0 : Number(each[0]);
-            each.shift();
-
-            newList.baseStats.spirit = each[0] == 'NaN' ? 0 : Number(each[0]);
-            each.shift();
-
-            newList.baseStats.longhouse = Number(each[0]);
-            each.shift();
-			
-            newList.baseStats.amulet = Number(each[0]);
-            each.shift();
-
-            newList.baseStats.hazelnut = Number(each[0]);
-			each.shift();
-
-            newList.baseStats.quest_hp = 0;
-            newList.baseStats.quest_mana = 0;
-            newList.baseStats.quest_move = 0;
-
-            newList.ksmStats = {
-                strength: 0,
-                mind: 0,
-                dexterity: 0,
-                constitution: 0,
-                perception: 0,
-                spirit: 0
+            var stored = {
+                cln: localStorage.getItem("cln"),
+                cl2: localStorage.getItem("cl2"),
+                cl1: localStorage.getItem("cl1")
             };
-            newList.eraAbilities = gameStats.getDefaultEraAbilityRanks();
-
-            newList.runeCharms = {
-                charm1: "AAAAA",
-                charm2: "AAAAA",
-                charm3: "AAAAA",
-                charm4: "AAAAA",
-            };
-
-            // items
-            newList.items = [];
-            for (var j = 0; j < each.length; ++j) {
-                var isLocked = each[j][0] === "!";
-                if (isLocked) {
-                    each[j] = each[j].substr(1);
-                }
-                newList.items.push({"id": Number(each[j]), "slot": $scope.slotOrder[j], "locked": isLocked});
-            }
-
-            if (each.length < 35) {
-                for (var k = 0; k < (35 - each.length); ++k) {
-                    newList.items.push({"id": Number(each[j]), "slot": 21});
-                }
-            }
-
-            return {name: name, variants: [newList]};
-        };
-
-        var createListFromStringV2 = function(listStr, listVersion) {
-            var index = listStr.indexOf('~');
-            var name = listStr.slice(0, index);
-            if (!(/^[A-Za-z\s\d]+$/).test(name)) {
-                throw "Invalid list.";
-            }
-
-            listStr = listStr.substring(++index);
-
-            index = listStr.indexOf('~');
-            var variantName = listStr.slice(0, index);
-            if (!(/^[A-Za-z\s\d]+$/).test(variantName)) {
-                throw "Invalid list.";
-            }
-            listStr = listStr.substring(++index);
-
-            var baseStats = {};
-            var runeCharms = {};
-            var statList = ["strength", "mind", "dexterity", "constitution", "perception", "spirit"];
-            var takeAmt;
-            for (var i = 0; i < statList.length; ++i) {
-                takeAmt = listStr[0] === '-' ? 3 : 2;
-                baseStats[statList[i]] = encoder.toNumber(listStr.slice(0,takeAmt));
-                listStr = listStr.substring(takeAmt);
-            }
-
-            var ksmStats = {};
-            for (var i = 0; i < statList.length; ++i) {
-                takeAmt = listStr[0] === '-' ? 2 : 1;
-                ksmStats[statList[i]] = encoder.toNumber(listStr.slice(0,takeAmt));
-                listStr = listStr.substring(takeAmt);
-            }
-            if (statList[0] === '_')
-                baseStats.longhouse = -1;
-            else
-                baseStats.longhouse = encoder.toNumber(listStr.slice(0,1));
-            listStr = listStr.substring(1);
-			
-            if (statList[0] === '_')
-                baseStats.amulet = -1;
-            else
-                baseStats.amulet = encoder.toNumber(listStr.slice(0,1));
-			listStr = listStr.substring(1);
-
-            // v3: Hazelnut
-            if (listVersion >= 3) {
-                if (statList[0] === '_')
-                    baseStats.hazelnut = -1;
-                else
-                    baseStats.hazelnut = encoder.toNumber(listStr.slice(0,1));
-                listStr = listStr.substring(1);
-            }
-            else {
-                baseStats.hazelnut = 5;
-            }
-
-            baseStats.quest_hp = 0;
-            baseStats.quest_mana = 0;
-            baseStats.quest_move = 0;
-
-            // v5: character-specific quest resource bonuses
-            if (listVersion >= 5) {
-                const encodedQuestResources = listStr.slice(0, 9);
-                if (!(/^[0-9A-Za-z]{9}$/).test(encodedQuestResources)) {
-                    throw "Invalid list.";
-                }
-
-                baseStats.quest_hp = encoder.toNumber(encodedQuestResources.slice(0, 3));
-                baseStats.quest_mana = encoder.toNumber(encodedQuestResources.slice(3, 6));
-                baseStats.quest_move = encoder.toNumber(encodedQuestResources.slice(6, 9));
-                listStr = listStr.substring(9);
-            }
-
-            var eraAbilityRanks = gameStats.getDefaultEraAbilityRanks();
-            if (listVersion >= 6) {
-                const abilityCount = $scope.eraAbilities.length;
-                const encodedEraAbilities = listStr.slice(0, abilityCount);
-                if (!(new RegExp(`^[0-9A-Za-z]{${abilityCount}}$`)).test(
-                    encodedEraAbilities
-                )) {
-                    throw "Invalid list.";
-                }
-
-                for (let i = 0; i < abilityCount; ++i) {
-                    const ability = $scope.eraAbilities[i];
-                    const rank = encoder.toNumber(encodedEraAbilities[i]);
-                    if (rank > ability.maxRank) {
-                        throw "Invalid list.";
-                    }
-                    eraAbilityRanks[ability.key] = rank;
-                }
-                listStr = listStr.substring(abilityCount);
-            }
-            
-            runeCharms.charm1 = "AAAAA";
-            runeCharms.charm2 = "AAAAA";
-            runeCharms.charm3 = "AAAAA";
-            runeCharms.charm4 = "AAAAA";
-            
-            var items = [];
-            var itemIndex = 0;
-            while (listStr.length > 0) {
-                if (listVersion >= 5 && itemIndex >= $scope.slotOrder.length) {
-                    throw "Invalid list.";
-                }
-
-                let isLocked = false;
-                if (listStr[0] === '.') {
-                    isLocked = true;
-                    listStr = listStr.substring(1);
-                }
-                
-                if (listStr[0] === '_') {
-                    items.push({
-                        id: 0,
-                        slot: $scope.slotOrder[itemIndex],
-                        locked: isLocked
-                    });
-                    listStr = listStr.substring(1);
-                }
-                else if (listStr[0] === '-') {
-                    if (listVersion >= 5 && !(/^-[A-Y]{5}/).test(listStr)) {
-                        throw "Invalid list.";
-                    }
-
-                    items.push({
-                        id: $scope.runeCharmId,
-                        slot: $scope.slotOrder[itemIndex],
-                        locked: isLocked,
-                    });
-                        
-                    if (itemIndex === 3) {
-                        runeCharms.charm1 = listStr.slice(1,6);
-                    }
-                    else if (itemIndex === 4) {
-                        runeCharms.charm2 = listStr.slice(1,6);
-                    }
-                    else if (itemIndex === 14) {
-                        runeCharms.charm3 = listStr.slice(1,6);
-                    }
-                    else if (itemIndex === 15) {
-                        runeCharms.charm4 = listStr.slice(1,6);
-                    }
-                    listStr = listStr.substring(6);
-                }
-                else {
-                    if (listVersion >= 5 && !(/^[0-9A-Za-z]{3}/).test(listStr)) {
-                        throw "Invalid list.";
-                    }
-
-                    items.push({
-                        id: encoder.toNumber(listStr.slice(0,3)),
-                        slot: $scope.slotOrder[itemIndex],
-                        locked: isLocked
-                    });
-                    listStr = listStr.substring(3);
-                }
-                itemIndex++;
-            }
-
-            if (listVersion >= 5 && itemIndex !== $scope.slotOrder.length) {
-                throw "Invalid list.";
-            }
-
-            if (itemIndex < $scope.slotOrder.length) {
-                  for (var x = 0; x < $scope.slotOrder.length - itemIndex; ++x) {
-                     items.push({
-                        id: 0,
-                        slot: 21,
-                        locked: false
-                    });
-                 }
-            }
-            
-            // Version Check, if # of item slots loaded does not equal total number in current version it will throw an error
-            if(itemIndex > $scope.slotOrder.length) {
-                throw "Invalid list.";
-            }
-
-            return {
-                name: name,
-                variants: [{
-                    name: variantName,
-                    baseStats: baseStats,
-                    ksmStats: ksmStats,
-                    eraAbilities: eraAbilityRanks,
-                    runeCharms: runeCharms,
-                    items: items
-                }]
-            };
+            var persisted = builderContracts.readBuilderPersistence({
+                cookies: {"cookie-consent": true},
+                storage: stored
+            });
+            return builderContracts.decodeBuilderLists(persisted.encodedLists);
         };
 
         /**
@@ -735,20 +332,23 @@
             // remove old cookies
             $cookies.remove("sc1", {"path": "/"});
 
-            if (cookieConsent) {
-                $scope.itemsPerPage = Number($cookies.get("ipp") || "20");
-            }
+            var persisted = builderContracts.readBuilderPersistence({
+                cookies: {
+                    "cookie-consent": cookieConsent,
+                    ipp: $cookies.get("ipp"),
+                    scl1: $cookies.get("scl1")
+                },
+                storage: {
+                    scl: localStorage.getItem("scl")
+                }
+            });
+            $scope.itemsPerPage = persisted.itemsPerPage;
 
             $scope.allLists = loadCharacterLists();
             $scope.allLists.sort(compareLists);
 
             // load selected list
-            if (cookieConsent) {
-                var selectedListCookie = localStorage.getItem("scl");
-                if (!selectedListCookie) {
-                    selectedListCookie = $cookies.get("scl1");
-                }
-            }
+            var selectedListCookie = persisted.selectedList;
 
             if (selectedListCookie) {
                 var splitListCookie = selectedListCookie.split("!");
@@ -770,171 +370,39 @@
          * Saves the user info to client side storage
          */
         $scope.saveClientSideData = function() {
-            if (!$cookies.get("cookie-consent")
-                || $scope.exceptionEncountered) {
-                return;
-            }
-
-            var cookieDate = new Date();
-            cookieDate.setFullYear(cookieDate.getFullYear() + 20);
-
-            $cookies.put("ipp", $scope.itemsPerPage, {path: "/", samesite: "lax", secure: true, expires: cookieDate});
-
-            // save lists
-            listCookieStr = `${$scope.listVer}*`;
-            for (let i = 0; i < $scope.allLists.length; ++i) {
-                for (let j = 0; j < $scope.allLists[i].variants.length; ++j) {
-                    listCookieStr += createStringFromList(
-                        $scope.allLists[i].name,
-                        $scope.allLists[i].variants[j]
-                    );
-
-                    listCookieStr += "*";
-                }
-            }
-
-            if ($scope.exceptionEncountered)
+            if (!$cookies.get("cookie-consent") || $scope.exceptionEncountered)
                 return;
 
-            localStorage.setItem("cln", listCookieStr);
-            localStorage.setItem("scl", $scope.allLists[$scope.selectedListIndex].name + "!" + $scope.selectedList.name);
-
-            if ($cookies.get("cl1")) {
-                $cookies.remove("cl1");
-                $cookies.remove("scl1");
-            }
-
-            //save columns
-            let savedColumns = "";
-            for (var i = 0; i < $scope.statInfo.length; ++i) {
-                if ($scope.statInfo[i].showColumn) {
-                    savedColumns += $scope.statInfo[i].short + "-";
-                }
-            }
-            $cookies.put(`sc-${$scope.allLists[$scope.selectedListIndex].name}`, savedColumns, {path: "/", samesite: "lax", secure: true, expires: cookieDate});
+            var selectedColumns = $scope.statInfo
+                .filter(function(stat) { return stat.showColumn; })
+                .map(function(stat) { return stat.short; });
+            var plan = builderContracts.createBuilderPersistencePlan({
+                hasConsent: Boolean($cookies.get("cookie-consent")),
+                exceptionEncountered: $scope.exceptionEncountered,
+                encodedLists: builderContracts.encodeBuilderLists($scope.allLists),
+                selectedCharacter: $scope.allLists[$scope.selectedListIndex].name,
+                selectedVariant: $scope.selectedList.name,
+                itemsPerPage: $scope.itemsPerPage,
+                selectedColumns: selectedColumns
+            });
+            builderContracts.applyBuilderPersistencePlan(plan, {
+                cookies: $cookies,
+                storage: localStorage
+            });
 
             $scope.clientSideDataSize = $scope.getClientSideDataSize();
         };
 
         $scope.getClientSideDataSize = function() {
-            var total = 0, len, item;
-            for (item in localStorage) {
-                if (!localStorage.hasOwnProperty(item))
-                    continue;
-
-                len = ((localStorage[item].length + item.length) * 2);
-                total += len;
-            }
-            return total;
+            return builderContracts.calculateStorageSize(localStorage);
         };
 
         $scope.displayClientSideDataSize = function() {
-            if (!$scope.clientSideDataSize) return "";
-
-            var display = ["Storage Size: "];
-            var label = "B";
-            var size = $scope.clientSideDataSize;
-            var percent = size / 10485760;
-            if (size > 1024) {
-                size = size / 1024;
-                label = "KB";
-                if (size > 1024) {
-                    size = size / 1024;
-                    label = "MB";
-                }
-            }
-            display.push(size.toFixed(2), label, "/10MB ", percent.toFixed(2), "%");
-            return display.join("");
+            return builderContracts.formatStorageSize($scope.clientSideDataSize);
         }
 
         var createStringFromList = function(listName, list) {
-            var listCookieStr = listName + "~" + list.name + "~";
-            listCookieStr += encoder.fromNumber(list.baseStats.strength,2);
-            listCookieStr += encoder.fromNumber(list.baseStats.mind,2);
-            listCookieStr += encoder.fromNumber(list.baseStats.dexterity,2);
-            listCookieStr += encoder.fromNumber(list.baseStats.constitution,2);
-            listCookieStr += encoder.fromNumber(list.baseStats.perception,2);
-            listCookieStr += encoder.fromNumber(list.baseStats.spirit,2);
-
-            listCookieStr += encoder.fromNumber(list.ksmStats.strength,1);
-            listCookieStr += encoder.fromNumber(list.ksmStats.mind,1);
-            listCookieStr += encoder.fromNumber(list.ksmStats.dexterity,1);
-            listCookieStr += encoder.fromNumber(list.ksmStats.constitution,1);
-            listCookieStr += encoder.fromNumber(list.ksmStats.perception,1);
-            listCookieStr += encoder.fromNumber(list.ksmStats.spirit,1);
-
-            if (list.baseStats.longhouse >= 0)
-                listCookieStr += encoder.fromNumber(list.baseStats.longhouse,1);
-            else
-                listCookieStr += "_";
-
-            if (list.baseStats.amulet >= 0)
-                listCookieStr += encoder.fromNumber(list.baseStats.amulet,1);
-            else
-                listCookieStr += "_";
-            
-            if (list.baseStats.hazelnut >= 0)
-                listCookieStr += encoder.fromNumber(list.baseStats.hazelnut,1);
-			else
-                listCookieStr += "_";    
-
-            const questResourceStats = ["quest_hp", "quest_mana", "quest_move"];
-            for (const questResourceStat of questResourceStats) {
-                const value = gameStats.normalizeQuestResourceBonus(
-                    list.baseStats[questResourceStat]
-                );
-                listCookieStr += encoder.fromNumber(value, 3);
-            }
-
-            const eraAbilityRanks = gameStats.normalizeEraAbilityRanks(
-                list.eraAbilities
-            );
-            for (const ability of $scope.eraAbilities) {
-                listCookieStr += encoder.fromNumber(
-                    eraAbilityRanks[ability.key],
-                    1
-                );
-            }
-
-            var charmStr = "";
-
-            for (let k = 0; k < list.items.length; ++k) {
-                if (list.items[k].id > 0) {
-                    listCookieStr += (list.items[k].locked ? "." : "") + encoder.fromNumber(list.items[k].id,3);
-                }
-                else if (list.items[k].id === $scope.runeCharmId) {
-                    if (list.items[k].locked) {
-                        listCookieStr += ".";
-                    }
-
-                    switch (k) {
-                        case 3:
-                            charmStr = list.runeCharms.charm1;
-                            break;
-                        case 4:
-                            charmStr = list.runeCharms.charm2;
-                            break;
-                        case 14:
-                            charmStr = list.runeCharms.charm3;
-                            break;
-                        case 15:
-                            charmStr = list.runeCharms.charm4;
-                            break;
-                    }
-
-                    if (charmStr === "AAAAA") {
-                        listCookieStr += "_";
-                    }
-                    else {
-                        listCookieStr += "-" + charmStr;
-                    }
-                } 
-                else {
-                    listCookieStr += "_";
-                }
-            }
-
-            return listCookieStr;
+            return builderContracts.encodeBuilderVariant(listName, list);
         };
 
         let compareLists = function(a, b) {
@@ -983,6 +451,24 @@
         //#endregion
 
         //#region ~~~~~~~~~ EVENTS ~~~~~~~~~
+        var applyBuilderTransition = function(action) {
+            var next = builderContracts.builderReducer({
+                allLists: $scope.allLists,
+                selectedListIndex: $scope.selectedListIndex,
+                selectedListVariantIndex: $scope.selectedListVariantIndex,
+                selectedList: $scope.selectedList,
+                currentPage: $scope.currentPage,
+                totalPages: $scope.totalPages,
+                sortStat: $scope.sortStat,
+                sortDir: $scope.sortDir
+            }, action);
+            $scope.allLists = next.allLists;
+            $scope.selectedList = next.selectedList;
+            $scope.currentPage = next.currentPage;
+            $scope.sortStat = next.sortStat;
+            $scope.sortDir = next.sortDir;
+        };
+
         /** Event for when a different character list is chosen from the dropdown. */
         $scope.onListChanged = function() {
             selectListByIndex($scope.selectedListIndex);
@@ -1127,8 +613,7 @@
          * @param {number} index - the index of the item slot.
          */
         $scope.onRowLockClicked = function(index) {
-            var item = $scope.selectedList.items[index];
-            item.locked = !item.locked;
+            applyBuilderTransition({type: "item/toggle-lock", index: index});
             $scope.saveClientSideData();
         };
 
@@ -1162,33 +647,10 @@
 
             var importStr = $scope.importModel.input;
             if (importStr) {
-                var listVersion = -1;
+                var decoded = builderContracts.decodeBuilderEntries(importStr);
+                for (let i = 0; i < decoded.length; ++i) {
+                    var newList = decoded[i];
 
-                // check if list has a version number
-                var asteriskIdx = importStr.indexOf("*");
-                if (/^\d+\*/.test(importStr)) {
-                    listVersion = Number(importStr.substring(0, asteriskIdx));
-                    importStr = importStr.slice(asteriskIdx);
-                }
-
-                var listStrs = importStr.split("*").filter(function(el) {return el.length != 0});;
-                for (let i = 0; i < listStrs.length; ++i) {
-                    var newList;
-                    if (listVersion === 1) {
-                        newList = createListFromString(listStrs[i]);
-                    }
-                    else if (listVersion > 1) {
-                        newList = createListFromStringV2(listStrs[i], listVersion);
-                    }
-                    else {
-                        try {
-                            newList = createListFromStringV2(listStrs[i], 2);
-                        }
-                        catch (e) {
-                            newList = createListFromString(listStrs[i]);
-                        }
-                    }
-                
                     // check if list exists
                     for (let j = 0; j < $scope.allLists.length; ++j) {
                         if ($scope.allLists[j].name === newList.name) {
@@ -1317,18 +779,7 @@
 
         /** Toggles the locks on all items. */
         var toggleColumnLock = function() {
-            var allLocked = true;
-            for (let i = 0; i < $scope.selectedList.items.length; ++i) {
-                if (!$scope.selectedList.items[i].locked) {
-                    allLocked = false;
-                    break;
-                }
-            }
-
-            for (let i = 0; i < $scope.selectedList.items.length; ++i) {
-                $scope.selectedList.items[i].locked = !allLocked;
-            }
-
+            applyBuilderTransition({type: "items/toggle-lock"});
             $scope.saveClientSideData();
         };
 
@@ -1648,26 +1099,7 @@
 
         /** Clears all items from the currently selected character list. */
         $scope.clearItemsFromList = function() {
-            for (var i = 0; i < $scope.selectedList.items.length; ++i) {
-                if (!$scope.selectedList.items[i].locked) {
-                    switch (i) {
-                        case 3:
-                            $scope.selectedList.runeCharms.charm1 = "AAAAA";
-                            break;
-                        case 4:
-                            $scope.selectedList.runeCharms.charm2 = "AAAAA";
-                            break;
-                        case 14:
-                            $scope.selectedList.runeCharms.charm3 = "AAAAA";
-                            break;
-                        case 15:
-                            $scope.selectedList.runeCharms.charm4 = "AAAAA";
-                            break;
-                    }
-                    $scope.selectedList.items[i] = {"slot": $scope.selectedList.items[i].slot, "id": 0, "name": "-"}; 
-                }
-                
-            }
+            applyBuilderTransition({type: "items/clear-unlocked"});
             $scope.saveClientSideData();
         };
 
@@ -1793,490 +1225,32 @@
         //#endregion
 
         /**
-         * Gets the total for alignment. This is a special case.
-         *
-         * @return {string} The total alignment restriction for the list.
-         */
-        var getAlignmentTotal = function() {
-            var canUseG = true;
-            var canUseN = true;
-            var canUseE = true;
-
-            for (var i = 0; i < $scope.selectedList.items.length; ++i) {
-                switch($scope.selectedList.items[i].alignRestriction) {
-                    case 0:
-                        break;
-                    case 1:
-                        canUseN = false;
-                        canUseE = false;
-                        break;
-                    case 2:
-                        canUseG = false;
-                        canUseE = false;
-                        break;
-                    case 3:
-                        canUseG = false;
-                        canUseN = false;
-                        break;
-                    case 4:
-                        canUseG = false;
-                        break;
-                    case 5:
-                        canUseN = false;
-                        break;
-                    case 6:
-                        canUseE = false;
-                        break;
-                    default:
-                        break;
-                }
-            }
-
-            if (!canUseG && !canUseN && !canUseE) {
-                return "ERROR";
-            }
-
-            return (canUseG ? "G " : "  ") + (canUseN ? "N " : "  ") + (canUseE ? "E" : " ");
-        };
-
-        /** Calculates the total from stat quests for a given stat.
-         *
-         * @param {string} statName - the variable name of the stat to be totalled.
-         * @return {number} the total acquired via stat quests.
-         */
-        var getTotalFromStatQuests = function(statName) {
-            var fromStatQuests = 0;
-
-            var totalBaseStats = $scope.selectedList.baseStats.strength +
-                $scope.selectedList.baseStats.mind +
-                $scope.selectedList.baseStats.dexterity +
-                $scope.selectedList.baseStats.constitution +
-                $scope.selectedList.baseStats.perception +
-                $scope.selectedList.baseStats.spirit;
-
-            switch (statName) {
-                case "strength":
-                    if (totalBaseStats < 244) {
-                        fromStatQuests += 3;
-                    }
-                    if ($scope.selectedList.baseStats.amulet == 0) {
-                        fromStatQuests += 10;
-                    }
-                    if ($scope.selectedList.baseStats.longhouse == 3) {
-                        fromStatQuests += 5;
-                    }
-                    if ($scope.selectedList.baseStats.longhouse == 2) {
-                        fromStatQuests += 3;
-                    }
-                    if ($scope.selectedList.baseStats.hazelnut == 0) {
-                        fromStatQuests += 10;
-                    }
-                    break;
-                case "mind":
-                    if (totalBaseStats < 244) {
-                        fromStatQuests += 3;
-                    }
-                    if ($scope.selectedList.baseStats.amulet == 1) {
-                        fromStatQuests += 10;
-                    }
-                    if ($scope.selectedList.baseStats.longhouse == 1 || $scope.selectedList.baseStats.longhouse == 8) {
-                        fromStatQuests += 5;
-                    }
-                    if ($scope.selectedList.baseStats.longhouse == 0) {
-                        fromStatQuests += 3;
-                    }
-					if ($scope.selectedList.baseStats.hazelnut == 1) {
-                        fromStatQuests += 10;
-                    }
-                    if ($scope.selectedList.baseStats.longhouse == 12) {
-                        fromStatQuests += 10;
-                    }
-                    break;
-                case "dexterity":
-                    if (totalBaseStats < 244) {
-                        fromStatQuests += 3;
-                    }
-                    if ($scope.selectedList.baseStats.amulet == 2) {
-                        fromStatQuests += 10;
-                    }
-                    if ($scope.selectedList.baseStats.longhouse == 10) {
-						fromStatQuests += 8;
-					}
-                    if ($scope.selectedList.baseStats.longhouse == 4 || $scope.selectedList.baseStats.longhouse == 6) {
-                        fromStatQuests += 5;
-                    }
-                    if ($scope.selectedList.baseStats.longhouse == 1 || $scope.selectedList.baseStats.longhouse == 7) {
-                        fromStatQuests += 3;
-                    }
-                    if ($scope.selectedList.baseStats.longhouse == 12) {
-						fromStatQuests -= 2;
-					}
-					if ($scope.selectedList.baseStats.hazelnut == 2) {
-                        fromStatQuests += 10;
-                    }
-                    break;
-                case "constitution":
-                    if (totalBaseStats < 244) {
-                        fromStatQuests += 3;
-                    }
-                    if ($scope.selectedList.baseStats.amulet == 3) {
-                        fromStatQuests += 10;
-                    }
-                    if ($scope.selectedList.baseStats.longhouse == 5) {
-                        fromStatQuests += 5;
-                    }
-                    if ($scope.selectedList.baseStats.longhouse == 3 || $scope.selectedList.baseStats.longhouse == 6) {
-                        fromStatQuests += 3;
-                    }
-					if ($scope.selectedList.baseStats.hazelnut == 3) {
-                        fromStatQuests += 10;
-                    }
-                    break;
-                case "perception":
-                    if (totalBaseStats < 244) {
-                        fromStatQuests += 3;
-                    }
-                    if ($scope.selectedList.baseStats.amulet == 4) {
-                        fromStatQuests += 10;
-                    }
-                    if ($scope.selectedList.baseStats.hazelnut == 4) {
-                        fromStatQuests += 10;
-                    }
-                    if ($scope.selectedList.baseStats.longhouse == 11) {
-						fromStatQuests += 8;
-                    }
-                    if ($scope.selectedList.baseStats.longhouse == 2 || $scope.selectedList.baseStats.longhouse == 7) {
-                        fromStatQuests += 5;
-                    }
-                    if ($scope.selectedList.baseStats.longhouse == 4) {
-                        fromStatQuests += 3;
-                    }
-                    break;
-                case "spirit":
-                    if (totalBaseStats < 244) {
-                        fromStatQuests += 3;
-                    }
-                    if ($scope.selectedList.baseStats.amulet == 5) {
-                        fromStatQuests += 10;
-                    }
-                    if ($scope.selectedList.baseStats.longhouse == 0) {
-                        fromStatQuests += 5;
-                    }
-                    if ($scope.selectedList.baseStats.longhouse == 5 || $scope.selectedList.baseStats.longhouse == 8) {
-                        fromStatQuests += 3;
-                    }
-					if ($scope.selectedList.baseStats.longhouse == 9) {
-                        fromStatQuests += 8;
-                    }
-					if ($scope.selectedList.baseStats.hazelnut == 5) {
-                        fromStatQuests += 10;
-                    }
-                    break;
-                default:
-                    break;
-            }
-
-            return fromStatQuests;
-        };
-
-        /**
-         * Gets the total bonuses generated by other stats.
-         * WARNING: be careful of stack overflow errors when calling getStatTotal in here.
-         *
-         * @param {string} statName - the variable name of the stat to be totalled.
-         * @return {number} the total bonuses gained from other stats.
-         */
-        var getTotalFromStatBonuses = function(statName) {
-            const stats = {};
-            const dependencies = gameStats.getNaturalStatDependencies(statName);
-            for (let i = 0; i < dependencies.length; ++i) {
-                const dependency = dependencies[i];
-                stats[dependency] = $scope.getStatTotal(dependency);
-            }
-
-            const baseStats = $scope.selectedList.baseStats || {};
-            stats.quest_hp = baseStats.quest_hp;
-            stats.quest_mana = baseStats.quest_mana;
-            stats.quest_move = baseStats.quest_move;
-
-            return gameStats.calculateNaturalStatBonus(
-                statName,
-                stats,
-                $scope.selectedList.items
-            );
-        };
-
-        /**
-         * Gets the bonus that should be applied to the stat total.
-         *
-         * @param {string} statName - the variable name of the stat to get the total bonus for.
-         * @param {number} curTotal - the current total for the stat.
-         * @return {number} the bonus amount based on the current total.
-         */
-        var getStatTotalBonus = function(statName, curTotal) {
-            switch (statName) {
-                case "dam":
-               /**
-				*	for (var i = 0; i < $scope.selectedList.items.length; ++i) {
-                *       if ($scope.selectedList.items[i].slot == 14 && $scope.selectedList.items[i].twoHanded) {
-                *            return parseInt(curTotal / 3);
-                *        }
-                *    }
-				*/
-                    break;
-                default:
-                    break;
-            }
-
-            return 0;
-        };
-
-        /**
-         * Gets the max total from items for a given stat.
-         *
-         * @param {string} statName - the variable name of the stat to get the max item total for.
-         * @return {number} the max total a stat can gain from items.
-         */
-        var getItemTotalMax = function(statName) {
-            var max = null;
-
-            switch (statName) {
-                case "hit":
-                    max = gameStats.calculateHitrollEquipmentCap(
-                        $scope.getStatTotal("dexterity")
-                    );
-                    break;
-                case "dam":
-                    max = gameStats.calculateDamrollEquipmentCap(
-                        $scope.getStatTotal("strength")
-                    );
-                    break;
-                case "spelldam":
-                case "spellcrit":
-                    max = 40;
-                    break;
-                case "hpr":
-                    max = gameStats.calculateRegenEquipmentCap(
-                        $scope.getStatTotal("constitution")
-                    );
-                    break;
-                case "mar":
-                    max = gameStats.calculateRegenEquipmentCap(
-                        $scope.getStatTotal("mind")
-                    );
-                    break;
-                case "mvr":
-                    max = gameStats.calculateRegenEquipmentCap(
-                        $scope.getStatTotal("dexterity")
-                    );
-                    break;
-                default:
-                    break;
-            }
-
-            return max;
-        };
-
-        /**
-         * Gets the max total for a given stat.
-         *
-         * @param {string} statName - the variable name of the stat to get the max total for.
-         * @return {number} the max total for the given stat.
-         */
-        var getStatTotalMax = function(statName) {
-            var max = null;
-
-            switch (statName) {
-                case "strength":
-                case "mind":
-                case "dexterity":
-                case "constitution":
-                case "perception":
-                case "spirit":
-                    max = 100;
-                    max += gameStats.calculateEraAbilityStatCapBonus(
-                        $scope.selectedList.eraAbilities
-                    );
-                    for (var i = 0; i < $scope.selectedList.items.length; ++i) {
-                        if ($scope.selectedList.items[i][statName + "Cap"])
-                            max += $scope.selectedList.items[i][statName + "Cap"];
-                    }
-                    break;
-                case "manaReduction":
-                    max = 50;
-                    break;
-                case "mitigation":
-                    var hasBattleTraining = false;
-                    for (var i = 25; i < $scope.selectedList.items.length; ++i) { // loop through Other slots
-                        if ($scope.selectedList.items[i].id == 1144 || $scope.selectedList.items[i].id == 1137) {
-                            hasBattleTraining = true;
-                            break;
-                        }
-                    }
-
-                    var max = parseInt(Math.max(Math.min($scope.getStatTotal("constitution"), 70) - 30, 0) / 2);
-                    if (hasBattleTraining) {
-                        max += 10;
-                    }
-                    break;
-            }
-
-            return max;
-        };
-
-        /**
-         * Gets the min total for a given stat.
-         *
-         * @param {string} statName - the variable name of the stat to get the min total for.
-         * @return {number} the min total for the given stat.
-         */
-        var getStatTotalMin = function(statName) {
-            var min = null;
-
-            switch (statName) {
-                case "ac":
-                    min = -250;
-                    break;
-                default:
-                    break;
-            }
-
-            return min;
-        };
-
-        /**
-         * Calculates the total for a given stat.
-         * Applies bonuses from items, spells, and other stats.
-         *
-         * @param {string} statName - the variable name of the stat to be totalled.
-         * @return {int|string|decimal} the total for the given stat.
+         * Calculates the total for a given stat through the framework-neutral
+         * game-stat service and mirrors restrictions back to AngularJS.
          */
         $scope.getStatTotal = function(statName) {
-            if (!$scope.selectedList) {
-                return '';
-            }
+            if (!$scope.selectedList)
+                return "";
 
-            // Handle special case.
-            if (statName == 'alignRestriction') {
-                return getAlignmentTotal();
-            }
-
-            // Only get totals for number fields.
-            for (let i = 0; i < $scope.statInfo.length; ++i) {
-                if ($scope.statInfo[i].var == statName) {
-                    if ($scope.statInfo[i].type != "int") {
+            if (statName !== "alignRestriction") {
+                for (let i = 0; i < $scope.statInfo.length; ++i) {
+                    if ($scope.statInfo[i].var == statName && $scope.statInfo[i].type != "int")
                         return "";
-                    }
-                    break;
                 }
             }
 
-            // Clear stat restrictions
             if (!$scope.statRestrictions) {
                 $scope.statRestrictions = [];
-                for (let i = 0; i < $scope.statInfo.length; ++i) {
+                for (let i = 0; i < $scope.statInfo.length; ++i)
                     $scope.statRestrictions[$scope.statInfo[i].var] = [];
-                }
-            }
-            $scope.statRestrictions[statName] = [];
-
-            // Base stats
-            var fromBaseStats = 0;
-            if ($scope.selectedList.baseStats[statName]) {
-                fromBaseStats += $scope.selectedList.baseStats[statName];
             }
 
-            // KSM stat swap
-            var fromKSMStats = 0;
-            if ($scope.selectedList.ksmStats[statName]) {
-                fromKSMStats += $scope.selectedList.ksmStats[statName];
-            }
-
-            // Stat quests
-            var fromStatQuests = getTotalFromStatQuests(statName);
-
-            // Item stats
-            var fromItems = 0;
-            for (let i = 0; i < 24; ++i) {
-                if ($scope.selectedList.items[i][statName]) {
-                    fromItems += $scope.selectedList.items[i][statName];
-                }
-            }
-
-            // limit stats from items
-            itemTotalMax = getItemTotalMax(statName);
-            if (itemTotalMax != null) {
-                if (fromItems > itemTotalMax) {
-                    $scope.statRestrictions[statName].push({
-                        restriction: "fromItems",
-                        amount: fromItems,
-                        limit: itemTotalMax
-                    });
-                    fromItems = itemTotalMax;
-                }
-            }
-
-            // Spell/Familiar stats
-            var fromSpells = 0;
-            for (let i = 24; i < $scope.selectedList.items.length; ++i) {
-                if ($scope.selectedList.items[i][statName]) {
-                    fromSpells += $scope.selectedList.items[i][statName];
-                }
-            }
-
-            // stat bonuses
-            var fromBonus = getTotalFromStatBonuses(statName);
-
-            // persistent era ability bonuses
-            var fromEraAbilities = gameStats.calculateEraAbilityBonus(
-                statName,
-                $scope.selectedList.eraAbilities
+            var total = gameStats.calculateBuilderStatTotal(
+                $scope.selectedList,
+                statName
             );
-
-            // sum up the different sections
-            var total = fromBaseStats + fromKSMStats + fromStatQuests + fromItems + fromSpells + fromBonus + fromEraAbilities;
-
-            // apply total bonuses
-            total += getStatTotalBonus(statName, total);
-
-            // apply min and max
-            totalMax = getStatTotalMax(statName);
-            totalMin = getStatTotalMin(statName);
-
-            if (totalMax != null) {
-                if (total > totalMax) {
-                    $scope.statRestrictions[statName].push({
-                        restriction: "fromTotalMax",
-                        amount: total,
-                        limit: totalMax
-                    });
-                    total = totalMax;
-                }
-            }
-
-            if (totalMin != null) {
-                if (total < totalMin) {
-                    $scope.statRestrictions[statName].push({
-                        restriction: "fromTotalMin",
-                        amount: total,
-                        limit: totalMin
-                    });
-                }
-            }
-
-            switch (statName) {
-                case "dam":
-                case "hit":
-                case "hpr":
-                case "mar":
-                case "mvr":
-                case "spelldam":
-                case "spellcrit":
-                    total = total + " (" + fromItems + ")";
-                    break;
-            }
-
-            return total;
+            $scope.statRestrictions[statName] = total.restrictions;
+            return total.value;
         };
 
         /** Update runecraft charms. */
