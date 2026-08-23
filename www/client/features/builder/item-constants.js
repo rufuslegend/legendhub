@@ -9,6 +9,12 @@ export const SLOT_ORDER = [
     0, 1, 1, 2, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 13, 14, 15,
     15, 16, 16, 17, 18, 19, 20, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21
 ];
+export const SLOT_LABELS = ["Light", "Finger", "Neck", "Body", "Head", "Face", "Legs", "Feet", "Hands", "Arms", "Shield", "About", "Waist", "Wrist", "Wield", "Hold", "Ear", "Arm", "Amulet", "Aux", "Familiar", "Other"];
+export const SELECT_SHORT_OPTIONS = {
+    alignRestriction: ["     ", "G    ", "  N  ", "    E", "  N E", "G   E", "G N  "],
+    weaponType: ["", "Bladed", "Piercing", "Blunt"],
+    weaponStat: ["", "Str", "Dex", "Con"]
+};
 export const LONGHOUSE_OPTIONS = [
     "Bear   -- ( +5 spi - +3 min )",
     "Beaver -- ( +5 min - +3 dex )",

@@ -47,6 +47,7 @@ test.afterAll(async function() {
 });
 
 test.beforeEach(async function({context, page}) {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"], {origin: baseUrl});
     await context.addCookies([{name: "cookie-consent", value: "true", url: baseUrl}]);
     await page.addInitScript(function(value) {
         localStorage.setItem("cln", value);
@@ -92,9 +93,15 @@ test("Builder preserves persisted characters, variants, totals, panels, and expo
 
     const ksm = page.getByRole("button", {name: "KSM Swap/Quest Mods", exact: true});
     await expect(ksm).toHaveAttribute("aria-expanded", "false");
+    await expect(ksm.locator(".collapse-caret")).toHaveCount(1);
     await ksm.click();
     await expect(ksm).toHaveAttribute("aria-expanded", "true");
     await expect(page.getByLabel("Longhouse", {exact: true})).toBeVisible();
+    await expect(page.getByLabel("Quest HP", {exact: true})).toBeVisible();
+    const era = page.getByRole("button", {name: "Era Abilities", exact: true});
+    await era.click();
+    await expect(era).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator(".era-abilities-table")).toHaveCount(3);
 
     await page.locator("#strInput").fill("44");
     await page.locator("#strInput").blur();
@@ -104,4 +111,30 @@ test("Builder preserves persisted characters, variants, totals, panels, and expo
     await page.getByRole("button", {name: "Export", exact: true}).click();
     await expect(page.getByRole("dialog", {name: "Export Lists"})).toBeVisible();
     await expect(page.locator("#allListsExport")).toHaveValue(/^6\*/);
+    await expect(page.getByRole("button", {name: "Copy", exact: true})).toHaveCount(3);
+    await page.getByRole("button", {name: "Copy", exact: true}).first().click();
+    await expect(page.getByRole("status")).toHaveText("All Lists copied.");
+    await expect(page.evaluate(() => navigator.clipboard.readText())).resolves.toMatch(/^6\*Hero~Tank~/);
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("button", {name: "Export", exact: true})).toBeFocused();
+});
+
+// Catches a React dialog that only looks modal: keyboard users must stay in it,
+// close it with Escape, and return to the control that opened it.
+test("Builder dialogs contain focus and restore their trigger", async function({page}) {
+    await page.goto(`${baseUrl}/builder/`);
+    const trigger = page.getByRole("button", {name: "Import", exact: true});
+    await trigger.click();
+    const dialog = page.getByRole("dialog", {name: "Import Lists"});
+    await expect(dialog).toBeVisible();
+    await expect(page.locator("#builder-import")).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(dialog.getByRole("button", {name: "Close", exact: true})).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(dialog.getByRole("button", {name: "Import", exact: true})).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(dialog.getByRole("button", {name: "Close", exact: true})).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(trigger).toBeFocused();
 });

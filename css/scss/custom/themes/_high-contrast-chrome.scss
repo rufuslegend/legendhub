@@ -70,7 +70,16 @@ a[role="button"] {
 
 body[ng-controller="builder"] .bg-primary.text-white,
 body[ng-controller="builder"] .bg-secondary.text-white,
-body[ng-controller="builder"] .bg-danger.text-white {
+body[ng-controller="builder"] .bg-danger.text-white,
+[data-react-root="builder"] .bg-primary.text-white,
+[data-react-root="builder"] .bg-secondary.text-white,
+[data-react-root="builder"] .bg-danger.text-white {
+  color: $black !important;
+}
+
+[data-react-root="builder"] .bg-primary .btn-link,
+[data-react-root="builder"] .bg-secondary .btn-link,
+[data-react-root="builder"] .bg-danger .btn-link {
   color: $black !important;
 }
 
