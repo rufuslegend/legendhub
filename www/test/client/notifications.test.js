@@ -17,6 +17,13 @@ function createNotificationsDocument() {
     const popover = {innerHTML: "<button data-mark-notifications-read>Mark all as read</button>"};
     const triggers = [{id: "not-pop-1"}, {id: "not-pop-2"}];
     const error = {hidden: true, textContent: ""};
+    const markReadButton = {
+        disabled: false,
+        setAttribute(name, value) { this[name] = value; },
+        closest(selector) {
+            return selector === "[data-mark-notifications-read]" ? this : null;
+        }
+    };
     return {
         cookie: "loginToken=member-token",
         error,
@@ -35,9 +42,7 @@ function createNotificationsDocument() {
             let prevented = false;
             listeners.get("click")({
                 preventDefault() { prevented = true; },
-                target: {closest(selector) {
-                    return selector === "[data-mark-notifications-read]" ? {} : null;
-                }}
+                target: markReadButton
             });
             return prevented;
         }
