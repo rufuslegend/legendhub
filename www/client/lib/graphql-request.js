@@ -6,7 +6,7 @@ export class GraphQLRequestError extends Error {
     }
 }
 
-function redirectToUnauthorizedPage() {
+export function redirectToUnauthorizedPage() {
     if (typeof window !== "undefined")
         window.location.assign("/error/401.html");
 }

@@ -61,13 +61,38 @@ const editFixtures = {
         title: "A representative wiki page"
     }
 };
+const revertRequests = [];
+let failingRevertField = null;
 
 let baseUrl;
 let restoreDependencies;
 let server;
 
-function editorPageData(query) {
+function editorPageData(query, ip, variables) {
     const timestamp = "2026-08-22T12:00:00.000Z";
+    for (const revert of [
+        {field: "revertMob", id: 201, token: "mob-revert-token"},
+        {field: "revertQuest", id: 301, token: "quest-revert-token"},
+        {field: "revertWikiPage", id: 401, token: "wiki-revert-token"}
+    ]) {
+        if (!query.includes(revert.field))
+            continue;
+        revertRequests.push({query, ip, variables});
+        if (failingRevertField === revert.field) {
+            const error = new Error(`${revert.field} rejected.`);
+            error.status = 422;
+            throw error;
+        }
+        return {
+            [revert.field]: {
+                id: revert.id,
+                tokenRenewal: {
+                    token: revert.token,
+                    expires: "2030-01-01T00:00:00.000Z"
+                }
+            }
+        };
+    }
     if (query.includes("getNotifications(")) {
         return {
             getNotifications: {moreResults: false, results: []}
@@ -194,6 +219,8 @@ test.afterAll(async function() {
 });
 
 test.beforeEach(async function({context}) {
+    failingRevertField = null;
+    revertRequests.length = 0;
     await context.addCookies([
         {name: "loginToken", value: "editor-token", url: baseUrl},
         {name: "cookie-consent", value: "true", url: baseUrl},
@@ -267,6 +294,75 @@ test("legacy characterization: authenticated history pages retain their revert e
         await expect(revert).toHaveAttribute("href", history.revert);
         await revert.focus();
         await expect(revert).toBeFocused();
+    }
+});
+
+test("revert routes preserve authenticated variables, renewed cookies, and exact redirects", async function({context, page}) {
+    const cases = [
+        {
+            field: "revertMob",
+            historyId: 1201,
+            path: "/mobs/revert.html?id=1201",
+            redirect: "/mobs/details.html?id=201",
+            token: "mob-revert-token"
+        },
+        {
+            field: "revertQuest",
+            historyId: 1301,
+            path: "/quests/revert.html?id=1301",
+            redirect: "/quests/details.html?id=301",
+            token: "quest-revert-token"
+        },
+        {
+            field: "revertWikiPage",
+            historyId: 1401,
+            path: "/wiki/revert.html?id=1401",
+            redirect: "/wiki/details.html?id=401",
+            token: "wiki-revert-token"
+        }
+    ];
+
+    for (const revert of cases) {
+        await context.addCookies([{name: "loginToken", value: "editor-token", url: baseUrl}]);
+        const response = await page.request.get(`${baseUrl}${revert.path}`, {maxRedirects: 0});
+        expect(response.status()).toBe(302);
+        expect(response.headers().location).toBe(revert.redirect);
+        expect(response.headers()["set-cookie"]).toBe(
+            `loginToken=${revert.token}; Path=/; Expires=Tue, 01 Jan 2030 00:00:00 GMT; Secure; SameSite=Strict`
+        );
+    }
+
+    expect(revertRequests).toHaveLength(3);
+    for (const [index, revert] of cases.entries()) {
+        const call = revertRequests[index];
+        expect(call.variables).toEqual({authToken: "editor-token", historyId: revert.historyId});
+        expect(call.query).not.toContain("editor-token");
+        expect(call.query).not.toContain(String(revert.historyId));
+        expect(mutationRequest(call)).toEqual({
+            field: revert.field,
+            args: {authToken: "editor-token", historyId: revert.historyId}
+        });
+    }
+});
+
+test("revert routes preserve GraphQL failures without cookies or redirects", async function({context, page}) {
+    const cases = [
+        {field: "revertMob", historyId: 1201, path: "/mobs/revert.html?id=1201"},
+        {field: "revertQuest", historyId: 1301, path: "/quests/revert.html?id=1301"},
+        {field: "revertWikiPage", historyId: 1401, path: "/wiki/revert.html?id=1401"}
+    ];
+
+    for (const revert of cases) {
+        failingRevertField = revert.field;
+        await context.addCookies([{name: "loginToken", value: "editor-token", url: baseUrl}]);
+        const response = await page.request.get(`${baseUrl}${revert.path}`, {maxRedirects: 0});
+        expect(response.status()).toBe(422);
+        expect(response.headers().location).toBeUndefined();
+        expect(response.headers()["set-cookie"]).toBeUndefined();
+        expect(await response.text()).toContain(`${revert.field} rejected.`);
+
+        const call = revertRequests.at(-1);
+        expect(call.variables).toEqual({authToken: "editor-token", historyId: revert.historyId});
     }
 });
 
@@ -579,6 +675,170 @@ test("React migration: Markdown preview keeps ordinary formatting and removes ma
             url: window.previewUrlRan
         };
     })).toEqual({click: undefined, event: undefined, script: undefined, url: undefined});
+});
+
+test("React migration: Markdown preview preserves every allowed tag, attribute, and URI branch", async function({page}) {
+    await openEditor(page, "/wiki/edit.html?id=401", "Edit Wiki Page");
+    const allowedUris = [
+        {label: "HTTPS branch", href: "https://example.test/secure"},
+        {label: "HTTP branch", href: "http://example.test/plain"},
+        {label: "Mail branch", href: "mailto:archivist@example.test"},
+        {label: "Root branch", href: "/wiki/details.html?id=401"},
+        {label: "Hash branch", href: "#chapter"},
+        {label: "Dot branch", href: "./nearby.html"},
+        {label: "Parent branch", href: "../history.html"},
+        {label: "Bare branch", href: "wiki/details.html?id=401#notes"}
+    ];
+    const content = [
+        "# Heading one",
+        "## Heading two",
+        "### Heading three",
+        "#### Heading four",
+        "##### Heading five",
+        "###### Heading six",
+        "",
+        "> Quoted guidance",
+        "",
+        "Paragraph with **strong**, *emphasis*, <del>deleted</del>, and `inline code`.<br>",
+        "",
+        "---",
+        "",
+        "```",
+        "preformatted code",
+        "```",
+        "",
+        "1. Ordered entry",
+        "",
+        "- Unordered entry",
+        "",
+        "<table><thead><tr><th>Column</th></tr></thead><tbody><tr><td>Cell</td></tr></tbody></table>",
+        "",
+        '<a href="https://example.test/titled" title="Allowed link title">Titled link</a>',
+        '<img src="https://example.test/map.png" alt="Allowed map" title="Allowed image title">',
+        ...allowedUris.map(uri => `<a href="${uri.href}">${uri.label}</a>`),
+        "",
+        "Linkified https://example.test/automatic"
+    ].join("\n");
+    await page.locator("textarea").fill(content);
+
+    const preview = page.getByRole("region", {name: "Content Markdown preview"});
+    for (const tag of [
+        "a", "blockquote", "br", "code", "del", "em", "h1", "h2", "h3",
+        "h4", "h5", "h6", "hr", "img", "li", "ol", "p", "pre", "strong",
+        "table", "tbody", "td", "th", "thead", "tr", "ul"
+    ])
+        expect(await preview.locator(tag).count(), `allowed <${tag}>`).toBeGreaterThan(0);
+
+    await expect(preview.getByRole("link", {name: "Titled link"}))
+        .toHaveAttribute("title", "Allowed link title");
+    await expect(preview.getByRole("img", {name: "Allowed map"}))
+        .toHaveAttribute("src", "https://example.test/map.png");
+    await expect(preview.getByRole("img", {name: "Allowed map"}))
+        .toHaveAttribute("title", "Allowed image title");
+    for (const uri of allowedUris)
+        await expect(preview.getByText(uri.label, {exact: true})).toHaveAttribute("href", uri.href);
+    await expect(preview.getByRole("link", {name: "https://example.test/automatic"}))
+        .toHaveAttribute("href", "https://example.test/automatic");
+});
+
+test("React migration: Markdown preview rejects every forbidden tag, attribute, and URI edge", async function({page}) {
+    await openEditor(page, "/wiki/edit.html?id=401", "Edit Wiki Page");
+    const unsafeUris = [
+        {label: "JavaScript scheme", attribute: "href", value: "javascript:alert(1)", tag: "a"},
+        {label: "Mixed script scheme", attribute: "href", value: "JaVaScRiPt:alert(2)", tag: "a"},
+        {label: "Entity script scheme", attribute: "href", value: "java&#x73;cript:alert(3)", tag: "a"},
+        {label: "Whitespace script scheme", attribute: "href", value: "java&#10;script:alert(4)", tag: "a"},
+        {label: "Unicode-space script scheme", attribute: "href", value: "java\u2000script:alert(5)", tag: "a"},
+        {label: "VBScript scheme", attribute: "href", value: "vbscript:msgbox(1)", tag: "a"},
+        {label: "Data link", attribute: "href", value: "data:text/html;base64,PHNjcmlwdD4=", tag: "a"},
+        {label: "Protocol relative", attribute: "href", value: "//evil.example.test/path", tag: "a"},
+        {label: "Spaced protocol relative", attribute: "href", value: " / /evil.example.test/path", tag: "a"},
+        {label: "Data image", attribute: "src", value: "data:image/png;base64,iVBORw0KGgo=", tag: "img"}
+    ];
+    const content = [
+        '<p style="color:red" data-secret="value" aria-label="unsafe" onclick="window.badClick=1">Attribute carrier</p>',
+        '<img src="https://example.test/event.png" alt="Event image" onerror="window.badEvent=1" srcset="https://example.test/2x.png 2x">',
+        "<button>Forbidden button</button>",
+        '<embed src="https://example.test/plugin">',
+        '<form action="https://example.test/submit"><input name="secret"></form>',
+        '<iframe src="https://example.test/frame"></iframe>',
+        "<math><mi>unsafe math</mi></math>",
+        '<object data="https://example.test/object"></object>',
+        "<script>window.badScript=1</script>",
+        "<style>body { display: none; }</style>",
+        "<svg><circle onload=\"window.badSvg=1\"></circle></svg>",
+        ...unsafeUris.map(uri => uri.tag === "img"
+            ? `<img ${uri.attribute}="${uri.value}" alt="${uri.label}">`
+            : `<a ${uri.attribute}="${uri.value}">${uri.label}</a>`)
+    ].join("\n");
+    await page.locator("textarea").fill(content);
+
+    const preview = page.getByRole("region", {name: "Content Markdown preview"});
+    await expect(preview.locator("button, embed, form, iframe, input, math, object, script, style, svg"))
+        .toHaveCount(0);
+    const carrier = preview.getByText("Attribute carrier", {exact: true});
+    await expect(carrier).not.toHaveAttribute("style");
+    await expect(carrier).not.toHaveAttribute("data-secret");
+    await expect(carrier).not.toHaveAttribute("aria-label");
+    await expect(carrier).not.toHaveAttribute("onclick");
+    const eventImage = preview.getByRole("img", {name: "Event image"});
+    await expect(eventImage).not.toHaveAttribute("onerror");
+    await expect(eventImage).not.toHaveAttribute("srcset");
+    for (const uri of unsafeUris) {
+        const element = uri.tag === "img"
+            ? preview.getByRole("img", {name: uri.label})
+            : preview.getByText(uri.label, {exact: true});
+        await expect(element, uri.label).not.toHaveAttribute(uri.attribute);
+    }
+    expect(await page.evaluate(function() {
+        return {
+            click: window.badClick,
+            event: window.badEvent,
+            script: window.badScript,
+            svg: window.badSvg
+        };
+    })).toEqual({click: undefined, event: undefined, script: undefined, svg: undefined});
+});
+
+test("React migration: restoring mob numeric fields restores pristine edit state", async function({page}) {
+    await openEditor(page, "/mobs/edit.html?id=201", "Edit Mob");
+    const save = page.getByRole("button", {name: "Save", exact: true});
+    const xp = page.locator('input[name="xp"]');
+    const gold = page.locator('input[name="gold"]');
+
+    await expect(save).toBeDisabled();
+    await xp.fill("451");
+    await expect(save).toBeEnabled();
+    await xp.fill("450");
+    await expect(save).toBeDisabled();
+
+    await gold.fill("38");
+    await expect(save).toBeEnabled();
+    await gold.fill("37");
+    await expect(save).toBeDisabled();
+});
+
+test("React migration: a missing editor token redirects before GraphQL validation", async function({context, page}) {
+    await openEditor(page, "/mobs/edit.html?id=201", "Edit Mob");
+    await context.clearCookies();
+    let apiRequests = 0;
+    await page.route(`${baseUrl}/api`, async function(route) {
+        apiRequests += 1;
+        await route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify({
+                data: null,
+                errors: [{message: "Variable $authToken of required type String! was not provided."}]
+            })
+        });
+    });
+    await page.locator('input[name="name"]').fill("Expired token edit");
+
+    await Promise.all([
+        page.waitForURL(`${baseUrl}/error/401.html`),
+        page.getByRole("button", {name: "Save", exact: true}).click()
+    ]);
+    expect(apiRequests).toBe(0);
 });
 
 for (const editor of [

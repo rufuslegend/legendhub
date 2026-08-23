@@ -14,6 +14,7 @@ with version 2.6.0.
 ### Changed
 
 - Made mob, quest, and wiki editing safer and easier to use with a keyboard, with live save feedback and sanitized Markdown previews.
+- Fixed restoring older mob, quest, and wiki revisions so renewed sign-ins and return links work correctly.
 - Made item, mob, quest, and wiki details show their notes and guides immediately, including when JavaScript is unavailable.
 - Made the shared navigation, theme chooser, notification menu, and cookie banner work without the legacy browser framework while keeping all nine themes and saved preferences intact.
 - Made the Mobs, Quests, and Wiki lists easier to navigate: names and sortable headings are now ordinary links, while the separate new-tab details action remains available. Their mobile area and category menus now work with keyboard controls and return you to the menu button after closing.

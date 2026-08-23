@@ -1,5 +1,9 @@
 import {formatCookie, parseCookieHeader} from "../../lib/cookies.js";
-import {graphqlRequest} from "../../lib/graphql-request.js";
+import {
+    GraphQLRequestError,
+    graphqlRequest,
+    redirectToUnauthorizedPage
+} from "../../lib/graphql-request.js";
 
 const insertMobMutation = `
     mutation InsertMob(
@@ -163,7 +167,11 @@ function integer(value) {
 }
 
 function currentToken(document) {
-    return parseCookieHeader(document.cookie).loginToken;
+    const token = parseCookieHeader(document.cookie).loginToken;
+    if (token)
+        return token;
+    redirectToUnauthorizedPage();
+    throw new GraphQLRequestError("Authorization required.");
 }
 
 function persistTokenRenewal(document, tokenRenewal) {

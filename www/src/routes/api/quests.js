@@ -318,7 +318,7 @@ let revertQuest = function(req, authToken, historyId) {
                                 }
 
                                 apiUtils.trackPageUpdate(response.ip);
-                                resolve({id: results[0].QuestId, tokenRenewal: {token: response.token, expires: resopnse.expires}});
+                                resolve({id: results[0].QuestId, tokenRenewal: {token: response.token, expires: response.expires}});
                             });
                     });
             }

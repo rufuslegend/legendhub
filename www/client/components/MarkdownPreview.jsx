@@ -6,6 +6,14 @@ const markdown = new MarkdownIt({
     linkify: true,
     typographer: false
 });
+const uriWhitespace = /[\u0000-\u0020\u00A0\u1680\u180E\u2000-\u2029\u205F\u3000]/g;
+
+function rejectDataUri(_node, hookEvent) {
+    const name = hookEvent.attrName.toLowerCase();
+    const value = hookEvent.attrValue.replace(uriWhitespace, "");
+    if ((name === "href" || name === "src") && value.toLowerCase().startsWith("data:"))
+        hookEvent.keepAttr = false;
+}
 
 export const MARKDOWN_SANITIZE_POLICY = Object.freeze({
     ALLOWED_TAGS: [
@@ -25,7 +33,14 @@ export const MARKDOWN_SANITIZE_POLICY = Object.freeze({
 });
 
 export default function MarkdownPreview({id, label, value}) {
-    const html = DOMPurify.sanitize(markdown.render(value || ""), MARKDOWN_SANITIZE_POLICY);
+    DOMPurify.addHook("uponSanitizeAttribute", rejectDataUri);
+    let html;
+    try {
+        html = DOMPurify.sanitize(markdown.render(value || ""), MARKDOWN_SANITIZE_POLICY);
+    }
+    finally {
+        DOMPurify.removeHook("uponSanitizeAttribute", rejectDataUri);
+    }
     const headingId = `${id}-heading`;
 
     return (

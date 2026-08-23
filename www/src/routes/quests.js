@@ -366,8 +366,8 @@ router.get(["/revert.html"], async function(req, res, next) {
         return res.redirect(`/login.html?returnUrl=${encodeURIComponent(res.locals.url.path)}`);
 
     let query = `
-    mutation {
-        revertQuest (authToken:"${req.cookies.loginToken}",historyId:${req.query.id}) {
+    mutation($authToken: String!, $historyId: Int!) {
+        revertQuest(authToken: $authToken, historyId: $historyId) {
             id
             tokenRenewal {
                 token
@@ -378,24 +378,29 @@ router.get(["/revert.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(query, req.ip);
+        var data = await apiUtils.postAsync(query, req.ip, {
+            authToken: req.cookies.loginToken,
+            historyId: Number(req.query.id)
+        });
     }
     catch (e) {
         return next(e);
     }
 
     data = data.revertQuest;
+    let cookieOptions = {
+        path: "/",
+        secure: true,
+        sameSite: true
+    };
+    if (data.tokenRenewal.expires)
+        cookieOptions.expires = new Date(data.tokenRenewal.expires);
     res.cookie(
         "loginToken",
         data.tokenRenewal.token,
-        {
-            path: "/",
-            expires: data.tokenRenewal.expires,
-            secure: true,
-            sameSite: true
-        }
+        cookieOptions
     );
-    res.redirect(`quests/details.html?id=${data.id}`);
+    res.redirect(`/quests/details.html?id=${data.id}`);
 });
 
 router.get(["/delete.html"], async function(req, res, next) {

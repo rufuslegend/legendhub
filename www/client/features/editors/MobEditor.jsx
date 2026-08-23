@@ -103,7 +103,9 @@ export default function MobEditor({areas, mob}) {
                                 required
                                 type="number"
                                 value={state.draft.xp}
-                                onChange={event => change("xp", event.target.value)}
+                                onChange={event => change("xp", event.target.value === ""
+                                    ? ""
+                                    : Number(event.target.value))}
                             />
                         </div>
                     </div>
@@ -119,7 +121,9 @@ export default function MobEditor({areas, mob}) {
                                 required
                                 type="number"
                                 value={state.draft.gold}
-                                onChange={event => change("gold", event.target.value)}
+                                onChange={event => change("gold", event.target.value === ""
+                                    ? ""
+                                    : Number(event.target.value))}
                             />
                         </div>
                     </div>

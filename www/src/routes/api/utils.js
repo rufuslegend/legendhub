@@ -59,7 +59,7 @@ module.exports.trackPageUpdate = function(ip) {
     module.exports.trackAttempt("pageUpdate", ip, 5, 200, 60);
 }
 
-module.exports.postAsync = async function(query, ip) {
+module.exports.postAsync = async function(query, ip, variables) {
     let headers = {
         "Content-Type": "application/json"
     };
@@ -69,7 +69,7 @@ module.exports.postAsync = async function(query, ip) {
     const response = await fetch(`http://localhost:${process.env.PORT}/api`, {
         method: "POST",
         headers,
-        body: JSON.stringify({query})
+        body: JSON.stringify({query, variables})
     });
     const body = await response.json();
 
