@@ -6,7 +6,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const angularPatterns = [
-    /\bng-[a-z-]+=/,
+    /\bng-[a-z-]+(?=\s|=|>|\/)/,
     /\bangular\b/,
     /\bangular(?:\.min)?\.js\b/,
     /\bangular-(?:cookies|sanitize)\b/,
@@ -27,6 +27,7 @@ test("active browser surfaces contain no AngularJS runtime or adapter references
         return walkFiles(path.join(sourceRoot, relativeRoot));
     }).concat(walkFiles(path.join(__dirname, "../client")), [
         path.join(__dirname, "../package.json"),
+        path.join(__dirname, "../package-lock.json"),
         path.join(__dirname, "../accessibility/support/local-browser-scripts.js")
     ]);
     const activeAngularFiles = browserSources.filter(function(filePath) {

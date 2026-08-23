@@ -176,6 +176,50 @@ test("browser runtime preserves self-closing HTML during jQuery prefiltering", a
     expect(filteredHtml).toBe("<div/>");
 });
 
+test("shared-shell server-rendered pages never load or expose AngularJS", async function({ page }) {
+    const angularScriptRequests = [];
+    const runtimeSurfaces = [];
+    page.on("request", function(request) {
+        if (/\bangular(?:-cookies|-sanitize)?(?:\.min)?\.js(?:[?#]|$)/i.test(request.url()))
+            angularScriptRequests.push(request.url());
+    });
+
+    for (const pageUnderTest of [
+        {name: "login", path: "/login.html"},
+        {name: "home", path: "/"},
+        {name: "feedback", path: "/feedback.html"}
+    ]) {
+        const response = await page.goto(`${baseUrl}${pageUnderTest.path}`);
+        expect(response).not.toBeNull();
+        expect(response.status(), pageUnderTest.name).toBe(200);
+        await expect(page.locator("body")).toHaveCount(1);
+        runtimeSurfaces.push({
+            name: pageUnderTest.name,
+            ...(await page.evaluate(function() {
+                return {
+                    angularType: typeof window.angular,
+                    directiveAttributes: Array.from(document.querySelectorAll("*")).flatMap(function(element) {
+                        return Array.from(element.attributes).map(function(attribute) {
+                            return attribute.name;
+                        }).filter(function(name) {
+                            return name.startsWith("ng-");
+                        });
+                    })
+                };
+            }))
+        });
+    }
+
+    expect({angularScriptRequests, runtimeSurfaces}).toEqual({
+        angularScriptRequests: [],
+        runtimeSurfaces: [
+            {name: "login", angularType: "undefined", directiveAttributes: []},
+            {name: "home", angularType: "undefined", directiveAttributes: []},
+            {name: "feedback", angularType: "undefined", directiveAttributes: []}
+        ]
+    });
+});
+
 test("registration error state has no detectable WCAG A or AA violations in High Contrast", async function({ page }) {
     const loginPage = pages.find(function(pageUnderTest) {
         return pageUnderTest.name === "login";
