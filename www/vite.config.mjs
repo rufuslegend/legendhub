@@ -7,6 +7,10 @@ export default defineConfig({
     publicDir: false,
     build: {
         emptyOutDir: true,
+        lib: {
+            entry: resolve(import.meta.dirname, "client/entries/foundation.js"),
+            formats: ["es"]
+        },
         outDir: resolve(import.meta.dirname, "src/public/build"),
         rolldownOptions: {
             input: {

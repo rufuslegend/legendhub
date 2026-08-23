@@ -1,2 +1,2 @@
-new Event("legendhub-foundation");
+export const foundation = {};
 export {};
