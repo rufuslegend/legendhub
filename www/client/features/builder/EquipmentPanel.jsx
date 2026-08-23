@@ -4,6 +4,7 @@ import {
   SELECT_SHORT_OPTIONS,
   SLOT_LABELS,
 } from "./item-constants.js";
+import { useEffect, useRef } from "react";
 import { getItemRestrictionText } from "./builder-derivations.js";
 import { BuilderModal } from "./ImportExportDialog.jsx";
 import { selectFilteredItems } from "./builder-reducer.js";
@@ -70,6 +71,34 @@ function statRestrictionText(restrictions = []) {
     .join(" ");
 }
 
+function WarningCell({ children, className = "", warning }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!warning || !ref.current) return undefined;
+    const jquery = globalThis.jQuery || globalThis.$;
+    if (!jquery?.fn?.tooltip) return undefined;
+    const element = ref.current;
+    jquery(element).tooltip({ container: "body", trigger: "hover focus" });
+    return () => jquery(element).tooltip("dispose");
+  }, [warning]);
+
+  return (
+    <td
+      ref={ref}
+      className={`${className}${warning ? " builder-warning-cell" : ""}`.trim()}
+      data-toggle={warning ? "tooltip" : undefined}
+      tabIndex={warning ? 0 : undefined}
+      title={warning || undefined}
+    >
+      {warning && (
+        <i className="fas fa-question-circle mr-1" aria-hidden="true" />
+      )}
+      {children}
+    </td>
+  );
+}
+
 function DetailsLink({ item }) {
   return item.id > 0 ? (
     <a
@@ -106,7 +135,6 @@ function EquipmentTotalRow({
   totals,
   statRestrictions,
   onToggleLocks,
-  showWarnings,
 }) {
   return (
     <tr className="bg-secondary text-white">
@@ -114,34 +142,28 @@ function EquipmentTotalRow({
       <td>
         <button
           type="button"
-          className="btn btn-link p-0"
+          className="btn btn-link p-0 builder-table-action builder-lock-action"
           aria-label={`${allLocked ? "Unlock" : "Lock"} all items`}
           onClick={onToggleLocks}
         >
-          {allLocked ? "Unlock" : "Lock"}
+          <i
+            className={`fas ${allLocked ? "fa-lock text-success" : "fa-unlock text-secondary"}`}
+            aria-hidden="true"
+          />
         </button>
       </td>
       <th scope="row">Total</th>
       {stats.map((stat) => {
         const warnings = statRestrictions[stat.var] || [];
-        const warningId = `builder-stat-warning-${stat.var}`;
+        const warning = statRestrictionText(warnings);
         return (
-          <td
+          <WarningCell
             key={stat.var}
             className={warnings.length ? "bg-danger" : ""}
-            aria-describedby={warnings.length ? warningId : undefined}
+            warning={warning}
           >
             {totals[stat.var] ?? ""}
-            {showWarnings && warnings.length > 0 && (
-              <span
-                id={warningId}
-                className="d-block small"
-                role="alert"
-              >
-                {statRestrictionText(warnings)}
-              </span>
-            )}
-          </td>
+          </WarningCell>
         );
       })}
     </tr>
@@ -190,7 +212,7 @@ export default function EquipmentPanel({
   return (
     <section className="row">
       <div className="table-responsive">
-        <table className="table table-striped table-hover table-sm table-bordered">
+        <table className="table table-striped table-hover table-sm table-bordered builder-equipment-table">
           <thead className="thead-dark">
             <EquipmentHeaderRow stats={stats} />
           </thead>
@@ -201,7 +223,6 @@ export default function EquipmentPanel({
               totals={totals}
               statRestrictions={statRestrictions}
               onToggleLocks={onToggleLocks}
-              showWarnings
             />
             {state.selectedList.items.map((item, index) => {
               const warning = getItemRestrictionText(
@@ -210,41 +231,34 @@ export default function EquipmentPanel({
               ).replaceAll("<br /><br />", " ");
               return (
                 <tr key={index}>
-                  <td
+                  <WarningCell
                     className={
                       warning ? "bg-danger text-white" : "bg-primary text-white"
                     }
-                    aria-describedby={
-                      warning ? `builder-item-warning-${index}` : undefined
-                    }
+                    warning={warning}
                   >
                     {SLOT_LABELS[item.slot] || item.slot}
-                    {warning && (
-                      <span
-                        id={`builder-item-warning-${index}`}
-                        className="d-block small"
-                        role="alert"
-                      >
-                        {warning}
-                      </span>
-                    )}
-                  </td>
+                  </WarningCell>
                   <td>
                     <button
                       type="button"
-                      className="btn btn-link p-0"
+                      className="btn btn-link p-0 builder-table-action builder-lock-action"
                       aria-label={`Toggle lock for ${SLOT_LABELS[item.slot] || `slot ${index + 1}`}`}
+                      aria-pressed={item.locked}
                       onClick={() =>
                         onAction({ type: "item/toggle-lock", index })
                       }
                     >
-                      {item.locked ? "Locked" : "Unlocked"}
+                      <i
+                        className={`fas ${item.locked ? "fa-lock text-success" : "fa-unlock text-secondary"}`}
+                        aria-hidden="true"
+                      />
                     </button>
                   </td>
                   <th scope="row">
                     <button
                       type="button"
-                      className="btn btn-link p-0"
+                      className="btn btn-link p-0 builder-table-action"
                       onClick={() => onOpen(index)}
                     >
                       {item.name || "-"}
@@ -255,7 +269,7 @@ export default function EquipmentPanel({
                     <td key={stat.var} className="p-0">
                       <button
                         type="button"
-                        className="btn btn-link btn-block rounded-0 px-1 py-1 py-lg-0"
+                        className="btn btn-link btn-block rounded-0 px-1 py-1 py-lg-0 builder-table-action builder-stat-action"
                         aria-label={`Choose ${item.name || "empty item"} by ${stat.display}`}
                         onClick={() => onOpen(index)}
                       >
@@ -275,7 +289,6 @@ export default function EquipmentPanel({
               totals={totals}
               statRestrictions={statRestrictions}
               onToggleLocks={onToggleLocks}
-              showWarnings={false}
             />
           </tfoot>
         </table>
@@ -307,13 +320,17 @@ export default function EquipmentPanel({
                       <td>
                         <button
                           type="button"
-                          className="btn btn-link p-0"
+                          className="btn btn-link p-0 builder-table-action builder-lock-action"
                           aria-label={`${current.locked ? "Unlock" : "Lock"} current item`}
+                          aria-pressed={current.locked}
                           onClick={() =>
                             onAction({ type: "search/toggle-lock" })
                           }
                         >
-                          {current.locked ? "Locked" : "Unlocked"}
+                          <i
+                            className={`fas ${current.locked ? "fa-lock text-success" : "fa-unlock text-secondary"}`}
+                            aria-hidden="true"
+                          />
                         </button>
                       </td>
                       <th>
@@ -414,7 +431,7 @@ export default function EquipmentPanel({
                     <tr>
                       <th>
                         <button
-                          className="btn btn-link p-0 text-white"
+                          className="btn btn-link p-0 text-white builder-table-action"
                           type="button"
                           onClick={() =>
                             onAction({ type: "search/sort", stat: "name" })
@@ -426,7 +443,7 @@ export default function EquipmentPanel({
                       {stats.map((stat) => (
                         <th key={stat.var}>
                           <button
-                            className="btn btn-link p-0 text-white"
+                            className="btn btn-link p-0 text-white builder-table-action"
                             type="button"
                             onClick={() =>
                               onAction({ type: "search/sort", stat: stat.var })
@@ -444,7 +461,7 @@ export default function EquipmentPanel({
                       <tr key={item.id}>
                         <td>
                           <button
-                            className="btn btn-link p-0"
+                            className="btn btn-link p-0 builder-table-action"
                             type="button"
                             disabled={current.locked}
                             onClick={() => onPick(item)}

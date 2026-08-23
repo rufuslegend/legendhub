@@ -17,6 +17,7 @@ with version 2.6.0.
 - Hardened list searches, failed sign-ins, and notifications so entered or stored names remain plain text and passwords are never echoed back into the page.
 - Kept renewed sign-ins working after account changes even when optional cookie consent is not enabled.
 - Made notification and item-search actions keyboard-accessible, prevented duplicate mark-read requests, and added an Items recovery prompt when the interactive page cannot render.
+- Restored the Builder's compact equipment table, hover and keyboard-focus explanations for red warning cells, and scrolling inside long item-selection windows.
 
 ## [2.9.0] - 2026-08-22
 

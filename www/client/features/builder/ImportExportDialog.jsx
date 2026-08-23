@@ -1,5 +1,22 @@
 import {useEffect, useRef, useState} from "react";
 
+let openBuilderModalCount = 0;
+let bodyAlreadyModalOpen = false;
+
+function lockPageScroll() {
+    if (openBuilderModalCount === 0) {
+        bodyAlreadyModalOpen = document.body.classList.contains("modal-open");
+        document.body.classList.add("modal-open");
+    }
+    openBuilderModalCount += 1;
+}
+
+function unlockPageScroll() {
+    openBuilderModalCount = Math.max(0, openBuilderModalCount - 1);
+    if (openBuilderModalCount === 0 && !bodyAlreadyModalOpen)
+        document.body.classList.remove("modal-open");
+}
+
 function focusableElements(element) {
     return Array.from(element?.querySelectorAll("a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])") || []).filter(entry => !entry.hidden);
 }
@@ -11,6 +28,7 @@ export function BuilderModal({children, label, onClose, initialFocus}) {
     closeRef.current = onClose;
 
     useEffect(function() {
+        lockPageScroll();
         triggerRef.current = document.activeElement;
         const modal = ref.current;
         const focusInitial = function() {
@@ -45,6 +63,7 @@ export function BuilderModal({children, label, onClose, initialFocus}) {
         window.addEventListener("keydown", keydown);
         document.addEventListener("focusin", focusin);
         return () => {
+            unlockPageScroll();
             window.removeEventListener("keydown", keydown);
             document.removeEventListener("focusin", focusin);
             for (const entry of hidden) {
@@ -55,7 +74,7 @@ export function BuilderModal({children, label, onClose, initialFocus}) {
             triggerRef.current?.focus();
         };
     }, []);
-    return <div ref={ref} className="modal d-block" role="dialog" aria-modal="true" aria-label={label} tabIndex="-1"><div className="modal-dialog modal-lg" role="document"><div className="modal-content"><div className="modal-header"><h2 className="modal-title h5">{label}</h2><button type="button" className="close" aria-label="Close" onClick={() => closeRef.current()}><span aria-hidden="true">×</span></button></div>{children}</div></div></div>;
+    return <div ref={ref} className="modal d-block" role="dialog" aria-modal="true" aria-label={label} tabIndex="-1"><div className="modal-dialog modal-lg modal-dialog-scrollable" role="document"><div className="modal-content"><div className="modal-header"><h2 className="modal-title h5">{label}</h2><button type="button" className="close" aria-label="Close" onClick={() => closeRef.current()}><span aria-hidden="true">×</span></button></div>{children}</div></div></div>;
 }
 
 function CopyField({id, label, value, onCopied}) {

@@ -28,6 +28,15 @@ body {
   cursor: pointer;
 }
 
+.builder-lock-action {
+  min-width: 1rem;
+  min-height: 1rem;
+}
+
+.builder-stat-action {
+  min-height: 1.5rem;
+}
+
 [ng\:cloak],
 [ng-cloak],
 [data-ng-cloak],

@@ -8977,6 +8977,15 @@ body > .container-fluid {
   cursor: pointer;
 }
 
+.builder-lock-action {
+  min-width: 1rem;
+  min-height: 1rem;
+}
+
+.builder-stat-action {
+  min-height: 1.5rem;
+}
+
 [ng\:cloak],
 [ng-cloak],
 [data-ng-cloak],
@@ -9555,6 +9564,30 @@ body[ng-controller=builder] > .container-fluid > .row:first-child > .col-lg-6,
   border-color: #ff5888;
   outline: 0;
   box-shadow: 0 0 0 3.2px rgba(255, 88, 140, 0.35);
+}
+
+/* stylelint-disable selector-not-notation */
+.builder-table-action,
+.builder-table-action:not(:disabled):not(.disabled):hover,
+.builder-table-action:not(:disabled):not(.disabled):active {
+  text-shadow: none;
+  background-image: none;
+  filter: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* stylelint-enable selector-not-notation */
+.builder-table-action:focus,
+.builder-table-action.focus {
+  background-image: none;
+  filter: none;
+  border: 0;
+  border-radius: 0;
+  outline: 2px solid #ff5888;
+  outline-offset: -2px;
+  box-shadow: none;
 }
 
 .table {

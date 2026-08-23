@@ -216,6 +216,30 @@ body[ng-controller="builder"] > .container-fluid > .row:first-child > .col-lg-6,
   box-shadow: $input-btn-focus-box-shadow;
 }
 
+/* stylelint-disable selector-not-notation */
+.builder-table-action,
+.builder-table-action:not(:disabled):not(.disabled):hover,
+.builder-table-action:not(:disabled):not(.disabled):active {
+  text-shadow: none;
+  background-image: none;
+  filter: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+/* stylelint-enable selector-not-notation */
+
+.builder-table-action:focus,
+.builder-table-action.focus {
+  background-image: none;
+  filter: none;
+  border: 0;
+  border-radius: 0;
+  outline: 2px solid $glass-accent-bright;
+  outline-offset: -2px;
+  box-shadow: none;
+}
+
 .table {
   color: $body-color;
   border-color: rgba($glass-line, .7);

@@ -216,6 +216,45 @@ test("Builder equipment footer repeats totals and stat cells use real controls",
     await expect(page.getByRole("dialog", {name: "Choose Item"})).toBeVisible();
 });
 
+// Catches the Glass theme turning compact equipment-table actions into
+// rounded, bordered buttons inside already-bordered cells.
+test("Builder Glass table actions stay visually integrated and keyboard visible", async function({context, page}) {
+    await context.addCookies([{name: "theme", value: "glass-blue", url: baseUrl}]);
+    await page.goto(`${baseUrl}/builder/`);
+    const table = equipmentTable(page);
+    const row = table.locator("tbody tr").nth(1);
+    const actions = [
+        table.getByRole("button", {name: "Lock all items", exact: true}).first(),
+        row.getByRole("button", {name: /^Toggle lock for /}),
+        row.getByRole("button", {name: "Limited light", exact: true}),
+        row.getByRole("button", {name: "Choose Limited light by Strength", exact: true})
+    ];
+
+    for (const action of actions) {
+        await expect(action).toHaveClass(/builder-table-action/);
+        expect(await action.evaluate(element => {
+            const style = getComputedStyle(element);
+            return {
+                backgroundImage: style.backgroundImage,
+                borderTopWidth: style.borderTopWidth,
+                borderRadius: style.borderRadius,
+                boxShadow: style.boxShadow,
+                textShadow: style.textShadow
+            };
+        })).toEqual({
+            backgroundImage: "none",
+            borderTopWidth: "0px",
+            borderRadius: "0px",
+            boxShadow: "none",
+            textShadow: "none"
+        });
+    }
+
+    await actions[1].focus();
+    await expect(actions[1]).toHaveCSS("outline-style", "solid");
+    await expect(actions[1].locator(".fa-lock, .fa-unlock")).toHaveCount(1);
+});
+
 // Catches either total-row bulk control changing every lock without the legacy
 // confirmation, or using stale wording after all items become locked.
 test("Builder bulk lock controls confirm cancel and apply for both lock states", async function({page}) {
@@ -223,7 +262,7 @@ test("Builder bulk lock controls confirm cancel and apply for both lock states",
     const table = equipmentTable(page);
     const itemLocks = table.getByRole("button", {name: /^Toggle lock for /});
     await expect(itemLocks).toHaveCount(35);
-    expect((await itemLocks.allTextContents()).some(value => value === "Unlocked")).toBe(true);
+    expect((await itemLocks.evaluateAll(buttons => buttons.map(button => button.getAttribute("aria-pressed")))).some(value => value === "false")).toBe(true);
 
     let bulk = table.getByRole("button", {name: "Lock all items", exact: true});
     await expect(bulk).toHaveCount(2);
@@ -231,12 +270,12 @@ test("Builder bulk lock controls confirm cancel and apply for both lock states",
     let dialog = page.getByRole("dialog", {name: "Confirm lock all items"});
     await expect(dialog).toContainText("Are you sure you want to lock all items?");
     await dialog.getByRole("button", {name: "Close"}).click();
-    expect((await itemLocks.allTextContents()).some(value => value === "Unlocked")).toBe(true);
+    expect((await itemLocks.evaluateAll(buttons => buttons.map(button => button.getAttribute("aria-pressed")))).some(value => value === "false")).toBe(true);
 
     await bulk.nth(1).click();
     dialog = page.getByRole("dialog", {name: "Confirm lock all items"});
     await dialog.getByRole("button", {name: "Yes", exact: true}).click();
-    expect((await itemLocks.allTextContents()).every(value => value === "Locked")).toBe(true);
+    expect((await itemLocks.evaluateAll(buttons => buttons.map(button => button.getAttribute("aria-pressed")))).every(value => value === "true")).toBe(true);
 
     bulk = table.getByRole("button", {name: "Unlock all items", exact: true});
     await expect(bulk).toHaveCount(2);
@@ -244,12 +283,12 @@ test("Builder bulk lock controls confirm cancel and apply for both lock states",
     dialog = page.getByRole("dialog", {name: "Confirm unlock all items"});
     await expect(dialog).toContainText("Are you sure you want to unlock all items?");
     await dialog.getByRole("button", {name: "Close"}).click();
-    expect((await itemLocks.allTextContents()).every(value => value === "Locked")).toBe(true);
+    expect((await itemLocks.evaluateAll(buttons => buttons.map(button => button.getAttribute("aria-pressed")))).every(value => value === "true")).toBe(true);
 
     await bulk.nth(1).click();
     dialog = page.getByRole("dialog", {name: "Confirm unlock all items"});
     await dialog.getByRole("button", {name: "Yes", exact: true}).click();
-    expect((await itemLocks.allTextContents()).every(value => value === "Unlocked")).toBe(true);
+    expect((await itemLocks.evaluateAll(buttons => buttons.map(button => button.getAttribute("aria-pressed")))).every(value => value === "false")).toBe(true);
 });
 
 // Catches a React dialog that only looks modal: keyboard users must stay in it,
@@ -272,6 +311,29 @@ test("Builder dialogs contain focus and restore their trigger", async function({
     await expect(dialog.getByRole("button", {name: "Close", exact: true})).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(trigger).toBeFocused();
+});
+
+// Catches long Builder dialogs leaving wheel scrolling on the page or clipping
+// item results instead of scrolling the dialog body within a short viewport.
+test("Builder picker scrolls within the viewport and locks the page behind it", async function({page}) {
+    await page.setViewportSize({width: 900, height: 420});
+    await page.goto(`${baseUrl}/builder/`);
+    await equipmentTable(page).locator("tbody tr").nth(1).getByRole("button", {name: "Limited light", exact: true}).click();
+
+    const dialog = page.getByRole("dialog", {name: "Choose Item"});
+    const dialogBody = dialog.locator(".modal-body");
+    await expect(dialog.locator(".modal-dialog")).toHaveClass(/modal-dialog-scrollable/);
+    await expect(page.locator("body")).toHaveClass(/modal-open/);
+    expect(await dialogBody.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+
+    const pageScroll = await page.evaluate(() => scrollY);
+    await dialogBody.hover();
+    await page.mouse.wheel(0, 500);
+    await expect.poll(() => dialogBody.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => scrollY)).toBe(pageScroll);
+
+    await dialog.getByRole("button", {name: "Close", exact: true}).click();
+    await expect(page.locator("body")).not.toHaveClass(/modal-open/);
 });
 
 // Catches hydration that loses representative normal, faux, missing, or rune
@@ -542,16 +604,26 @@ test("Builder renders literal totals, modifiers, abilities, and associated warni
     expect(await totalFor(page, "Rent")).toContain("1553");
     expect(await totalFor(page, "Light")).toBe("");
 
-    const heavyWarning = page.getByText("You need 120 strength to wield this. You do not have enough hands to hold this item.", {exact: true});
-    await expect(heavyWarning).toBeVisible();
-    const heavyCell = heavyWarning.locator("xpath=..");
-    await expect(heavyCell).toHaveAttribute("aria-describedby", await heavyWarning.getAttribute("id"));
-    const statWarning = page.getByText("The overall limit for this stat is 104. You currently have 115.", {exact: true});
-    await expect(statWarning).toBeVisible();
-    const statCell = statWarning.locator("xpath=..");
-    await expect(statCell).toHaveAttribute("aria-describedby", await statWarning.getAttribute("id"));
-    await expect(page.getByText("You cannot wear two of this item.", {exact: true})).toHaveCount(2);
-    await expect(page.getByText("You can only have three limited items equipped.", {exact: true})).toHaveCount(2);
+    const heavyCell = equipmentTable(page).locator("tbody tr").nth(17).locator("td").first();
+    await expect(heavyCell).toHaveClass(/bg-danger/);
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+    await heavyCell.hover();
+    let tooltip = page.getByRole("tooltip");
+    await expect(tooltip).toHaveText("You need 120 strength to wield this. You do not have enough hands to hold this item.");
+    await expect(heavyCell).toHaveAttribute("aria-describedby", await tooltip.getAttribute("id"));
+    await page.mouse.move(0, 0);
+    await expect(tooltip).toHaveCount(0);
+    await heavyCell.focus();
+    tooltip = page.getByRole("tooltip");
+    await expect(tooltip).toBeVisible();
+    await expect(heavyCell).toHaveAttribute("aria-describedby", await tooltip.getAttribute("id"));
+    await heavyCell.evaluate(element => element.blur());
+    await expect(tooltip).toHaveCount(0);
+
+    const statCell = equipmentTable(page).locator("tbody tr").first().locator("th, td").nth(3);
+    await expect(statCell).toHaveClass(/bg-danger/);
+    await statCell.hover();
+    await expect(page.getByRole("tooltip")).toHaveText("The overall limit for this stat is 104. You currently have 115.");
 
     await page.getByRole("button", {name: "KSM Swap/Quest Mods", exact: true}).click();
     await expect(page.getByLabel("Quest HP", {exact: true})).toHaveValue("17");
