@@ -4,10 +4,13 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const Module = require("node:module");
 const {GraphQLObjectType, GraphQLSchema, parse, validate} = require("graphql");
+const itemApiPath = require.resolve("../../src/routes/api/items.js");
 
-function loadItemApi() {
+function loadItemApi(mysql) {
     const originalLoad = Module._load;
     Module._load = function(request, parent, isMain) {
+        if (mysql && parent?.filename === itemApiPath && request === "./mysql-connection")
+            return mysql;
         if (request === "sync-rpc")
             return function() { return function() { return [
                 {COLUMN_NAME: "Id", DATA_TYPE: "int", IS_NULLABLE: "NO"},
@@ -15,11 +18,19 @@ function loadItemApi() {
                 {COLUMN_NAME: "Slot", DATA_TYPE: "int", IS_NULLABLE: "NO"},
                 {COLUMN_NAME: "Strength", DATA_TYPE: "int", IS_NULLABLE: "YES"},
                 {COLUMN_NAME: "AlignmentRestriction", DATA_TYPE: "varchar", IS_NULLABLE: "YES"},
-                {COLUMN_NAME: "StrengthCap", DATA_TYPE: "int", IS_NULLABLE: "YES"}
+                {COLUMN_NAME: "StrengthCap", DATA_TYPE: "int", IS_NULLABLE: "YES"},
+                {COLUMN_NAME: "Weight", DATA_TYPE: "decimal", IS_NULLABLE: "YES"},
+                {COLUMN_NAME: "UniqueWear", DATA_TYPE: "tinyint", IS_NULLABLE: "YES"},
+                {COLUMN_NAME: "IsLimited", DATA_TYPE: "tinyint", IS_NULLABLE: "YES"},
+                {COLUMN_NAME: "TwoHanded", DATA_TYPE: "tinyint", IS_NULLABLE: "YES"},
+                {COLUMN_NAME: "FauxObject", DATA_TYPE: "tinyint", IS_NULLABLE: "YES"}
             ]; }; };
         return originalLoad.call(this, request, parent, isMain);
     };
-    try { return require("../../src/routes/api/items.js"); }
+    try {
+        delete require.cache[itemApiPath];
+        return require(itemApiPath);
+    }
     finally { Module._load = originalLoad; }
 }
 
@@ -73,4 +84,19 @@ test("Builder hydration restores saved items and rune charms without changing th
     assert.equal(hydrated.items[3].hp, 10);
     assert.equal(hydrated.items[4].name, "DELETED");
     assert.equal(hydrated.items[4].slot, 15);
+});
+
+// Catches an all-missing hydration lookup becoming a GraphQL error instead of
+// allowing the Builder to render each persisted id as DELETED.
+test("production item hydration resolves an empty list when every id is missing", async function() {
+    const itemApi = loadItemApi({
+        query(_sql, values, callback) {
+            assert.deepEqual(values, [[404, 405]]);
+            callback(null, []);
+        }
+    });
+
+    const result = await itemApi.queryFields.getItemsInIds.resolve(null, {ids: [404, 405]});
+
+    assert.deepEqual(result, []);
 });

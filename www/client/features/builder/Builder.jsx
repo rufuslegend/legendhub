@@ -12,6 +12,7 @@ import {applyBuilderPersistencePlan, applySelectedColumns, calculateStorageSize,
 import {builderReducer, createDefaultVariant, createInitialBuilderState, selectStatRestrictions, selectStatTotal} from "./builder-reducer.js";
 import {RUNE_CHARM_ID} from "./item-constants.js";
 import {createItemsBySlotQuery, createItemsInIdsQuery, hydrateBuilderVariant} from "./builder-api.js";
+import {validateBuilderListName} from "./builder-list-validation.js";
 
 function cookies() { return Object.fromEntries(document.cookie.split("; ").filter(Boolean).map(value => value.split("=").map(decodeURIComponent))); }
 function cookieStore() { return {get: name => cookies()[name], put(name, value, options) { document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(value)}; path=${options.path}; SameSite=Lax; Secure; expires=${options.expires.toUTCString()}`; }, remove(name) { document.cookie = `${encodeURIComponent(name)}=; path=/; expires=${new Date(0).toUTCString()}`; }}; }
@@ -42,7 +43,18 @@ export default function Builder({itemStatCategories = [], selectedColumns = []})
                 const persisted = readBuilderPersistence({cookies: cookieValues, storage: localStorage});
                 let lists = persisted.encodedLists ? decodeBuilderLists(persisted.encodedLists) : [];
                 if (!lists.length) lists.push({name: "Untitled", variants: [createDefaultVariant("Original")]});
-                lists = await hydrateLists(lists, data.getItemFragment);
+                try { lists = await hydrateLists(lists, data.getItemFragment); }
+                catch (error) {
+                    // The encoding is still usable. Never replace it or persist an empty
+                    // fallback merely because the optional item metadata request failed.
+                    lists.sort((left, right) => left.name.localeCompare(right.name, undefined, {sensitivity: "accent"}));
+                    const [characterName, variantName] = String(persisted.selectedList || "!").split("!");
+                    const listIndex = Math.max(lists.findIndex(list => list.name === characterName), 0);
+                    const variantIndex = Math.max(lists[listIndex].variants.findIndex(variant => variant.name === variantName), 0);
+                    const columns = cookies()[`sc-${lists[listIndex].name}`] || persisted.columns;
+                    dispatch({type: "ui/patch", value: {allLists: lists, selectedListIndex: listIndex, selectedListVariantIndex: variantIndex, selectedList: lists[listIndex].variants[variantIndex], statInfo: applySelectedColumns(columns, data.getItemStatInfo), defaultStatInfo: data.getItemStatInfo, itemFragment: data.getItemFragment, itemsPerPage: persisted.itemsPerPage, initialized: true, requestStatus: "error", requestError: "Saved builder data could not be hydrated. Retry to restore item details."}});
+                    return;
+                }
                 if (cancelled) return;
                 lists.sort((left, right) => left.name.localeCompare(right.name, undefined, {sensitivity: "accent"}));
                 const [characterName, variantName] = String(persisted.selectedList || "!").split("!");
@@ -77,7 +89,8 @@ export default function Builder({itemStatCategories = [], selectedColumns = []})
     function action(value) {
         if (value.type === "variant/select" && value.listIndex !== state.selectedListIndex) {
             const characterName = state.allLists[value.listIndex].name;
-            dispatch({type: "ui/patch", value: {statInfo: applySelectedColumns(cookies()[`sc-${characterName}`], state.defaultStatInfo)}});
+            const cookieValues = cookies();
+            dispatch({type: "ui/patch", value: {statInfo: applySelectedColumns(cookieValues[`sc-${characterName}`] || cookieValues.sc2, state.defaultStatInfo)}});
         }
         dispatch(value);
     }
@@ -93,16 +106,13 @@ export default function Builder({itemStatCategories = [], selectedColumns = []})
             dispatch({type: "character/delete", fallbackVariant: createDefaultVariant("Original")});
         }
         else if (state.currentDialog === "delete-variant") dispatch({type: "variant/delete", fallbackVariant: createDefaultVariant("Original")});
-        else if (["add-character", "edit-character", "edit-variant"].includes(state.currentDialog)) {
-            const name = String(value || "").trim();
+        else if (["add-character", "edit-character", "add-variant", "edit-variant"].includes(state.currentDialog)) {
+            const validation = validateBuilderListName({name: value, mode: state.currentDialog, allLists: state.allLists, selectedListIndex: state.selectedListIndex, selectedVariantIndex: state.selectedListVariantIndex});
+            const name = validation.name;
             const character = state.allLists[state.selectedListIndex];
-            const duplicateCharacter = state.allLists.some((list, index) => list.name === name && (state.currentDialog !== "edit-character" || index !== state.selectedListIndex));
-            const duplicateVariant = character.variants.some((variant, index) => variant.name === name && (state.currentDialog !== "edit-variant" || index !== state.selectedListVariantIndex));
-            const tooMany = state.currentDialog === "add-character" && state.allLists.length >= 20000;
-            if (!/^[A-Za-z\s\d]+$/.test(name)) return dispatch({type: "ui/patch", value: {dialogError: "Invalid characters."}});
-            if (tooMany) return dispatch({type: "ui/patch", value: {dialogError: "Limit reached."}});
-            if (duplicateCharacter || duplicateVariant) return dispatch({type: "ui/patch", value: {dialogError: "Duplicate entry."}});
+            if (validation.error) return dispatch({type: "ui/patch", value: {dialogError: validation.error}});
             if (state.currentDialog === "add-character") dispatch({type: "character/add", name, variant: createDefaultVariant("Original")});
+            if (state.currentDialog === "add-variant") dispatch({type: "variant/add", listIndex: state.selectedListIndex, variant: {...selected, name}});
             if (state.currentDialog === "edit-character") {
                 const oldName = character.name;
                 const columns = cookies()[`sc-${oldName}`];
@@ -154,5 +164,5 @@ export default function Builder({itemStatCategories = [], selectedColumns = []})
     function pickItem(item, rune) { if (rune) { const charm = state.charmSelectors.join(""); dispatch({type: "rune/update", index: state.currentItemIndex, charm, runeId: RUNE_CHARM_ID, runeStats: deriveRuneCharmStats(charm)}); } else dispatch({type: "item/select", index: state.currentItemIndex, item}); close(); }
     if (state.requestStatus === "pending" && !state.initialized) return <main className="container-fluid"><p role="status">Loading Builder…</p></main>;
     if (!selected) return null;
-    return <main className="container-fluid"><div className="row"><CharacterPanel state={state} onAction={action} onDialog={openDialog} /><StatsPanel state={state} onAction={action} /></div>{state.requestError && <p role="alert" className="text-danger">{state.requestError}</p>}<EquipmentPanel state={state} totals={totals} restrictions={restrictions} statRestrictions={statRestrictions} onAction={action} onOpen={openItem} onPick={pickItem} onClose={close} />{state.currentDialog === "export" && <ImportExportDialog mode="export" value={exportValue()} onClose={close} />}{state.currentDialog === "import" && <ImportExportDialog mode="import" value={state.importModel || {input: "", lists: [], message: "", loading: false}} onChange={importChange} onClose={close} onSubmit={submitImport} />}{state.currentDialog && !["import", "export"].includes(state.currentDialog) && <BuilderListsDialog dialog={state.currentDialog} state={state} onClose={close} onSubmit={listsDialog} onColumns={short => short ? dispatch({type: "column/toggle", stat: short}) : dispatch({type: "columns/reset"})} />}</main>;
+    return <main className="container-fluid"><div className="row"><CharacterPanel state={state} onAction={action} onDialog={openDialog} /><StatsPanel state={state} onAction={action} /></div>{state.requestError && <p role="alert" className="text-danger">{state.requestError} <button type="button" className="btn btn-link p-0" onClick={() => window.location.reload()}>Retry</button></p>}<EquipmentPanel state={state} totals={totals} restrictions={restrictions} statRestrictions={statRestrictions} onAction={action} onOpen={openItem} onPick={pickItem} onClose={close} />{state.currentDialog === "export" && <ImportExportDialog mode="export" value={exportValue()} onClose={close} />}{state.currentDialog === "import" && <ImportExportDialog mode="import" value={state.importModel || {input: "", lists: [], message: "", loading: false}} onChange={importChange} onClose={close} onSubmit={submitImport} />}{state.currentDialog && !["import", "export"].includes(state.currentDialog) && <BuilderListsDialog dialog={state.currentDialog} state={state} onClose={close} onSubmit={listsDialog} onColumns={short => short ? dispatch({type: "column/toggle", stat: short}) : dispatch({type: "columns/reset"})} />}</main>;
 }

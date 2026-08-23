@@ -216,6 +216,20 @@ test("builder reducer selects equipment and clears a replaced runecharm encoding
     assert.equal(state.selectedList.items[3].id, -5);
 });
 
+// Catches the picker unlock control changing only its current-row copy or only
+// the canonical equipped item, which would leave choices permanently disabled.
+test("builder reducer unlocks the current picker item in canonical state", async function() {
+    const {builderReducer, createDefaultVariant, createInitialBuilderState} = await loadReducer();
+    const variant = createDefaultVariant("Original");
+    variant.items[0] = {id: 41, slot: 0, name: "Locked light", locked: true};
+    let state = {...createInitialBuilderState(), allLists: [{name: "Hero", variants: [variant]}], selectedList: variant};
+    state = builderReducer(state, {type: "search/open", item: variant.items[0], index: 0});
+    state = builderReducer(state, {type: "search/toggle-lock"});
+
+    assert.equal(state.selectedList.items[0].locked, false);
+    assert.equal(state.currentItem.locked, false);
+});
+
 // Catches search state leaking between slots or filtering/sorting/paging with different deployed semantics.
 test("builder reducer and selectors own item search transitions", async function() {
     const {builderReducer, createInitialBuilderState, selectFilteredItems, selectPagedItems} = await loadReducer();

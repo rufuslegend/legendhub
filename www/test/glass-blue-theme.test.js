@@ -279,12 +279,17 @@ test("Glass Blue compacts builder panels and preserves Columns label contrast", 
     assert.match(expanded,
         /\.card-header h4,\s*\.card-header \.h4\s*\{\s*font-size:\s*1\.25rem;/);
 
-    const builderPanelRule = expanded.match(
-        /body\[ng-controller=(?:"builder"|builder)\] > \.container-fluid > \.row:first-child > \.col-lg-6\s*\{([^}]*)\}/);
-    assert.ok(builderPanelRule, "missing compact Glass builder panel rule");
-    assert.match(builderPanelRule[1], /padding-right:\s*0\.5rem;/);
-    assert.match(builderPanelRule[1], /padding-left:\s*0\.5rem;/);
-    assert.match(builderPanelRule[1], /margin-bottom:\s*0\.75rem !important;/);
+    for (const selector of [
+        "body[ng-controller=builder] > .container-fluid > .row:first-child > .col-lg-6",
+        "[data-react-root=builder] > .container-fluid > .row:first-child > .col-lg-6"
+    ]) {
+        const builderPanelRules = rulesForSelector(expanded, selector);
+        assert.ok(builderPanelRules.length, `missing compact Glass builder panel rule for ${selector}`);
+        const declarations = builderPanelRules.at(-1).declarations;
+        assert.match(declarations, /padding-right:\s*0\.5rem;/);
+        assert.match(declarations, /padding-left:\s*0\.5rem;/);
+        assert.match(declarations, /margin-bottom:\s*0\.75rem !important;/);
+    }
 
     assert.match(expanded,
         /\.list-group-item-action h5\s*\{\s*color:\s*inherit;/);

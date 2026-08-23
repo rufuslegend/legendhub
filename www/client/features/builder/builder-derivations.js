@@ -61,7 +61,7 @@ export function deriveItemRestrictions({items = [], strength = 0} = {}) {
                 handCount += item.twoHanded ? 2 : 1;
             if (handCount > 3) {
                 for (let otherIndex = 0; otherIndex < items.length; ++otherIndex) {
-                    if (items[otherIndex]?.slot == 14 || items[otherIndex]?.slot == 15)
+                    if ((items[otherIndex]?.slot == 14 || items[otherIndex]?.slot == 15) && !restrictions[otherIndex].includes("twohanded"))
                         restrictions[otherIndex].push("twohanded");
                 }
                 handApplied = true;

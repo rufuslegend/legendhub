@@ -50,6 +50,8 @@ function blankItem(index) {
 function decodeLegacy(encoded) {
     const fields = encoded.split("_");
     const [name, variantName = "Original"] = fields.shift().split("!");
+    if (!/^[A-Za-z\s\d]+$/.test(name) || !/^[A-Za-z\s\d]+$/.test(variantName))
+        invalidList();
     const baseStats = {};
     for (const stat of ATTRIBUTE_NAMES) {
         const value = fields.shift();

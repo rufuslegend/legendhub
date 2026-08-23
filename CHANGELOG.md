@@ -30,6 +30,8 @@ with version 2.6.0.
 
 ### Fixed
 
+- Protected saved Builder lists when item details are temporarily unavailable, with a visible Retry action that restores normal items, faux objects, rune charms, and missing-item markers without discarding the original list.
+- Restored complete Builder list-name validation, in-picker item unlocking, accessible warning associations, and compact Character/Stats spacing in every Glass theme.
 - Updated the browser library behind interactive pages to close known HTML-handling vulnerabilities while preserving existing behavior.
 - Gave the add and details icon links descriptive names for screen-reader users across Items, Mobs, Quests, and Wiki.
 - Named the Builder character and variant selectors for screen-reader users.

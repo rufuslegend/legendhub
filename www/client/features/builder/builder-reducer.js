@@ -232,6 +232,13 @@ export function builderReducer(state, action) {
                 const item = selectedList.items[action.index];
                 item.locked = !item.locked;
             });
+        case "search/toggle-lock": {
+            const next = cloneSelected(state, function(selectedList) {
+                const item = selectedList.items[state.currentItemIndex];
+                item.locked = !item.locked;
+            });
+            return {...next, currentItem: next.selectedList.items[state.currentItemIndex]};
+        }
         case "items/toggle-lock":
             return cloneSelected(state, function(selectedList) {
                 const allLocked = selectedList.items.every(item => item.locked);
@@ -266,7 +273,10 @@ export function builderReducer(state, action) {
                 sortDir: "",
                 currentItem: action.item,
                 currentItemIndex: action.index,
-                isRuneCrafting: action.item.id === RUNE_CHARM_ID
+                isRuneCrafting: action.item.id === RUNE_CHARM_ID,
+                charmSelectors: action.item.id === RUNE_CHARM_ID
+                    ? (state.selectedList.runeCharms[RUNE_CHARM_ITEM_INDEX[action.index]] || "AAAAA").split("")
+                    : ["A", "A", "A", "A", "A"]
             };
         case "search/wield":
             return {...state, wieldSlotFilter: action.value};

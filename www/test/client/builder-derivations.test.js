@@ -48,14 +48,15 @@ test("builder derives literal equipment restrictions and warning text", async fu
         {id: 302, slot: 4, isLimited: true},
         {id: 303, slot: 5, isLimited: true},
         {id: 304, slot: 6, isLimited: true},
-        blank(7)
+        blank(7),
+        blank(15)
     ];
 
     const restrictions = deriveItemRestrictions({items, strength: 100});
 
     assert.deepEqual(restrictions, [
         ["unique"], ["unique"], ["weight", "twohanded"], ["twohanded"],
-        [], [], [], ["limited"], []
+        [], [], [], ["limited"], [], ["twohanded"]
     ]);
     assert.equal(
         getItemRestrictionText(restrictions[2], items[2]),

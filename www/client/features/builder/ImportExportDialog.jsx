@@ -18,9 +18,20 @@ export function BuilderModal({children, label, onClose, initialFocus}) {
             (initial || modal)?.focus();
         };
         focusInitial();
-        const siblings = Array.from(document.body.children).filter(element => !element.contains(modal));
-        const hidden = siblings.map(element => ({element, inert: element.inert, ariaHidden: element.getAttribute("aria-hidden")}));
+        const siblings = [];
+        let branch = modal;
+        for (let parent = modal?.parentElement; parent; parent = parent.parentElement) {
+            siblings.push(...Array.from(parent.children).filter(element => element !== branch));
+            branch = parent;
+            if (parent === document.body)
+                break;
+        }
+        const hidden = [...new Set(siblings)].map(element => ({element, inert: element.inert, ariaHidden: element.getAttribute("aria-hidden")}));
         for (const {element} of hidden) { element.inert = true; element.setAttribute("aria-hidden", "true"); }
+        function focusin(event) {
+            if (!modal?.contains(event.target))
+                focusInitial();
+        }
         function keydown(event) {
             if (event.key === "Escape") { event.preventDefault(); closeRef.current(); return; }
             if (event.key !== "Tab") return;
@@ -32,8 +43,10 @@ export function BuilderModal({children, label, onClose, initialFocus}) {
             else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
         }
         window.addEventListener("keydown", keydown);
+        document.addEventListener("focusin", focusin);
         return () => {
             window.removeEventListener("keydown", keydown);
+            document.removeEventListener("focusin", focusin);
             for (const entry of hidden) {
                 entry.element.inert = entry.inert;
                 if (entry.ariaHidden == null) entry.element.removeAttribute("aria-hidden");
@@ -54,7 +67,7 @@ function CopyField({id, label, value, onCopied}) {
         }
         catch (_error) { onCopied("Copy failed. Select the text and copy it manually."); }
     }
-    return <><h3 className="h5 mt-3">{label}</h3><div className="input-group"><input id={id} className="form-control" readOnly value={value} /><div className="input-group-append"><button className="btn btn-primary" type="button" onClick={copy}>Copy</button></div></div></>;
+    return <><h3 className="h5 mt-3">{label}</h3><div className="input-group"><input id={id} className="form-control" readOnly value={value} /><div className="input-group-append"><button className="btn btn-primary" type="button" aria-label={`Copy ${label}`} onClick={copy}>Copy</button></div></div></>;
 }
 
 export default function ImportExportDialog({mode, value, onChange, onClose, onSubmit}) {

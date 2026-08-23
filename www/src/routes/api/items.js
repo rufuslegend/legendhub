@@ -346,16 +346,10 @@ let getItemsInIds = function(ids) {
                     return;
                 }
 
-                if (results.length > 0) {
-                    let response = [];
-                    for (let i = 0; i < results.length; ++i) {
-                        response.push(new Item(results[i]));
-                    }
-                    resolve(response);
-                }
-                else {
-                    reject(new apiUtils.NotFoundError(`Items with ids (${ids}) not found.`));
-                }
+                let response = [];
+                for (let i = 0; i < results.length; ++i)
+                    response.push(new Item(results[i]));
+                resolve(response);
             });
     });
 };
