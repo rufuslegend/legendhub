@@ -480,7 +480,9 @@
 
         switch (statName) {
             case "strength":
-                if (baseStats.amulet == 0 || baseStats.hazelnut == 0)
+                if (baseStats.amulet == 0)
+                    bonus += 10;
+                if (baseStats.hazelnut == 0)
                     bonus += 10;
                 if (baseStats.longhouse == 3)
                     bonus += 5;
@@ -488,7 +490,9 @@
                     bonus += 3;
                 break;
             case "mind":
-                if (baseStats.amulet == 1 || baseStats.hazelnut == 1)
+                if (baseStats.amulet == 1)
+                    bonus += 10;
+                if (baseStats.hazelnut == 1)
                     bonus += 10;
                 if (baseStats.longhouse == 1 || baseStats.longhouse == 8)
                     bonus += 5;
@@ -498,7 +502,9 @@
                     bonus += 10;
                 break;
             case "dexterity":
-                if (baseStats.amulet == 2 || baseStats.hazelnut == 2)
+                if (baseStats.amulet == 2)
+                    bonus += 10;
+                if (baseStats.hazelnut == 2)
                     bonus += 10;
                 if (baseStats.longhouse == 10)
                     bonus += 8;
@@ -510,7 +516,9 @@
                     bonus -= 2;
                 break;
             case "constitution":
-                if (baseStats.amulet == 3 || baseStats.hazelnut == 3)
+                if (baseStats.amulet == 3)
+                    bonus += 10;
+                if (baseStats.hazelnut == 3)
                     bonus += 10;
                 if (baseStats.longhouse == 5)
                     bonus += 5;
@@ -518,7 +526,9 @@
                     bonus += 3;
                 break;
             case "perception":
-                if (baseStats.amulet == 4 || baseStats.hazelnut == 4)
+                if (baseStats.amulet == 4)
+                    bonus += 10;
+                if (baseStats.hazelnut == 4)
                     bonus += 10;
                 if (baseStats.longhouse == 11)
                     bonus += 8;
@@ -528,7 +538,9 @@
                     bonus += 3;
                 break;
             case "spirit":
-                if (baseStats.amulet == 5 || baseStats.hazelnut == 5)
+                if (baseStats.amulet == 5)
+                    bonus += 10;
+                if (baseStats.hazelnut == 5)
                     bonus += 10;
                 if (baseStats.longhouse == 0)
                     bonus += 5;

@@ -15,6 +15,12 @@ const blanks29 = "_".repeat(29);
 const blanks35 = "_".repeat(35);
 const baseStats = "0U0U0U0U0U0U";
 
+function compactItems(count, itemIndex, token) {
+    const items = Array(count).fill("_");
+    items[itemIndex] = token;
+    return items.join("");
+}
+
 const fixtures = [
     {
         label: "unversioned legacy",
@@ -34,21 +40,21 @@ const fixtures = [
     },
     {
         label: "version 2 compact",
-        encoded: `2*Two~Original~${baseStats}000000__${blanks29.slice(0, 5)}03G${blanks29.slice(8)}`,
+        encoded: `2*Two~Original~${baseStats}000000__${compactItems(29, 5, "03G")}`,
         name: "Two",
         itemId: 202,
         itemIndex: 5
     },
     {
         label: "version 3 compact",
-        encoded: `3*Three~Original~${baseStats}000000___${blanks35.slice(0, 11)}04t${blanks35.slice(14)}`,
+        encoded: `3*Three~Original~${baseStats}000000___${compactItems(35, 11, "04t")}`,
         name: "Three",
         itemId: 303,
         itemIndex: 11
     },
     {
         label: "version 4 compact",
-        encoded: `4*Four~Original~${baseStats}000000___${blanks35.slice(0, 16)}06W${blanks35.slice(19)}`,
+        encoded: `4*Four~Original~${baseStats}000000___${compactItems(35, 16, "06W")}`,
         name: "Four",
         itemId: 404,
         itemIndex: 16
@@ -125,6 +131,37 @@ test("every supported fixture upgrades to a stable version-6 round trip", async 
         assert.equal(encodeBuilderLists(roundTripped), encoded, fixture.label);
         assert.match(encoded, /^6\*/);
     }
+});
+
+// Catches symmetric encoder/decoder defects by comparing every variable-width v6 field with an independently derived literal.
+test("builder encoding emits the canonical literal v6 payload", async function() {
+    const {encodeBuilderLists} = await loadEncoding();
+    const {createDefaultVariant} = await loadReducer();
+    const variant = createDefaultVariant("Variant");
+    Object.assign(variant.baseStats, {
+        strength: 30, mind: 31, dexterity: 32,
+        constitution: 33, perception: 34, spirit: 35,
+        longhouse: 2, amulet: 3, hazelnut: 4,
+        quest_hp: 17, quest_mana: 23, quest_move: 300
+    });
+    Object.assign(variant.ksmStats, {
+        strength: -1, mind: 1, dexterity: -2,
+        constitution: 2, perception: -3, spirit: 3
+    });
+    Object.assign(variant.eraAbilities, {
+        mentalEnhancement: 2, arcaneFocus: 5, hardenedSkin: 4,
+        increasedPotential: 3, physicalEnhancement: 1, weaponFocus: 1,
+        innateRegeneration: 2, physicalEndurance: 3
+    });
+    variant.items[0] = {id: 1144, slot: 0, locked: true};
+    variant.items[3] = {id: -5, slot: 2, locked: true};
+    variant.runeCharms.charm1 = "BCDEF";
+
+    assert.equal(
+        encodeBuilderLists([{name: "Hero", variants: [variant]}]),
+        "6*Hero~Variant~0U0V0W0X0Y0Z-11-22-3323400H00N04q25431123" +
+            ".0IS__.-BCDEF_______________________________*"
+    );
 });
 
 // Catches grouping logic that drops or merges same-character variants during import/export.

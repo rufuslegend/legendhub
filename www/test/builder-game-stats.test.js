@@ -57,12 +57,14 @@ function createEncoder() {
 
 function createBuilderScope(contracts = builderContracts) {
     let builderController;
+    let builderDependencies;
     const angular = {
         module: function(moduleName) {
             assert.equal(moduleName, "legendwiki-app");
             return {
                 controller: function(controllerName, definition) {
                     assert.equal(controllerName, "builder");
+                    builderDependencies = definition.slice(0, -1);
                     builderController = definition[definition.length - 1];
                 }
             };
@@ -99,17 +101,19 @@ function createBuilderScope(contracts = builderContracts) {
             then: function() {}
         };
     };
-    builderController(
-        scope,
-        {get: function() {}},
-        http,
-        {},
-        function() {},
-        {selectShortOptions: {slot: []}},
-        createEncoder(),
-        {addCallback: function() {}},
+    const dependencies = {
+        "$scope": scope,
+        "$cookies": {get: function() {}},
+        "$http": http,
+        "$q": {},
+        "$timeout": function() {},
+        itemConstants: {selectShortOptions: {slot: []}},
+        encoder: createEncoder(),
+        exceptionService: {addCallback: function() {}},
         gameStats
-    );
+    };
+    builderController(...builderDependencies.map(name => dependencies[name]));
+    scope.registeredDependencies = builderDependencies;
     scope.statInfo = [
         "strength",
         "mind",
@@ -136,6 +140,16 @@ function createBuilderScope(contracts = builderContracts) {
 
     return scope;
 }
+
+// Catches obsolete Angular coupling after encoding moved to the ESM Builder contract.
+test("AngularJS builder registration no longer injects the legacy encoder", function() {
+    const scope = createBuilderScope();
+
+    assert.deepEqual(Array.from(scope.registeredDependencies), [
+        "$scope", "$cookies", "$http", "$q", "$timeout",
+        "itemConstants", "exceptionService", "gameStats"
+    ]);
+});
 
 // Catches rollback adapter drift where AngularJS recreates defaults instead of consuming the extracted reducer contract.
 test("AngularJS builder delegates default variants to the ESM contract", function() {
@@ -173,6 +187,18 @@ test("AngularJS builder delegates row locking to the extracted reducer", functio
 
     assert.equal(receivedAction.type, "item/toggle-lock");
     assert.equal(receivedAction.index, 2);
+});
+
+// Catches collapsing Amulet and Hazelnut into one reward when both target the same attribute.
+test("builder independently awards Amulet and Hazelnut rewards to the same attribute", function() {
+    const scope = createBuilderScope();
+    const variant = scope.getDefaultList("Original");
+    variant.baseStats.amulet = 0;
+    variant.baseStats.hazelnut = 0;
+    scope.allLists = [{name: "Hero", variants: [variant]}];
+    scope.selectedList = variant;
+
+    assert.equal(scope.getStatTotal("strength"), 23);
 });
 
 function getRestrictions(scope, statName) {

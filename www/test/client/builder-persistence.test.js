@@ -27,6 +27,24 @@ test("builder persistence gates reads on consent and preserves storage fallback 
     });
 });
 
+// Catches any legacy key bypassing its required decoder-version prefix or being skipped when newer keys are absent.
+test("builder persistence reads each deployed list-key fallback in order", async function() {
+    const {readBuilderPersistence} = await loadPersistence();
+    const cases = [
+        [{cln: "6*Current", cl2: "Two", cl1: "One", cl: "Legacy"}, "6*Current"],
+        [{cl2: "Two", cl1: "One", cl: "Legacy"}, "2*Two"],
+        [{cl1: "One", cl: "Legacy"}, "1*One"],
+        [{cl: "Legacy"}, "Legacy"],
+        [{}, null]
+    ];
+
+    for (const [storage, expected] of cases) {
+        assert.equal(readBuilderPersistence({
+            cookies: {"cookie-consent": "yes"}, storage
+        }).encodedLists, expected);
+    }
+});
+
 // Catches character column lookup that ignores its scoped cookie or loses deployed default-column behavior.
 test("builder persistence applies scoped and fallback selected columns", async function() {
     const {applySelectedColumns, readBuilderPersistence} = await loadPersistence();
@@ -71,6 +89,32 @@ test("builder persistence plan preserves current keys and exact cookie options",
             expires: new Date("2046-08-23T14:15:16.000Z")
         });
     }
+});
+
+// Catches a correct persistence plan being applied to the wrong browser APIs or leaving migrated cookies behind.
+test("builder persistence applies storage, cookie writes, and legacy removals", async function() {
+    const {applyBuilderPersistencePlan} = await loadPersistence();
+    const calls = [];
+    const plan = {
+        storage: {cln: "6*Encoded*", scl: "Hero!Tank"},
+        cookies: [{name: "ipp", value: "50", options: {path: "/"}}],
+        removeCookies: ["cl1", "scl1"]
+    };
+    applyBuilderPersistencePlan(plan, {
+        storage: {setItem: (key, value) => calls.push(["storage", key, value])},
+        cookies: {
+            put: (name, value, options) => calls.push(["put", name, value, options]),
+            get: name => name === "cl1" ? "present" : null,
+            remove: name => calls.push(["remove", name])
+        }
+    });
+
+    assert.deepEqual(calls, [
+        ["storage", "cln", "6*Encoded*"],
+        ["storage", "scl", "Hero!Tank"],
+        ["put", "ipp", "50", {path: "/"}],
+        ["remove", "cl1"]
+    ]);
 });
 
 // Catches exception or denied-consent paths that overwrite the user's recoverable local data.

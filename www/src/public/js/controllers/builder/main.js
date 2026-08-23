@@ -1,5 +1,5 @@
 (function() {
-    function builderController($scope, $cookies, $http, $q, $timeout, itemConstants, encoder, exceptionService, gameStats) {
+    function builderController($scope, $cookies, $http, $q, $timeout, itemConstants, exceptionService, gameStats) {
         var builderContracts = globalThis.legendBuilderContracts;
 
         //#region ~~~~~~~~~ INITIALIZATION ~~~~~~~~~
@@ -163,7 +163,6 @@
          * @param {number} index - The index of the list in the character list array.
          */
         var selectListByIndex = function(index, variantIndex = 0) {
-            $scope.selectedListIndex = index;
             selectListVariantByIndex(index, variantIndex);
 
         };
@@ -175,8 +174,7 @@
          * @param {number} variantIndex - The index of the variant in the variant array of the character list.
          */
         var selectListVariantByIndex = function(listIndex, variantIndex) {
-            $scope.selectedListVariantIndex = variantIndex;
-            $scope.selectedList = $scope.allLists[listIndex].variants[variantIndex];
+            applyBuilderTransition({type: "variant/select", listIndex: listIndex, variantIndex: variantIndex});
             $scope.editCharacterModel = {"name": $scope.allLists[listIndex].name};
             var list = $scope.selectedList;
 
@@ -344,8 +342,7 @@
             });
             $scope.itemsPerPage = persisted.itemsPerPage;
 
-            $scope.allLists = loadCharacterLists();
-            $scope.allLists.sort(compareLists);
+            applyBuilderTransition({type: "lists/load", lists: loadCharacterLists()});
 
             // load selected list
             var selectedListCookie = persisted.selectedList;
@@ -405,20 +402,13 @@
             return builderContracts.encodeBuilderVariant(listName, list);
         };
 
-        let compareLists = function(a, b) {
-            a = a.name.toLowerCase();
-            b = b.name.toLowerCase();
-            if (a < b) return -1;
-            if (a > b) return 1;
-            return 0;
-        };
-
         var addCharacterList = function(name) {
-            $scope.allLists.push({name: name, variants: []});
-            $scope.allLists.sort(compareLists);
-            let index = $scope.allLists.map(function(e) { return e.name; }).indexOf(name);
-            $scope.selectedListIndex = index;
-            $scope.addCharacterVariant(index);
+            applyBuilderTransition({
+                type: "character/add",
+                name: name,
+                variant: $scope.getDefaultList("Original")
+            });
+            selectListVariantByIndex($scope.selectedListIndex, $scope.selectedListVariantIndex);
         };
 
         $scope.addCharacterVariant = function(listIndex) {
@@ -432,8 +422,8 @@
                 var variantCopy = $scope.getDefaultList("Original");
             }
 
-            $scope.allLists[listIndex].variants.push(variantCopy);
-            selectListVariantByIndex(listIndex, $scope.allLists[listIndex].variants.length - 1);
+            applyBuilderTransition({type: "variant/add", listIndex: listIndex, variant: variantCopy});
+            selectListVariantByIndex($scope.selectedListIndex, $scope.selectedListVariantIndex);
         };
 
         $scope.isVariantPrimary = function() {
@@ -441,32 +431,22 @@
         };
 
         $scope.makeVariantPrimary = function() {
-            var tmp = $scope.allLists[$scope.selectedListIndex].variants[0];
-            $scope.allLists[$scope.selectedListIndex].variants[0] = $scope.allLists[$scope.selectedListIndex].variants[$scope.selectedListVariantIndex];
-            $scope.allLists[$scope.selectedListIndex].variants[$scope.selectedListVariantIndex] = tmp;
-            $scope.selectedListVariantIndex = 0;
-
+            applyBuilderTransition({type: "variant/make-primary"});
             $scope.saveClientSideData();
         };
         //#endregion
 
         //#region ~~~~~~~~~ EVENTS ~~~~~~~~~
         var applyBuilderTransition = function(action) {
-            var next = builderContracts.builderReducer({
-                allLists: $scope.allLists,
-                selectedListIndex: $scope.selectedListIndex,
-                selectedListVariantIndex: $scope.selectedListVariantIndex,
-                selectedList: $scope.selectedList,
-                currentPage: $scope.currentPage,
-                totalPages: $scope.totalPages,
-                sortStat: $scope.sortStat,
-                sortDir: $scope.sortDir
-            }, action);
-            $scope.allLists = next.allLists;
-            $scope.selectedList = next.selectedList;
-            $scope.currentPage = next.currentPage;
-            $scope.sortStat = next.sortStat;
-            $scope.sortDir = next.sortDir;
+            var state = builderContracts.createInitialBuilderState();
+            Object.keys(state).forEach(function(key) {
+                if ($scope[key] !== undefined)
+                    state[key] = $scope[key];
+            });
+            var next = builderContracts.builderReducer(state, action);
+            Object.keys(next).forEach(function(key) {
+                $scope[key] = next[key];
+            });
         };
 
         /** Event for when a different character list is chosen from the dropdown. */
@@ -481,6 +461,7 @@
 
         /** Event for when a stat is changed in the view. */
         $scope.onStatChanged = function() {
+            applyBuilderTransition({type: "stats/normalize"});
             // check stat total
             $scope.baseStatsForm.strInput.$setValidity("total", true);
             if ($scope.selectedList.baseStats) {
@@ -490,11 +471,6 @@
                     $scope.baseStatsForm.strInput.$setValidity("total", false);
                 }
 
-                if (total === 244) {
-                    $scope.selectedList.baseStats.longhouse = -1;
-                    $scope.selectedList.baseStats.amulet = -1;
-                    $scope.selectedList.baseStats.hazelnut = -1;
-                }
             }
 
             $scope.ksmStatsForm.ksmStrInput.$setValidity("balanced", true);
@@ -533,21 +509,10 @@
          */
         $scope.onRowClicked = function(index) {
             var item = $scope.selectedList.items[index];
-  
 
-            $scope.loadingModal = false;
-            $scope.searchString = "";
-            $scope.sortStat = "";
-            $scope.sortDir = "";
-            $scope.currentItem = item;
-            $scope.currentItemIndex = index;
-
-            if(item.id === $scope.runeCharmId) {
-                $scope.isRuneCrafting = true;
+            applyBuilderTransition({type: "search/open", item: item, index: index});
+            if($scope.isRuneCrafting) {
                 $scope.getCurrentRunes($scope.currentItemIndex);
-            }
-            else {
-                $scope.isRuneCrafting = false;
             }
 
             if ($scope.itemsBySlot[item.slot].length == 0) {
@@ -682,41 +647,7 @@
 
         /** Event for when the user submits the import. */
         $scope.onImportSubmitClicked = function() {
-            var lists = $scope.importModel.lists;
-            for (let i = 0; i < lists.length; ++i) {
-                if (!lists[i].exists || lists[i].overwrite) {
-                    var foundList = false;
-                    for (let j = 0; j < $scope.allLists.length; ++j) {
-                        if ($scope.allLists[j].name === lists[i].name) {
-                            foundList = true;
-                            var foundVariant = false;
-                            for (let k = 0; k < $scope.allLists[j].variants.length; ++k) {
-                                if ($scope.allLists[j].variants[k].name === lists[i].variants[0].name) {
-                                    foundVariant = true;
-                                    $scope.allLists[j].variants[k] = angular.copy(lists[i].variants[0]);
-
-                                    break;
-                                }
-                            }
-
-                            if (!foundVariant) {
-                                $scope.allLists[j].variants.push(angular.copy(lists[i].variants[0]));
-                            }
-
-                            break;
-                        }
-                    }
-
-                    if (!foundList) {
-                        $scope.allLists.push(
-                            {
-                                name: lists[i].name,
-                                variants: [angular.copy(lists[i].variants[0])]
-                            }
-                        );
-                    }
-                }
-            }
+            applyBuilderTransition({type: "lists/import", lists: $scope.importModel.lists});
 
             $scope.saveClientSideData();
             selectListVariantByIndex(
@@ -839,20 +770,14 @@
          * Event for when the previous page button is clicked in pagination.
          */
         $scope.onPreviousClicked = function() {
-            $scope.currentPage -= 1;
-            if ($scope.currentPage < 1) {
-                $scope.currentPage = 1;
-            }
+            applyBuilderTransition({type: "page/change", page: $scope.currentPage - 1});
         };
 
         /**
          * Event for when the next page button is clicked in pagination.
          */
         $scope.onNextClicked = function() {
-            $scope.currentPage += 1;
-            if ($scope.currentPage > $scope.totalPages) {
-                $scope.currentPage = $scope.totalPages;
-            }
+            applyBuilderTransition({type: "page/change", page: $scope.currentPage + 1});
         };
 
         /**
@@ -861,7 +786,7 @@
          * @param {number} num - the page number that was clicked.
          */
         $scope.onPageClicked = function(num) {
-            $scope.currentPage = num + 1;
+            applyBuilderTransition({type: "page/change", page: num + 1});
         };
 
         /**
@@ -886,25 +811,7 @@
                 return;
             }
 
-            //if the new item is not a runecharm, set that charm slot to default AAAAA
-            if($scope.selectedList.items[$scope.currentItemIndex].id === $scope.runeCharmId && item.id != $scope.runeCharmId) {
-                switch ($scope.currentItemIndex) {
-                    case 3:
-                        $scope.selectedList.runeCharms.charm1 = "AAAAA";
-                        break;
-                    case 4:
-                        $scope.selectedList.runeCharms.charm2 = "AAAAA";
-                        break;
-                    case 14:
-                        $scope.selectedList.runeCharms.charm3 = "AAAAA";
-                        break;
-                    case 15:
-                        $scope.selectedList.runeCharms.charm4 = "AAAAA";
-                        break;
-                }
-            }
-
-            $scope.selectedList.items[$scope.currentItemIndex] = angular.copy(item);
+            applyBuilderTransition({type: "item/select", index: $scope.currentItemIndex, item: item});
             $scope.saveClientSideData();
             applyItemRestrictions();
             $('#itemChoiceModal').modal('hide');
@@ -914,7 +821,7 @@
          * Event for when the text changes in the item search modal.
          */
         $scope.onSearchChange = function() {
-            $scope.currentPage = 1;
+            applyBuilderTransition({type: "search/text", value: $scope.searchString});
             $scope.filterSearchResults();
         };
 
@@ -925,19 +832,7 @@
          * @param {string} statVar - the variable name for the stat that was clicked.
          */
         $scope.onColumnHeaderClicked = function(statVar) {
-            if ($scope.sortStat != statVar) {
-                $scope.sortStat = statVar;
-                $scope.sortDir = "-";
-            }
-            else {
-                if ($scope.sortDir == "+") {
-                    $scope.sortDir = "-";
-                }
-                else {
-                    $scope.sortDir = "+";
-                }
-            }
-            $scope.filteredItems.sort($scope.dynamicSort($scope.sortDir + $scope.sortStat));
+            applyBuilderTransition({type: "search/sort", stat: statVar});
         };
 
         /**
@@ -963,7 +858,7 @@
         };
 
         $('#itemChoiceModal').on('shown.bs.modal', function() {
-            $scope.currentPage = 1;
+            applyBuilderTransition({type: "page/change", page: 1});
             $scope.filterSearchResults();
             $('#itemChoiceSearch').focus();
         });
@@ -996,7 +891,7 @@
                 }
 
 
-                $scope.allLists[$scope.selectedListIndex].name = newName
+                applyBuilderTransition({type: "character/rename", name: newName});
                 $scope.saveClientSideData();
 
                 $("#textInputModal").modal("hide");
@@ -1045,7 +940,7 @@
         /** Confirm function for the edit variant modal. */
         var editVariant = function() {
             if (validateEditVariant()) {
-                $scope.selectedList.name = $scope.textInputModalModel.input;
+                applyBuilderTransition({type: "variant/rename", name: $scope.textInputModalModel.input});
                 $scope.saveClientSideData();
 
                 $("#textInputModal").modal("hide");
@@ -1072,17 +967,11 @@
             var index = $scope.selectedListIndex;
             var cookieName = `sc-${$scope.allLists[index].name}`;
             if (index > -1) {
-                $scope.allLists.splice(index, 1);
-                if ($scope.allLists.length == 0) {
-                    addCharacterList("Untitled");
-                    selectListByIndex(0);
-                }
-                else if ($scope.selectedListIndex >= $scope.allLists.length) {
-                    selectListByIndex($scope.allLists.length - 1);
-                }
-                else {
-                    selectListByIndex($scope.selectedListIndex);
-                }
+                applyBuilderTransition({
+                    type: "character/delete",
+                    fallbackVariant: $scope.getDefaultList("Original")
+                });
+                selectListByIndex($scope.selectedListIndex);
             }
 
             //remove savedColumn cookie
@@ -1115,17 +1004,11 @@
         var deleteVariant = function() {
             var index = $scope.selectedListVariantIndex;
             if (index > -1) {
-                $scope.allLists[$scope.selectedListIndex].variants.splice(index, 1);
-
-                if ($scope.allLists[$scope.selectedListIndex].variants.length === 0) {
-                    $scope.addCharacterVariant($scope.selectedListIndex);
-                }
-                else if ($scope.selectedListVariantIndex >= $scope.allLists[$scope.selectedListIndex].variants.length) {
-                    selectListVariantByIndex($scope.selectedListIndex, $scope.allLists[$scope.selectedListIndex].variants.length - 1);
-                }
-                else {
-                    selectListVariantByIndex($scope.selectedListIndex, $scope.selectedListVariantIndex);
-                }
+                applyBuilderTransition({
+                    type: "variant/delete",
+                    fallbackVariant: $scope.getDefaultList("Original")
+                });
+                selectListVariantByIndex($scope.selectedListIndex, $scope.selectedListVariantIndex);
             }
         };
 
@@ -1256,41 +1139,14 @@
         /** Update runecraft charms. */
         $scope.runeCraftCharms = function() {
             var cslot = $scope.currentItemIndex;
-            var charmSlot = undefined;
-
-            switch (cslot) {
-                case 3:
-                    charmSlot = "charm1";
-                    break;
-                case 4:
-                    charmSlot = "charm2";
-                    break;
-                case 14:
-                    charmSlot = "charm3";
-                    break;
-                case 15:
-                    charmSlot = "charm4";
-                    break;
-                default:
-                    break;
-            }
-
-
-            if(charmSlot) {
-                $scope.selectedList.runeCharms[charmSlot] = "";
-                for(var i = 0; i < $scope.charmSelectors.length; ++i) {
-                    $scope.selectedList.runeCharms[charmSlot] += $scope.charmSelectors[i];
-                }
-
-                var runeStats = applyRunecharmStats($scope.selectedList.runeCharms[charmSlot]);
-                for (const [stat, num] of Object.entries(runeStats)) {
-                    $scope.selectedList.items[cslot][stat] = num;
-                }
-                
-                var name = runeStats.charmName.substring(0, runeStats.charmName.length-1);          
-                $scope.selectedList.items[cslot].name = "Runecharm (" + name + ")";
-                $scope.selectedList.items[cslot].id = $scope.runeCharmId;
-            }
+            var charm = $scope.charmSelectors.join("");
+            applyBuilderTransition({
+                type: "rune/update",
+                index: cslot,
+                charm: charm,
+                runeId: $scope.runeCharmId,
+                runeStats: applyRunecharmStats(charm)
+            });
 
             $scope.saveClientSideData();
         };
@@ -1336,33 +1192,15 @@
         
         /** swaps isRuneCrafting for modal hiding purposes **/
         $scope.runeCraftButtonClick = function() {
-               $scope.isRuneCrafting = !$scope.isRuneCrafting;
+               applyBuilderTransition({type: "rune/toggle-mode"});
                $scope.getCurrentRunes($scope.currentItemIndex);
         };
 
         /** updates charm selectors with current charm string for that slot index*/
         $scope.getCurrentRunes = function(index) {
-            var charmStr = "";
-            switch (index) {
-                case 3:
-                    charmStr = $scope.selectedList.runeCharms.charm1;
-                    break;
-                case 4:
-                    charmStr = $scope.selectedList.runeCharms.charm2;
-                    break;
-                case 14:
-                    charmStr = $scope.selectedList.runeCharms.charm3;
-                    break;
-                case 15:
-                    charmStr = $scope.selectedList.runeCharms.charm4;
-                    break;
-                default:
-                    break;
-            }
-            
-            for(var i = 0; i < $scope.charmSelectors.length; ++i) {
-                $scope.charmSelectors[i] = charmStr[i];
-            }
+            $scope.charmSelectors = builderContracts.selectRuneCharms({
+                selectedList: $scope.selectedList
+            }, index);
         };
 
         /** Applies item restrictions. */
@@ -1530,52 +1368,16 @@
         };
 
         $scope.filterSearchResults = function() {
-            let items = $scope.itemsBySlot[$scope.currentItem.slot];
-            if (items) {
-                let filteredItems = items.slice(0);
-                let i = filteredItems.length;
-                var operators = /\<|\>|\=/;
-
-                while (i--) {
-                    var filteredBySearch = true;
-                    if($scope.searchString.includes('=') || $scope.searchString.includes('>') || $scope.searchString.includes('<')) {
-                      var strings = $scope.searchString.split(',');
-                      var isFiltered = [strings.length];
-                      for (var s = 0;s < strings.length; ++s) {
-                        var compare = strings[s].match(operators);
-                        if(compare) {
-                            isFiltered[s] = filterByStats(compare, filteredItems[i]);
-                        }
-                      }
-
-                      filteredBySearch = isFiltered.includes(true);
-                    }
-                    else {
-                        filteredBySearch = $scope.searchString && !filteredItems[i].name.toLowerCase().includes($scope.searchString.toLowerCase()); 
-                    }
-
-                    let filteredByWield = false;
-                    if ($scope.currentItem.slot == 14 || $scope.currentItem.slot == 15) {
-                        if ($scope.wieldSlotFilter == 1 && filteredItems[i].realSlot != 14) {
-                            filteredByWield = true;
-                         }
-                         else if ($scope.wieldSlotFilter == 2 && filteredItems[i].realSlot != 15) {
-                             filteredByWield = true;
-                        }
-                        else if ($scope.wieldSlotFilter == 3 && filteredItems[i].realSlot != 10) {
-                            filteredByWield = true;
-                        }
-                     }
-                    if (filteredBySearch || filteredByWield) {
-                        filteredItems.splice(i, 1);
-                    }
-                }
-
-                $scope.filteredItems = filteredItems;
-            }
-            else {
-                $scope.filteredItems = items;
-            }
+            applyBuilderTransition({type: "search/wield", value: $scope.wieldSlotFilter});
+            $scope.filteredItems = builderContracts.selectFilteredItems({
+                itemsBySlot: $scope.itemsBySlot,
+                currentItem: $scope.currentItem,
+                searchString: $scope.searchString,
+                wieldSlotFilter: $scope.wieldSlotFilter,
+                statInfo: $scope.statInfo,
+                sortStat: $scope.sortStat,
+                sortDir: $scope.sortDir
+            });
 
         };
 
@@ -1635,32 +1437,17 @@
         $scope.toggleColumn = function(statShort) {
             if (!$scope.statInfo)
                 return;
-
-            for (let i = 0; i < $scope.statInfo.length; ++i) {
-                if ($scope.statInfo[i].short === statShort) {
-                    $scope.statInfo[i].showColumn = !$scope.statInfo[i].showColumn;
-                    $scope.saveClientSideData();
-                    return;
-                }
-            }
+            applyBuilderTransition({type: "column/toggle", stat: statShort});
+            $scope.saveClientSideData();
         };
 
         $scope.resetColumns = function() {
-            for (let i = 0; i < $scope.statInfo.length; ++i) {
-                $scope.statInfo[i].showColumn = $scope.statInfo[i].showColumnDefault;
-            }
-
+            applyBuilderTransition({type: "columns/reset"});
             $scope.saveClientSideData();
         };
 
         $scope.resetFilters = function() {
-            for (var i = 0; i < $scope.defaultStatInfo.length; ++i) {
-                for (var j = 0; j < $scope.statInfo.length; ++j) {
-                    if ($scope.defaultStatInfo[i].var === $scope.statInfo[j].var) {
-                        $scope.statInfo[j].filter = $scope.defaultStatInfo[i].filter;
-                    }
-                }
-            }
+            applyBuilderTransition({type: "filters/reset"});
         };
 
         $scope.getNumberArray = function(num) {
@@ -1681,5 +1468,5 @@
 
     angular
         .module("legendwiki-app")
-        .controller('builder', ["$scope", "$cookies", "$http", "$q", "$timeout", "itemConstants", "encoder", "exceptionService", "gameStats", builderController]);
+        .controller('builder', ["$scope", "$cookies", "$http", "$q", "$timeout", "itemConstants", "exceptionService", "gameStats", builderController]);
 })();
