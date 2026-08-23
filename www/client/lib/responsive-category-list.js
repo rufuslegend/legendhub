@@ -25,6 +25,7 @@ function initializeResponsiveCategoryLists(root = document) {
             categoryList.classList.add("active");
             document.body.classList.add("modal-open");
             open.setAttribute("aria-expanded", "true");
+            close.focus();
         }
 
         open.addEventListener("click", openCategoryList);

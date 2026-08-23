@@ -177,15 +177,16 @@ for (const pageUnderTest of pages) {
         const categoryList = page.locator(`#${pageUnderTest.heading.toLowerCase()}-categories`);
         await expect(open).toHaveAttribute("aria-controls", await categoryList.getAttribute("id"));
         await expect(open).toHaveAttribute("aria-expanded", "false");
-
         await open.focus();
         await page.keyboard.press("Enter");
         await expect(categoryList).toHaveClass(/(^|\s)active(\s|$)/);
         await expect(open).toHaveAttribute("aria-expanded", "true");
 
         const close = categoryList.getByRole("button", {name: `Close ${pageUnderTest.categoryLabel.toLowerCase()}`});
-        await close.focus();
+        const category = categoryList.getByRole("link", {name: pageUnderTest.categoryName, exact: true});
         await expect(close).toBeFocused();
+        await page.keyboard.press("Tab");
+        await expect(category).toBeFocused();
         await page.keyboard.press("Escape");
         await expect(categoryList).not.toHaveClass(/(^|\s)active(\s|$)/);
         await expect(open).toHaveAttribute("aria-expanded", "false");
@@ -193,7 +194,12 @@ for (const pageUnderTest of pages) {
 
         await page.keyboard.press("Space");
         await expect(categoryList).toHaveClass(/(^|\s)active(\s|$)/);
-        await close.click();
+        await expect(close).toBeFocused();
+        await page.keyboard.press("Tab");
+        await expect(category).toBeFocused();
+        await page.keyboard.press("Shift+Tab");
+        await expect(close).toBeFocused();
+        await page.keyboard.press("Enter");
         await expect(categoryList).not.toHaveClass(/(^|\s)active(\s|$)/);
         await expect(open).toBeFocused();
     });

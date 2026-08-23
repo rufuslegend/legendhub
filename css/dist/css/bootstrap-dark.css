@@ -9245,7 +9245,7 @@ blockquote {
     left: 0;
     visibility: visible;
     background-color: rgba(0, 0, 0, 0.5);
-    transition: all 150ms linear;
+    transition: left 150ms linear, background-color 150ms linear;
   }
 }
 @media (max-width: 767px) and (prefers-reduced-motion: reduce) {
