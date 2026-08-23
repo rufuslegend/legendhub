@@ -11,6 +11,7 @@ export default defineConfig({
         rolldownOptions: {
             input: {
                 account: resolve(import.meta.dirname, "client/entries/account.jsx"),
+                items: resolve(import.meta.dirname, "client/entries/items.jsx"),
                 "item-editor": resolve(import.meta.dirname, "client/entries/item-editor.jsx"),
                 "mob-editor": resolve(import.meta.dirname, "client/entries/mob-editor.jsx"),
                 "quest-editor": resolve(import.meta.dirname, "client/entries/quest-editor.jsx"),

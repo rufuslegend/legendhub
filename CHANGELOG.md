@@ -13,6 +13,7 @@ with version 2.6.0.
 
 ### Changed
 
+- Made item search, filters, visible columns, sorting, and paging respond without the legacy browser framework while keeping shareable search links and saved column choices.
 - Made item editing safer and easier to use with a keyboard, including searchable mob and quest choices, save feedback, and a safe Markdown preview.
 - Made mob, quest, and wiki editing safer and easier to use with a keyboard, with live save feedback and sanitized Markdown previews.
 - Fixed restoring older mob, quest, and wiki revisions so renewed sign-ins and return links work correctly.

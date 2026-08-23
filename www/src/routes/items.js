@@ -10,14 +10,14 @@ router.get(["/", "/index.html"], async function(req, res, next) {
     let getItemsQuery = `
     ${itemApi.fragment}
 
-    {
+    query ItemPage($searchString: String, $filterString: String, $sortBy: String, $sortAsc: Boolean, $page: Int!, $rows: Int!) {
         getItems(
-        ${req.query.search === undefined ? '' : `searchString:"${req.query.search}",`}
-        ${req.query.filters === undefined ? '' : `filterString:"${req.query.filters}",`}
-        ${req.query.sortBy === undefined ? '' : `sortBy:"${req.query.sortBy}",`}
-        ${req.query.sortAsc === undefined ? '' : `sortAsc:${req.query.sortAsc},`}
-        page:${page}
-        rows:${rows}) {
+        searchString: $searchString,
+        filterString: $filterString,
+        sortBy: $sortBy,
+        sortAsc: $sortAsc,
+        page: $page,
+        rows: $rows) {
             moreResults
             items {
                 ... ItemAll
@@ -46,7 +46,14 @@ router.get(["/", "/index.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(getItemsQuery);
+        var data = await apiUtils.postAsync(getItemsQuery, undefined, {
+            searchString: req.query.search ?? null,
+            filterString: req.query.filters ?? null,
+            sortBy: req.query.sortBy ?? null,
+            sortAsc: req.query.sortAsc === undefined ? null : req.query.sortAsc === "true",
+            page,
+            rows
+        });
     }
     catch (e) {
         return next(e);

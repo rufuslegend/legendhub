@@ -114,13 +114,17 @@ async function expectNoWcagViolations(page) {
     expect(results.violations).toEqual([]);
 }
 
-async function expectKeyboardModal(page, trigger, dialog) {
+async function expectKeyboardModal(page, trigger, dialog, controlled = true) {
     await trigger.focus();
     await expect(trigger).toBeFocused();
     await page.keyboard.press("Enter");
 
     await expect(dialog).toBeVisible();
     await expect(dialog).toBeFocused();
+    if (controlled) {
+        await expect(trigger).toHaveAttribute("aria-expanded", "true");
+        expect(await trigger.evaluate(element => element.closest("[inert]") != null)).toBe(true);
+    }
     await page.keyboard.press("Tab");
     await expect(dialog.getByRole("button", { name: "Close" })).toBeFocused();
     await expectNoWcagViolations(page);
@@ -128,6 +132,10 @@ async function expectKeyboardModal(page, trigger, dialog) {
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
     await expect(trigger).toBeFocused();
+    if (controlled) {
+        await expect(trigger).toHaveAttribute("aria-expanded", "false");
+        expect(await trigger.evaluate(element => element.closest("[inert]") == null)).toBe(true);
+    }
 }
 
 test.beforeEach(async function({ context, page }) {
@@ -263,6 +271,46 @@ test("Items Filters dialog supports keyboard access without detectable violation
     );
 });
 
+test("Items Columns dialog keeps the selected option focused while changing visibility", async function({ page }) {
+    const itemsPage = pages.find(function(pageUnderTest) { return pageUnderTest.name === "items"; });
+    await expectHighContrastPage(page, itemsPage);
+    await page.getByRole("button", {name: "Columns", exact: true}).click();
+    const option = page.getByRole("button", {name: "Name", exact: true});
+    await option.click();
+    await expect(option).toBeFocused();
+});
+
+// Catches a pending search that prevents a newer query, or an older response that overwrites it.
+test("Items search aborts obsolete requests and renders only the newest results", async function({ page }) {
+    const itemsPage = pages.find(function(pageUnderTest) { return pageUnderTest.name === "items"; });
+    let count = 0;
+    let releaseFirst;
+    const firstStarted = new Promise(resolve => { releaseFirst = resolve; });
+    let started;
+    const firstRequest = new Promise(resolve => { started = resolve; });
+    await page.route(`${baseUrl}/api`, async function(route) {
+        count++;
+        if (count === 1) {
+            started();
+            await firstStarted;
+            await route.fulfill({contentType: "application/json", body: JSON.stringify({data: {getItems: {items: [{id: 11, name: "Old result"}], moreResults: false}}})});
+            return;
+        }
+        await route.fulfill({contentType: "application/json", body: JSON.stringify({data: {getItems: {items: [{id: 12, name: "New result"}], moreResults: false}}})});
+    });
+    await expectHighContrastPage(page, itemsPage);
+    const input = page.getByPlaceholder("Search by name...");
+    await input.fill("old");
+    await input.press("Enter");
+    await firstRequest;
+    await input.fill("new");
+    await page.getByRole("button", {name: /Search/}).click();
+    await expect.poll(() => count).toBe(2);
+    releaseFirst();
+    await expect(page.getByText("New result", {exact: true})).toBeVisible();
+    await expect(page.getByText("Old result", {exact: true})).toHaveCount(0);
+});
+
 test("Builder collapsible section supports keyboard access without detectable violations", async function({ page }) {
     const builderPage = pages.find(function(pageUnderTest) {
         return pageUnderTest.name === "builder";
@@ -299,6 +347,7 @@ test("Builder Columns dialog supports keyboard access without detectable violati
     await expectKeyboardModal(
         page,
         page.getByRole("button", { name: "Hide/Show Columns", exact: true }).filter({ visible: true }),
-        page.getByRole("dialog", { name: "Select visible columns" })
+        page.getByRole("dialog", { name: "Select visible columns" }),
+        false
     );
 });
