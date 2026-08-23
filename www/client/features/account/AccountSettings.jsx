@@ -1,4 +1,4 @@
-import {useReducer} from "react";
+import {useEffect, useReducer, useRef} from "react";
 import {
     EDITABLE_NOTIFICATION_FIELDS,
     updateNotificationSettings,
@@ -23,9 +23,35 @@ const passwordErrors = {
     network: "Password could not be saved. Try again."
 };
 
+function useEditorFocus(status, error) {
+    const triggerRef = useRef(null);
+    const firstFieldRef = useRef(null);
+    const pendingRef = useRef(null);
+    const errorRef = useRef(null);
+    const previousStatus = useRef(status);
+    const previousError = useRef(error);
+
+    useEffect(function() {
+        if (status === "viewing" && previousStatus.current !== "viewing")
+            triggerRef.current?.focus();
+        else if (status === "editing" && previousStatus.current === "viewing")
+            firstFieldRef.current?.focus();
+        else if (status === "saving" && previousStatus.current !== "saving")
+            pendingRef.current?.focus();
+        else if (error && error !== previousError.current)
+            errorRef.current?.focus();
+
+        previousStatus.current = status;
+        previousError.current = error;
+    }, [status, error]);
+
+    return {triggerRef, firstFieldRef, pendingRef, errorRef};
+}
+
 function NotificationEditor({editor, dispatch}) {
     const editing = editor.status !== "viewing";
     const saving = editor.status === "saving";
+    const focus = useEditorFocus(editor.status, editor.error);
 
     async function save(event) {
         event.preventDefault();
@@ -49,6 +75,7 @@ function NotificationEditor({editor, dispatch}) {
             <div className={editing ? "col-12 col-lg-8" : "offset-4 col-4"}>
                 {!editing && (
                     <button
+                        ref={focus.triggerRef}
                         type="button"
                         className="btn btn-default btn-block"
                         aria-label="Edit notification settings"
@@ -70,6 +97,9 @@ function NotificationEditor({editor, dispatch}) {
                                                 </label>
                                             </div>
                                             <select
+                                                ref={field === EDITABLE_NOTIFICATION_FIELDS[0]
+                                                    ? focus.firstFieldRef
+                                                    : undefined}
                                                 className="custom-select"
                                                 id={`${field}Input`}
                                                 value={String(editor.draft[field])}
@@ -89,8 +119,25 @@ function NotificationEditor({editor, dispatch}) {
                             })}
                         </div>
                         {editor.error === "network" && (
-                            <p className="text-danger" role="alert" aria-live="assertive">
+                            <p
+                                ref={focus.errorRef}
+                                className="text-danger"
+                                role="alert"
+                                aria-live="assertive"
+                                tabIndex="-1"
+                            >
                                 Notification settings could not be saved. Try again.
+                            </p>
+                        )}
+                        {saving && (
+                            <p
+                                ref={focus.pendingRef}
+                                className="text-info"
+                                role="status"
+                                aria-label="Saving notification settings"
+                                tabIndex="-1"
+                            >
+                                Saving notification settings…
                             </p>
                         )}
                         <div className="row">
@@ -128,6 +175,7 @@ function NotificationEditor({editor, dispatch}) {
 function PasswordEditor({editor, dispatch}) {
     const editing = editor.status !== "viewing";
     const saving = editor.status === "saving";
+    const focus = useEditorFocus(editor.status, editor.error);
 
     async function save(event) {
         event.preventDefault();
@@ -163,6 +211,7 @@ function PasswordEditor({editor, dispatch}) {
             <div className={editing ? "col-12 col-lg-8" : "offset-4 col-4"}>
                 {!editing && (
                     <button
+                        ref={focus.triggerRef}
                         type="button"
                         className="btn btn-default btn-block"
                         aria-label="Change password"
@@ -178,6 +227,7 @@ function PasswordEditor({editor, dispatch}) {
                                 <div className="form-group">
                                     <label htmlFor="oldPasswordInput">Current Password</label>
                                     <input
+                                        ref={focus.firstFieldRef}
                                         type="password"
                                         className="form-control"
                                         id="oldPasswordInput"
@@ -218,8 +268,26 @@ function PasswordEditor({editor, dispatch}) {
                             </div>
                         </div>
                         {editor.error && (
-                            <p className="text-danger" id="password-error" role="alert" aria-live="assertive">
+                            <p
+                                ref={focus.errorRef}
+                                className="text-danger"
+                                id="password-error"
+                                role="alert"
+                                aria-live="assertive"
+                                tabIndex="-1"
+                            >
                                 {passwordErrors[editor.error]}
+                            </p>
+                        )}
+                        {saving && (
+                            <p
+                                ref={focus.pendingRef}
+                                className="text-info"
+                                role="status"
+                                aria-label="Saving password"
+                                tabIndex="-1"
+                            >
+                                Saving password…
                             </p>
                         )}
                         <div className="row">

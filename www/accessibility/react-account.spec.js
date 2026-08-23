@@ -3,6 +3,7 @@
 const Module = require("node:module");
 const AxeBuilder = require("@axe-core/playwright").default;
 const {expect, test} = require("@playwright/test");
+const {Kind, parse} = require("graphql");
 const fulfillLocalBrowserScript = require("./support/local-browser-scripts");
 const publicPageData = require("./support/public-page-data");
 
@@ -127,6 +128,57 @@ async function pressButton(page, name) {
     return button;
 }
 
+function graphqlType(node) {
+    if (node.kind === Kind.NON_NULL_TYPE)
+        return `${graphqlType(node.type)}!`;
+    if (node.kind === Kind.LIST_TYPE)
+        return `[${graphqlType(node.type)}]`;
+    return node.name.value;
+}
+
+function responseSelection(selectionSet) {
+    const names = selectionSet.selections.map(function(field) {
+        expect(field.kind).toBe(Kind.FIELD);
+        expect(field.alias).toBeUndefined();
+        expect(field.arguments).toHaveLength(0);
+        return field.name.value;
+    });
+    expect(new Set(names).size).toBe(names.length);
+    return Object.fromEntries(selectionSet.selections.map(function(field) {
+        return [
+            field.name.value,
+            field.selectionSet ? responseSelection(field.selectionSet) : true
+        ];
+    }));
+}
+
+function expectGraphqlContract(body, expected) {
+    const document = parse(body.query);
+    expect(document.definitions).toHaveLength(1);
+    const operation = document.definitions[0];
+    expect(operation.kind).toBe(Kind.OPERATION_DEFINITION);
+    expect(operation.operation).toBe("mutation");
+    expect(operation.name.value).toBe(expected.operationName);
+    expect(operation.variableDefinitions).toHaveLength(
+        Object.keys(expected.variableDefinitions).length
+    );
+    expect(Object.fromEntries(operation.variableDefinitions.map(function(definition) {
+        return [definition.variable.name.value, graphqlType(definition.type)];
+    }))).toEqual(expected.variableDefinitions);
+    expect(operation.selectionSet.selections).toHaveLength(1);
+
+    const mutation = operation.selectionSet.selections[0];
+    expect(mutation.kind).toBe(Kind.FIELD);
+    expect(mutation.alias).toBeUndefined();
+    expect(mutation.name.value).toBe(expected.fieldName);
+    expect(mutation.arguments).toHaveLength(Object.keys(expected.arguments).length);
+    expect(Object.fromEntries(mutation.arguments.map(function(argument) {
+        expect(argument.value.kind).toBe(Kind.VARIABLE);
+        return [argument.name.value, argument.value.name.value];
+    }))).toEqual(expected.arguments);
+    expect(responseSelection(mutation.selectionSet)).toEqual(expected.response);
+}
+
 test("account notification settings mount from props and save once with keyboard controls", async function({context, page}) {
     let releaseSave;
     let notificationRequests = 0;
@@ -138,6 +190,8 @@ test("account notification settings mount from props and save once with keyboard
 
         notificationRequests += 1;
         submittedBody = body;
+        if (notificationRequests === 3)
+            return route.abort("failed");
         if (notificationRequests === 1) {
             await new Promise(function(resolve) {
                 releaseSave = resolve;
@@ -165,6 +219,9 @@ test("account notification settings mount from props and save once with keyboard
         return JSON.parse(element.textContent).notificationSettings;
     })).toEqual(routeNotificationSettings);
     await pressButton(page, "Edit notification settings");
+    expect(await page.evaluate(function() {
+        return {tagName: document.activeElement.tagName, id: document.activeElement.id};
+    })).toEqual({tagName: "SELECT", id: "itemAddedInput"});
 
     const expectedLabels = [
         ["Item Added", "On"],
@@ -181,7 +238,9 @@ test("account notification settings mount from props and save once with keyboard
 
     await page.getByLabel("Item Updated", {exact: true}).selectOption("true");
     await pressButton(page, "Cancel notification changes");
+    await expect(page.getByRole("button", {name: "Edit notification settings"})).toBeFocused();
     await pressButton(page, "Edit notification settings");
+    await expect(page.getByLabel("Item Added", {exact: true})).toBeFocused();
     await expect(page.getByLabel("Item Updated", {exact: true})).toHaveValue("false");
 
     await page.getByLabel("Item Updated", {exact: true}).selectOption("true");
@@ -190,10 +249,38 @@ test("account notification settings mount from props and save once with keyboard
     const savingButton = page.getByRole("button", {name: "Saving notification settings"});
     await expect(savingButton).toBeDisabled();
     await expect(savingButton).toBeVisible();
-    await savingButton.press("Enter");
+    await expect(page.getByRole("status", {name: "Saving notification settings"})).toBeFocused();
+    await page.locator('section[aria-labelledby="notifications-heading"] form')
+        .evaluate(function(form) { form.requestSubmit(); });
     expect(notificationRequests).toBe(1);
 
-    expect(submittedBody.query).toContain("mutation UpdateNotificationSettings");
+    expectGraphqlContract(submittedBody, {
+        operationName: "UpdateNotificationSettings",
+        fieldName: "updateNotificationSettings",
+        variableDefinitions: {
+            authToken: "String!",
+            itemAdded: "Boolean!",
+            itemUpdated: "Boolean!",
+            mobAdded: "Boolean!",
+            mobUpdated: "Boolean!",
+            questAdded: "Boolean!",
+            questUpdated: "Boolean!",
+            wikiPageAdded: "Boolean!",
+            wikiPageUpdated: "Boolean!"
+        },
+        arguments: {
+            authToken: "authToken",
+            itemAdded: "itemAdded",
+            itemUpdated: "itemUpdated",
+            mobAdded: "mobAdded",
+            mobUpdated: "mobUpdated",
+            questAdded: "questAdded",
+            questUpdated: "questUpdated",
+            wikiPageAdded: "wikiPageAdded",
+            wikiPageUpdated: "wikiPageUpdated"
+        },
+        response: {token: true, expires: true}
+    });
     expect(submittedBody.variables).toEqual({
         authToken: "initial-token",
         ...editableNotifications,
@@ -202,6 +289,7 @@ test("account notification settings mount from props and save once with keyboard
 
     releaseSave();
     await expect(page.getByRole("button", {name: "Edit notification settings"})).toBeVisible();
+    await expect(page.getByRole("button", {name: "Edit notification settings"})).toBeFocused();
     await expect.poll(async function() {
         const cookies = await context.cookies(baseUrl);
         return cookies.find(function(cookie) { return cookie.name === "loginToken"; })?.value;
@@ -211,16 +299,27 @@ test("account notification settings mount from props and save once with keyboard
         document.cookie = "cookie-consent=; Path=/; Max-Age=0; SameSite=Lax; Secure";
     });
     await pressButton(page, "Edit notification settings");
+    await expect(page.getByLabel("Item Added", {exact: true})).toBeFocused();
     await page.getByLabel("Item Added", {exact: true}).selectOption("false");
     await pressButton(page, "Save notification settings");
     await expect.poll(function() { return notificationRequests; }).toBe(2);
     await expect(page.getByRole("button", {name: "Edit notification settings"})).toBeVisible();
+    await expect(page.getByRole("button", {name: "Edit notification settings"})).toBeFocused();
     const cookies = await context.cookies(baseUrl);
     expect(cookies.find(function(cookie) { return cookie.name === "loginToken"; })?.value)
         .toBe("notification-renewed-token");
+
+    await pressButton(page, "Edit notification settings");
+    await page.getByLabel("Mob Added", {exact: true}).selectOption("true");
+    await pressButton(page, "Save notification settings");
+    await expect(page.getByRole("alert"))
+        .toHaveText("Notification settings could not be saved. Try again.");
+    await expect(page.getByRole("alert")).toBeFocused();
+    expect(notificationRequests).toBe(3);
 });
 
 test("password editing announces validation and request failures before saving a renewed token", async function({context, page}) {
+    let releasePasswordSave;
     let passwordRequests = 0;
     const submittedBodies = [];
     const responses = [
@@ -235,6 +334,11 @@ test("password editing announces validation and request failures before saving a
         passwordRequests += 1;
         submittedBodies.push(body);
         const response = responses.shift();
+        if (passwordRequests === 1) {
+            await new Promise(function(resolve) {
+                releasePasswordSave = resolve;
+            });
+        }
         if (response.networkError)
             return route.abort("failed");
         return route.fulfill({
@@ -252,22 +356,55 @@ test("password editing announces validation and request failures before saving a
 
     await openAccount(page);
     await pressButton(page, "Change password");
+    expect(await page.evaluate(function() {
+        return {tagName: document.activeElement.tagName, id: document.activeElement.id};
+    })).toEqual({tagName: "INPUT", id: "oldPasswordInput"});
     await page.getByLabel("Current Password", {exact: true}).fill("discard-me");
     await pressButton(page, "Cancel password changes");
+    await expect(page.getByRole("button", {name: "Change password"})).toBeFocused();
     await pressButton(page, "Change password");
+    await expect(page.getByLabel("Current Password", {exact: true})).toBeFocused();
     await expect(page.getByLabel("Current Password", {exact: true})).toHaveValue("");
     await page.getByLabel("Current Password", {exact: true}).fill("current-secret");
     await page.getByLabel("New Password", {exact: true}).fill("new-secret");
     await page.getByLabel("Confirm Password", {exact: true}).fill("different-secret");
     await pressButton(page, "Save password");
     await expect(page.getByRole("alert")).toHaveText("New passwords do not match.");
+    await expect(page.getByRole("alert")).toBeFocused();
     expect(passwordRequests).toBe(0);
 
     await page.getByLabel("Confirm Password", {exact: true}).fill("new-secret");
     await pressButton(page, "Save password");
-    await expect(page.getByRole("alert")).toHaveText("Current password is invalid.");
+    await expect.poll(function() { return passwordRequests; }).toBe(1);
+    const savingButton = page.getByRole("button", {name: "Saving password"});
+    await expect(savingButton).toBeVisible();
+    await expect(savingButton).toBeDisabled();
+    await expect(page.getByRole("status", {name: "Saving password"})).toBeFocused();
+    await page.locator('section[aria-labelledby="password-heading"] form')
+        .evaluate(function(form) { form.requestSubmit(); });
     expect(passwordRequests).toBe(1);
-    expect(submittedBodies[0].query).toContain("mutation UpdatePassword");
+    releasePasswordSave();
+    await expect(page.getByRole("alert")).toHaveText("Current password is invalid.");
+    await expect(page.getByRole("alert")).toBeFocused();
+    expect(passwordRequests).toBe(1);
+    expectGraphqlContract(submittedBodies[0], {
+        operationName: "UpdatePassword",
+        fieldName: "updatePassword",
+        variableDefinitions: {
+            authToken: "String!",
+            currentPassword: "String!",
+            newPassword: "String!"
+        },
+        arguments: {
+            authToken: "authToken",
+            currentPassword: "currentPassword",
+            newPassword: "newPassword"
+        },
+        response: {
+            success: true,
+            tokenRenewal: {token: true, expires: true}
+        }
+    });
     expect(submittedBodies[0].variables).toEqual({
         authToken: "initial-token",
         currentPassword: "current-secret",
@@ -276,10 +413,12 @@ test("password editing announces validation and request failures before saving a
 
     await pressButton(page, "Save password");
     await expect(page.getByRole("alert")).toHaveText("Password could not be saved. Try again.");
+    await expect(page.getByRole("alert")).toBeFocused();
     expect(passwordRequests).toBe(2);
 
     await pressButton(page, "Save password");
     await expect(page.getByRole("button", {name: "Change password"})).toBeVisible();
+    await expect(page.getByRole("button", {name: "Change password"})).toBeFocused();
     expect(passwordRequests).toBe(3);
     expect(submittedBodies[2].variables).toEqual({
         authToken: "invalid-password-renewal",
@@ -290,6 +429,44 @@ test("password editing announces validation and request failures before saving a
         const cookies = await context.cookies(baseUrl);
         return cookies.find(function(cookie) { return cookie.name === "loginToken"; })?.value;
     }).toBe("password-renewed-token");
+});
+
+test("account page error boundary offers an accessible reload action", async function({page}) {
+    let documentRequests = 0;
+    page.on("request", function(request) {
+        if (request.isNavigationRequest() && request.url() === `${baseUrl}/account/`)
+            documentRequests += 1;
+    });
+    await page.addInitScript(function() {
+        const originalParse = JSON.parse;
+        JSON.parse = function(text, reviver) {
+            const value = originalParse.call(this, text, reviver);
+            if (value && typeof value === "object" && value.notificationSettings) {
+                value.notificationSettings = new Proxy(value.notificationSettings, {
+                    ownKeys: function() {
+                        throw new Error("Injected account render failure");
+                    }
+                });
+            }
+            return value;
+        };
+    });
+
+    const response = await page.goto(`${baseUrl}/account/`);
+    expect(response).not.toBeNull();
+    expect(response.status()).toBe(200);
+    const fallback = page.getByRole("alert");
+    await expect(fallback.getByRole("heading", {name: "Something went wrong"})).toBeVisible();
+    await expect(fallback).toContainText("We could not load this page. Reload and try again.");
+    const reloadButton = fallback.getByRole("button", {name: "Reload page"});
+    await expect(reloadButton).toBeVisible();
+
+    await Promise.all([
+        page.waitForEvent("load"),
+        reloadButton.click()
+    ]);
+    await expect.poll(function() { return documentRequests; }).toBe(2);
+    await expect(page.getByRole("alert").getByRole("button", {name: "Reload page"})).toBeVisible();
 });
 
 test("mounted account settings have no detectable WCAG A or AA violations in High Contrast", async function({page}) {

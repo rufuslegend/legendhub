@@ -13,7 +13,7 @@ with version 2.6.0.
 
 ### Changed
 
-- Made notification preferences and password changes easier to use with a keyboard and clearer to assistive technology, while preserving the existing account settings and secure sign-in renewal.
+- Made notification preferences and password changes easier to use with a keyboard, kept focus in the active account workflow, and improved clarity for assistive technology while preserving secure sign-in renewal.
 - Compacted the Builder by making KSM swaps, quest modifiers, and era abilities collapsible with directional indicators, aligning era abilities in three responsive columns, and allowing the Character card to size to its contents.
 - Restyled item-search filters to match the compact, responsive column picker with clearer themed category surfaces.
 - Kept column and filter choices comfortably dark in the Dark and Solarized Dark themes.

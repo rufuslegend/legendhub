@@ -33,6 +33,8 @@ function snapshotFiles(directory, relativeDirectory = "", excluded = () => false
 test("clean client build emits the account bundle without changing public assets", (t) => {
     fs.rmSync(buildRoot, {recursive: true, force: true});
     t.after(() => fs.rmSync(buildRoot, {recursive: true, force: true}));
+    fs.mkdirSync(buildRoot, {recursive: true});
+    fs.writeFileSync(path.join(buildRoot, "foundation.js"), "stale foundation bundle\n");
     const before = snapshotFiles(wwwRoot, "", (relativePath) =>
         relativePath === "node_modules" ||
         relativePath === path.join("src", "public", "build"));
