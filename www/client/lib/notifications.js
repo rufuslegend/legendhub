@@ -32,13 +32,32 @@ export function initializeNotifications({
         return;
 
     const content = document.querySelector("#notification-window");
+    let activeTrigger;
+
+    function hidePopover() {
+        if (!activeTrigger)
+            return;
+        jquery(activeTrigger).popover("hide");
+        activeTrigger = undefined;
+    }
+
+    function togglePopover(trigger) {
+        if (activeTrigger === trigger) {
+            hidePopover();
+            return;
+        }
+        hidePopover();
+        jquery(trigger).popover("show");
+        activeTrigger = trigger;
+    }
+
     if (content && jquery) {
         for (const trigger of document.querySelectorAll("[data-notification-popover]")) {
             jquery(trigger).popover({
                 container: "header",
                 content: content.innerHTML,
                 html: true,
-                trigger: "focus",
+                trigger: "manual",
                 placement: "bottom",
                 sanitize: false
             });
@@ -46,9 +65,19 @@ export function initializeNotifications({
     }
 
     document.addEventListener("click", async function(event) {
-        const button = event.target.closest("[data-mark-notifications-read]");
-        if (!button)
+        const trigger = event.target.closest("[data-notification-popover]");
+        if (trigger && jquery) {
+            event.preventDefault();
+            togglePopover(trigger);
             return;
+        }
+
+        const button = event.target.closest("[data-mark-notifications-read]");
+        if (!button) {
+            if (!event.target.closest(".popover"))
+                hidePopover();
+            return;
+        }
 
         event.preventDefault();
         try {

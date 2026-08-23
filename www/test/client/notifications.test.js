@@ -64,6 +64,7 @@ test("native notifications initialize the existing popovers and reload only afte
     });
 
     assert.equal(popoverCalls.length, 2);
+    assert.equal(popoverCalls[0].options.trigger, "manual");
     assert.equal(popoverCalls[0].options.content, "<button data-mark-notifications-read>Mark all as read</button>");
     assert.equal(document.clickMarkRead(), true);
     await new Promise(setImmediate);
