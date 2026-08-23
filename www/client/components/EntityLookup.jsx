@@ -1,5 +1,32 @@
 import {useEffect, useRef, useState} from "react";
 
+function makeBackgroundInert(dialog) {
+    if (!dialog)
+        return function() {};
+    const previousInert = new Map();
+    let child = dialog;
+    while (child.parentElement) {
+        const parent = child.parentElement;
+        for (const sibling of parent.children) {
+            if (sibling === child || previousInert.has(sibling))
+                continue;
+            previousInert.set(sibling, sibling.getAttribute("inert"));
+            sibling.setAttribute("inert", "");
+        }
+        if (parent === document.body)
+            break;
+        child = parent;
+    }
+    return function() {
+        for (const [element, inert] of previousInert) {
+            if (inert == null)
+                element.removeAttribute("inert");
+            else
+                element.setAttribute("inert", inert);
+        }
+    };
+}
+
 export default function EntityLookup({
     addHref,
     addLabel,
@@ -26,6 +53,7 @@ export default function EntityLookup({
     useEffect(function() {
         if (!open)
             return undefined;
+        const restoreBackground = makeBackgroundInert(dialogRef.current);
         function keepFocusInDialog(event) {
             if (event.key === "Escape")
                 close();
@@ -52,6 +80,7 @@ export default function EntityLookup({
         return function() {
             window.removeEventListener("keydown", keepFocusInDialog);
             abortRef.current?.abort();
+            restoreBackground();
         };
     }, [open]);
 
