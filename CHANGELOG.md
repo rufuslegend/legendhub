@@ -19,6 +19,8 @@ with version 2.6.0.
 - Made notification and item-search actions keyboard-accessible, prevented duplicate mark-read requests, and added an Items recovery prompt when the interactive page cannot render.
 - Restored the Builder's compact equipment table, hover and keyboard-focus explanations for red warning cells, and scrolling inside long item-selection windows.
 - Restored centered Builder equipment headers and totals at both ends of the table.
+- Kept long Columns and Filters windows scrollable on small screens without moving the page behind them.
+- Restored centered, compact Builder equipment rows and kept slot and total values on one line.
 
 ## [2.9.0] - 2026-08-22
 

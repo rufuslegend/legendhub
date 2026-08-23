@@ -152,14 +152,14 @@ function EquipmentTotalRow({
           />
         </button>
       </td>
-      <th scope="row">Total</th>
+      <th scope="row" className="font-weight-normal text-nowrap">Total</th>
       {stats.map((stat) => {
         const warnings = statRestrictions[stat.var] || [];
         const warning = statRestrictionText(warnings);
         return (
           <WarningCell
             key={stat.var}
-            className={warnings.length ? "bg-danger" : ""}
+            className={`${warnings.length ? "bg-danger " : ""}text-nowrap`}
             warning={warning}
           >
             {totals[stat.var] ?? ""}
@@ -232,14 +232,12 @@ export default function EquipmentPanel({
               return (
                 <tr key={index}>
                   <WarningCell
-                    className={
-                      warning ? "bg-danger text-white" : "bg-primary text-white"
-                    }
+                    className={`${warning ? "bg-danger" : "bg-primary"} text-white text-center text-nowrap py-md-1 py-lg-0`}
                     warning={warning}
                   >
                     {SLOT_LABELS[item.slot] || item.slot}
                   </WarningCell>
-                  <td>
+                  <td className="text-center">
                     <button
                       type="button"
                       className="btn btn-link p-0 builder-table-action builder-lock-action"
@@ -255,7 +253,7 @@ export default function EquipmentPanel({
                       />
                     </button>
                   </td>
-                  <th scope="row">
+                  <th scope="row" className="py-1 py-lg-0">
                     <button
                       type="button"
                       className="btn btn-link p-0 builder-table-action"

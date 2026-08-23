@@ -4,6 +4,7 @@
     "description": "A resource hub for LegendMUD",
     "scripts": {
         "build:client": "vite build",
+        "audit:ui-parity": "node scripts/audit-ui-parity.js",
         "dev:client": "vite build --watch",
         "pretest": "npm run build:client",
         "test": "node --test",

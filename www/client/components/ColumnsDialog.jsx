@@ -5,6 +5,8 @@ function useDialog(open, dialogRef, triggerRef, onClose) {
     useEffect(function() {
         if (!open)
             return undefined;
+        const bodyHadModalOpen = document.body.classList.contains("modal-open");
+        document.body.classList.add("modal-open");
         const previousInert = new Map();
         let child = dialogRef.current;
         while (child?.parentElement) {
@@ -51,6 +53,8 @@ function useDialog(open, dialogRef, triggerRef, onClose) {
                 else
                     element.setAttribute("inert", inert);
             }
+            if (!bodyHadModalOpen)
+                document.body.classList.remove("modal-open");
             setTimeout(function() { triggerRef.current?.focus(); });
         };
     }, [open, onClose, dialogRef, triggerRef]);
@@ -61,7 +65,7 @@ export default function ColumnsDialog({categories, onClose, onReset, onToggle, o
     useDialog(open, dialogRef, triggerRef, onClose);
     if (!open)
         return null;
-    return <div ref={dialogRef} id="columnsModal" className="modal d-block" tabIndex="-1" role="dialog" aria-modal="true" aria-labelledby="columnsModalLabel">
+    return <div ref={dialogRef} id="columnsModal" className="modal d-block show" tabIndex="-1" role="dialog" aria-modal="true" aria-labelledby="columnsModalLabel">
         <div className="modal-dialog modal-xl" role="document"><div className="modal-content">
             <div className="modal-header"><h2 className="modal-title h5" id="columnsModalLabel">Select visible columns</h2><button type="button" className="close" aria-label="Close" onClick={onClose}><span aria-hidden="true">&times;</span></button></div>
             <div className="modal-body">

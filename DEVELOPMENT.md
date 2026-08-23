@@ -168,6 +168,26 @@ and Filters dialogs, and a Builder collapsible section and Columns dialog.
 Authenticated pages and editor states still require separate automated
 coverage and manual testing.
 
+## Cross-deployment UI parity audit
+
+The UI parity audit compares mapped shared-shell, Builder, Item Search, and
+Columns/Filters dialog styles and geometry across all nine themes at desktop
+and mobile sizes. Run it from `www` with two deployments that contain
+equivalent data:
+
+```sh
+npm run audit:ui-parity -- \
+  --reference-base-url=https://www.legendhub.org \
+  --candidate-base-url=https://legendhub.dunwichmass.com
+```
+
+The command prints consolidated JSON findings. Repeated differences caused by
+one missing class are grouped with their affected themes and viewports. It
+exits successfully after reporting by default; add `--fail-on-diff` when a
+clean comparison is required. This operator audit complements the deterministic
+local Playwright regressions and is not part of `npm test` or
+`npm run test:a11y` because remote availability and deployment data vary.
+
 Validate the registry publishing and Compose tooling from the repository root:
 
 ```sh

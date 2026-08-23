@@ -532,6 +532,36 @@ test("Items React dialogs retain their interaction classes in every supported th
     }
 });
 
+// Catches either shared Item Search picker clipping its lower choices or
+// sending wheel input to the page behind the modal on a short mobile screen.
+test("Items Columns and Filters scroll as modals and lock the page behind them", async function({page}) {
+    await page.setViewportSize({width: 375, height: 420});
+    const itemsPage = pages.find(pageUnderTest => pageUnderTest.name === "items");
+    await expectHighContrastPage(page, itemsPage);
+
+    for (const name of ["Columns", "Filters"]) {
+        const iconClass = name === "Columns" ? ".fa-columns" : ".fa-filter";
+        const trigger = page.locator("button", {has: page.locator(iconClass)});
+        await trigger.click();
+        const dialogName = name === "Columns" ? "Select visible columns" : "Select search filters";
+        const dialog = page.getByRole("dialog", {name: dialogName});
+        await expect(dialog).toBeVisible();
+        await expect(page.locator("body")).toHaveClass(/modal-open/);
+        await expect(dialog).toHaveCSS("overflow-y", "auto");
+        expect(await dialog.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+
+        const pageScroll = await page.evaluate(() => scrollY);
+        await dialog.locator(".modal-content").hover({position: {x: 10, y: 200}});
+        await page.mouse.wheel(0, 500);
+        await expect.poll(() => dialog.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+        expect(await page.evaluate(() => scrollY)).toBe(pageScroll);
+
+        await dialog.getByRole("button", {name: "Close", exact: true}).click();
+        await expect(page.locator("body")).not.toHaveClass(/modal-open/);
+        await expect(trigger).toBeFocused();
+    }
+});
+
 test("Builder collapsible section supports keyboard access without detectable violations", async function({ page }) {
     const builderPage = pages.find(function(pageUnderTest) {
         return pageUnderTest.name === "builder";

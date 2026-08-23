@@ -234,6 +234,49 @@ test("Builder centers repeated equipment headers and totals", async function({pa
     expect(bottomTotalAlignment).toEqual(["center", "center", "center", "center", "center", "center", "center", "center", "center", "center", "center", "center"]);
 });
 
+// Catches the React body rows dropping the legacy compact padding, centered
+// slot/lock presentation, or non-wrapping slot and total values.
+test("Builder equipment body rows preserve legacy alignment wrapping and density", async function({context, page}) {
+    await context.addCookies([{name: "theme", value: "glass-blue", url: baseUrl}]);
+    await page.setViewportSize({width: 1280, height: 720});
+    await page.goto(`${baseUrl}/builder/`);
+    const table = equipmentTable(page);
+    const totalRow = table.locator("tbody tr").first();
+    const itemRow = table.locator("tbody tr").nth(1);
+    const slotCell = itemRow.locator("th, td").nth(0);
+    const lockCell = itemRow.locator("th, td").nth(1);
+    const nameCell = itemRow.locator("th, td").nth(2);
+    const statButton = itemRow.getByRole("button", {name: "Choose Limited light by Strength", exact: true});
+    const totalLabel = totalRow.getByRole("rowheader", {name: "Total", exact: true});
+    const totalStat = totalRow.locator("th, td").nth(3);
+
+    expect(await slotCell.evaluate(element => {
+        const style = getComputedStyle(element);
+        return {textAlign: style.textAlign, whiteSpace: style.whiteSpace, paddingTop: style.paddingTop, paddingBottom: style.paddingBottom};
+    })).toEqual({textAlign: "center", whiteSpace: "nowrap", paddingTop: "0px", paddingBottom: "0px"});
+    await expect(lockCell).toHaveCSS("text-align", "center");
+    expect(await nameCell.evaluate(element => {
+        const style = getComputedStyle(element);
+        return {paddingTop: style.paddingTop, paddingBottom: style.paddingBottom};
+    })).toEqual({paddingTop: "0px", paddingBottom: "0px"});
+    expect(await statButton.evaluate(element => {
+        const style = getComputedStyle(element);
+        return {textAlign: style.textAlign, paddingTop: style.paddingTop, paddingBottom: style.paddingBottom};
+    })).toEqual({textAlign: "center", paddingTop: "0px", paddingBottom: "0px"});
+    await expect(totalStat).toHaveCSS("white-space", "nowrap");
+    await expect(totalLabel).toHaveCSS("font-weight", "400");
+
+    await page.setViewportSize({width: 375, height: 667});
+    expect(await nameCell.evaluate(element => {
+        const style = getComputedStyle(element);
+        return {paddingTop: style.paddingTop, paddingBottom: style.paddingBottom};
+    })).toEqual({paddingTop: "4px", paddingBottom: "4px"});
+    expect(await statButton.evaluate(element => {
+        const style = getComputedStyle(element);
+        return {paddingTop: style.paddingTop, paddingBottom: style.paddingBottom};
+    })).toEqual({paddingTop: "4px", paddingBottom: "4px"});
+});
+
 // Catches the Glass theme turning compact equipment-table actions into
 // rounded, bordered buttons inside already-bordered cells.
 test("Builder Glass table actions stay visually integrated and keyboard visible", async function({context, page}) {
@@ -352,6 +395,31 @@ test("Builder picker scrolls within the viewport and locks the page behind it", 
 
     await dialog.getByRole("button", {name: "Close", exact: true}).click();
     await expect(page.locator("body")).not.toHaveClass(/modal-open/);
+});
+
+// Catches the shared Builder Columns picker clipping lower choices or
+// scrolling the document behind it on a short mobile screen.
+test("Builder Columns scrolls as a modal and locks the page behind it", async function({page}) {
+    await page.setViewportSize({width: 375, height: 420});
+    await page.goto(`${baseUrl}/builder/`);
+    const trigger = page.getByRole("button", {name: "Hide/Show Columns", exact: true}).filter({visible: true});
+    await trigger.click();
+
+    const dialog = page.getByRole("dialog", {name: "Select visible columns"});
+    await expect(dialog).toBeVisible();
+    await expect(page.locator("body")).toHaveClass(/modal-open/);
+    await expect(dialog).toHaveCSS("overflow-y", "auto");
+    expect(await dialog.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+
+    const pageScroll = await page.evaluate(() => scrollY);
+    await dialog.locator(".modal-content").hover({position: {x: 10, y: 200}});
+    await page.mouse.wheel(0, 500);
+    await expect.poll(() => dialog.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => scrollY)).toBe(pageScroll);
+
+    await dialog.getByRole("button", {name: "Close", exact: true}).click();
+    await expect(page.locator("body")).not.toHaveClass(/modal-open/);
+    await expect(trigger).toBeFocused();
 });
 
 // Catches hydration that loses representative normal, faux, missing, or rune
@@ -629,7 +697,7 @@ test("Builder renders literal totals, modifiers, abilities, and associated warni
     let tooltip = page.getByRole("tooltip");
     await expect(tooltip).toHaveText("You need 120 strength to wield this. You do not have enough hands to hold this item.");
     await expect(heavyCell).toHaveAttribute("aria-describedby", await tooltip.getAttribute("id"));
-    await page.mouse.move(0, 0);
+    await page.locator(".navbar-brand").hover();
     await expect(tooltip).toHaveCount(0);
     await heavyCell.focus();
     tooltip = page.getByRole("tooltip");
