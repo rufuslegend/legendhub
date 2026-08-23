@@ -62,7 +62,7 @@ async function totalFor(page, shortName) {
     const headers = (await equipmentTable(page).locator("thead").first().getByRole("columnheader").allTextContents()).map(value => value.trim());
     const column = headers.indexOf(shortName);
     expect(column).toBeGreaterThan(-1);
-    return equipmentTable(page).locator("tbody tr").first().locator("td").nth(column).innerText();
+    return equipmentTable(page).locator("tbody tr").first().locator("th, td").nth(column).innerText();
 }
 let baseUrl;
 let restorePostAsync;
@@ -178,6 +178,28 @@ test("Builder preserves persisted characters, variants, totals, panels, and expo
     await expect(page.getByRole("button", {name: "Export", exact: true})).toBeFocused();
 });
 
+// Catches the long equipment table losing its repeated footer navigation or
+// making a stat value clickable only through a non-semantic table-cell handler.
+test("Builder equipment footer repeats totals and stat cells use real controls", async function({page}) {
+    await page.goto(`${baseUrl}/builder/`);
+    const table = equipmentTable(page);
+    await expect(table).toBeVisible();
+    const expectedHeaders = ["Slot", "Lock", "Name", "Str", "Hit", "Dam", "HP", "Ma", "Mv", "AC", "Rent", "Light"];
+    expect((await table.locator("thead").getByRole("columnheader").allTextContents()).map(value => value.trim())).toEqual(expectedHeaders);
+    const footer = table.locator("tfoot");
+    await expect(footer).toBeVisible();
+    await expect(footer.getByRole("row").first()).toHaveClass(/bg-dark text-white/);
+    expect((await footer.getByRole("columnheader").allTextContents()).map(value => value.trim())).toEqual(expectedHeaders);
+    await expect(footer.getByRole("rowheader", {name: "Total", exact: true})).toBeVisible();
+    await expect(footer.getByRole("row").nth(1).locator("th, td").nth(3)).toContainText("104");
+
+    const itemRow = table.locator("tbody tr").nth(1);
+    const strengthCell = itemRow.locator("td").nth(2);
+    await expect(strengthCell).toHaveRole("cell");
+    await strengthCell.getByRole("button", {name: "Choose Limited light by Strength", exact: true}).click();
+    await expect(page.getByRole("dialog", {name: "Choose Item"})).toBeVisible();
+});
+
 // Catches a React dialog that only looks modal: keyboard users must stay in it,
 // close it with Escape, and return to the control that opened it.
 test("Builder dialogs contain focus and restore their trigger", async function({page}) {
@@ -287,6 +309,11 @@ test("Builder picker selects schema-shaped normal, faux, wield, and rune choices
     await page.getByLabel("Variant", {exact: true}).selectOption("0");
     await rows.nth(17).getByRole("button", {name: "Massive greatsword", exact: true}).click();
     dialog = page.getByRole("dialog", {name: "Choose Item"});
+    await dialog.getByLabel("Slot Filter").selectOption("1");
+    const resultTable = dialog.locator("table.mt-3");
+    await expect(resultTable.getByRole("link", {name: "Open details for Balanced blade in a new tab", exact: true})).toHaveAttribute("href", "/items/details.html?id=61");
+    await expect(dialog.getByRole("button", {name: "Offhand focus", exact: true})).toHaveCount(0);
+    await expect(dialog.getByRole("button", {name: "Defender shield", exact: true})).toHaveCount(0);
     await dialog.getByLabel("Slot Filter").selectOption("2");
     await expect(dialog.getByRole("button", {name: "Offhand focus", exact: true})).toBeVisible();
     await expect(dialog.getByRole("button", {name: "Balanced blade", exact: true})).toHaveCount(0);
@@ -474,6 +501,7 @@ test("Builder preserves global and per-character columns across lifecycle change
         {name: "sc-Hero", value: "Name-Str-Hit", url: baseUrl}
     ]);
     await page.goto(`${baseUrl}/builder/`);
+    await expect.poll(async () => (await context.cookies()).find(cookie => cookie.name === "sc-Hero")?.value).toBe("Name-Str-Hit-");
     await page.getByRole("button", {name: "Hide/Show Columns", exact: true}).click();
     let dialog = page.getByRole("dialog", {name: "Select visible columns"});
     await expect(dialog.getByLabel("Strength", {exact: true})).toBeChecked();
@@ -500,6 +528,21 @@ test("Builder preserves global and per-character columns across lifecycle change
     await page.getByRole("button", {name: "Delete Character", exact: true}).click();
     await page.getByRole("dialog", {name: "Are you sure?"}).getByRole("button", {name: "Yes", exact: true}).click();
     await expect.poll(async () => (await context.cookies()).find(cookie => cookie.name === "sc-Ranger")).toBeUndefined();
+    await expect(page.getByLabel("Character", {exact: true})).toHaveValue("0");
+    await page.getByRole("button", {name: "Hide/Show Columns", exact: true}).click();
+    dialog = page.getByRole("dialog", {name: "Select visible columns"});
+    await expect(dialog.getByLabel("Strength", {exact: true})).toBeChecked();
+    await expect(dialog.getByLabel("Hit", {exact: true})).toBeChecked();
+    await expect(dialog.getByLabel("Hit Points", {exact: true})).not.toBeChecked();
+    await page.keyboard.press("Escape");
+    await expect.poll(async () => (await context.cookies()).find(cookie => cookie.name === "sc-Hero")?.value).toBe("Name-Str-Hit-");
+    await page.reload();
+    await page.getByRole("button", {name: "Hide/Show Columns", exact: true}).click();
+    dialog = page.getByRole("dialog", {name: "Select visible columns"});
+    await expect(dialog.getByLabel("Strength", {exact: true})).toBeChecked();
+    await expect(dialog.getByLabel("Hit", {exact: true})).toBeChecked();
+    await expect(dialog.getByLabel("Hit Points", {exact: true})).not.toBeChecked();
+    await expect.poll(async () => (await context.cookies()).find(cookie => cookie.name === "sc-Hero")?.value).toBe("Name-Str-Hit-");
 });
 
 // Catches responsive grouping, glass spacing, caret state, or reduced-motion
@@ -509,6 +552,7 @@ test("Builder controls and collapsible layout remain responsive in every theme",
     for (const theme of themes) {
         await context.addCookies([{name: "theme", value: theme, url: baseUrl}]);
         await page.emulateMedia({reducedMotion: "reduce"});
+        const geometry = {};
         for (const viewport of [{width: 1280, height: 800}, {width: 375, height: 812}]) {
             await page.setViewportSize(viewport);
             await page.goto(`${baseUrl}/builder/`);
@@ -530,6 +574,50 @@ test("Builder controls and collapsible layout remain responsive in every theme",
                 expect(Math.abs(character.x - stats.x)).toBeLessThan(2);
                 expect(stats.y).toBeGreaterThan(character.y + character.height - 2);
             }
+            const characterCard = await page.locator("main > .row > section").first().locator(".card").boundingBox();
+            const actions = page.getByRole("group", {name: "Character Options"});
+            const actionBox = await actions.boundingBox();
+            const actionButtons = await actions.getByRole("button").evaluateAll(buttons => buttons.map(button => {
+                const box = button.getBoundingClientRect();
+                return {x: box.x, y: box.y, width: box.width, height: box.height};
+            }));
+            expect(characterCard).not.toBeNull();
+            expect(actionBox).not.toBeNull();
+            expect(actionButtons).toHaveLength(4);
+            geometry[viewport.width] = {characterCard, actionBox};
+            if (viewport.width >= 768) {
+                expect(actionBox.height).toBeLessThan(70);
+                expect(actionButtons.every(button => Math.abs(button.y - actionButtons[0].y) < 2)).toBe(true);
+                expect(actionButtons.every(button => Math.abs(button.width - actionButtons[0].width) < 2)).toBe(true);
+                expect(Math.abs(
+                    actionButtons[0].x - actionBox.x -
+                    (actionBox.x + actionBox.width - actionButtons.at(-1).x - actionButtons.at(-1).width)
+                )).toBeLessThan(2);
+            }
+            else {
+                expect(actionBox.height).toBeGreaterThan(120);
+                expect(actionButtons.every(button => Math.abs(button.x - actionButtons[0].x) < 2)).toBe(true);
+                expect(actionButtons.every(button => Math.abs(button.height - actionBox.height / 4) < 2)).toBe(true);
+            }
+            await page.getByRole("button", {name: "Era Abilities", exact: true}).click();
+            const eraColumns = page.locator("#eraAbilities > div");
+            await expect(eraColumns).toHaveCount(3);
+            const eraBoxes = await eraColumns.evaluateAll(columns => columns.map(column => {
+                const box = column.getBoundingClientRect();
+                const cells = column.querySelector("tbody tr").children;
+                const key = cells[0].getBoundingClientRect();
+                const value = cells[1].getBoundingClientRect();
+                return {x: box.x, y: box.y, width: box.width, keyWidth: key.width, valueWidth: value.width};
+            }));
+            expect(eraBoxes.every(box => Math.abs(box.keyWidth / (box.keyWidth + box.valueWidth) - 0.7) < 0.03)).toBe(true);
+            if (viewport.width >= 768) {
+                expect(eraBoxes.every(box => Math.abs(box.y - eraBoxes[0].y) < 2)).toBe(true);
+                expect(eraBoxes[1].x).toBeGreaterThan(eraBoxes[0].x + eraBoxes[0].width - 2);
+            }
+            else {
+                expect(eraBoxes.every(box => Math.abs(box.x - eraBoxes[0].x) < 2)).toBe(true);
+                expect(eraBoxes[1].y).toBeGreaterThan(eraBoxes[0].y);
+            }
             const toggle = page.getByRole("button", {name: "KSM Swap/Quest Mods", exact: true});
             await expect(toggle).toHaveClass(/collapsed/);
             await expect(toggle.locator(".collapse-caret")).toHaveCSS("transition-duration", "0s");
@@ -544,5 +632,9 @@ test("Builder controls and collapsible layout remain responsive in every theme",
                 expect(spacing.marginBottom).toBeCloseTo(spacing.rootFontSize * 0.75, 1);
             }
         }
+        expect(geometry[1280].characterCard.width).toBeGreaterThan(600);
+        expect(geometry[1280].characterCard.height).toBeLessThan(260);
+        expect(geometry[375].characterCard.width).toBeGreaterThan(340);
+        expect(geometry[375].characterCard.height).toBeGreaterThan(geometry[1280].characterCard.height + 100);
     }
 });

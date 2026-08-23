@@ -102,7 +102,13 @@ export default function Builder({itemStatCategories = [], selectedColumns = []})
         if (typing) return dispatch({type: "ui/patch", value: {dialogName: value}});
         if (state.currentDialog === "clear") dispatch({type: "items/clear-unlocked"});
         else if (state.currentDialog === "delete-character") {
-            cookieStore().remove(`sc-${state.allLists[state.selectedListIndex].name}`);
+            const deletedCharacter = state.allLists[state.selectedListIndex].name;
+            const remainingCharacters = state.allLists.filter((_list, index) => index !== state.selectedListIndex);
+            const fallbackIndex = Math.min(state.selectedListIndex, remainingCharacters.length - 1);
+            const fallbackCharacter = remainingCharacters[fallbackIndex]?.name || "Untitled";
+            const cookieValues = cookies();
+            dispatch({type: "ui/patch", value: {statInfo: applySelectedColumns(cookieValues[`sc-${fallbackCharacter}`] || cookieValues.sc2, state.defaultStatInfo)}});
+            cookieStore().remove(`sc-${deletedCharacter}`);
             dispatch({type: "character/delete", fallbackVariant: createDefaultVariant("Original")});
         }
         else if (state.currentDialog === "delete-variant") dispatch({type: "variant/delete", fallbackVariant: createDefaultVariant("Original")});

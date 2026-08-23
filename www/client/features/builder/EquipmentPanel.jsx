@@ -85,6 +85,68 @@ function DetailsLink({ item }) {
   ) : null;
 }
 
+function EquipmentHeaderRow({ stats, className = "" }) {
+  return (
+    <tr className={className}>
+      <th scope="col">Slot</th>
+      <th scope="col">Lock</th>
+      <th scope="col">Name</th>
+      {stats.map((stat) => (
+        <th key={stat.var} scope="col" title={stat.display}>
+          {stat.short}
+        </th>
+      ))}
+    </tr>
+  );
+}
+
+function EquipmentTotalRow({
+  stats,
+  totals,
+  statRestrictions,
+  onToggleLocks,
+  showWarnings,
+}) {
+  return (
+    <tr className="bg-secondary text-white">
+      <td />
+      <td>
+        <button
+          type="button"
+          className="btn btn-link p-0"
+          aria-label="Toggle all item locks"
+          onClick={onToggleLocks}
+        >
+          Lock
+        </button>
+      </td>
+      <th scope="row">Total</th>
+      {stats.map((stat) => {
+        const warnings = statRestrictions[stat.var] || [];
+        const warningId = `builder-stat-warning-${stat.var}`;
+        return (
+          <td
+            key={stat.var}
+            className={warnings.length ? "bg-danger" : ""}
+            aria-describedby={warnings.length ? warningId : undefined}
+          >
+            {totals[stat.var] ?? ""}
+            {showWarnings && warnings.length > 0 && (
+              <span
+                id={warningId}
+                className="d-block small"
+                role="alert"
+              >
+                {statRestrictionText(warnings)}
+              </span>
+            )}
+          </td>
+        );
+      })}
+    </tr>
+  );
+}
+
 export default function EquipmentPanel({
   state,
   totals,
@@ -127,56 +189,16 @@ export default function EquipmentPanel({
       <div className="table-responsive">
         <table className="table table-striped table-hover table-sm table-bordered">
           <thead className="thead-dark">
-            <tr>
-              <th scope="col">Slot</th>
-              <th scope="col">Lock</th>
-              <th scope="col">Name</th>
-              {stats.map((stat) => (
-                <th key={stat.var} title={stat.display}>
-                  {stat.short}
-                </th>
-              ))}
-            </tr>
+            <EquipmentHeaderRow stats={stats} />
           </thead>
           <tbody>
-            <tr className="bg-secondary text-white">
-              <td />
-              <td>
-                <button
-                  type="button"
-                  className="btn btn-link p-0"
-                  aria-label="Toggle all item locks"
-                  onClick={() => onAction({ type: "items/toggle-lock" })}
-                >
-                  Lock
-                </button>
-              </td>
-              <td>Total</td>
-              {stats.map((stat) => (
-                <td
-                  key={stat.var}
-                  className={
-                    statRestrictions[stat.var]?.length ? "bg-danger" : ""
-                  }
-                  aria-describedby={
-                    statRestrictions[stat.var]?.length
-                      ? `builder-stat-warning-${stat.var}`
-                      : undefined
-                  }
-                >
-                  {totals[stat.var] ?? ""}
-                  {statRestrictions[stat.var]?.length > 0 && (
-                    <span
-                      id={`builder-stat-warning-${stat.var}`}
-                      className="d-block small"
-                      role="alert"
-                    >
-                      {statRestrictionText(statRestrictions[stat.var])}
-                    </span>
-                  )}
-                </td>
-              ))}
-            </tr>
+            <EquipmentTotalRow
+              stats={stats}
+              totals={totals}
+              statRestrictions={statRestrictions}
+              onToggleLocks={() => onAction({ type: "items/toggle-lock" })}
+              showWarnings
+            />
             {state.selectedList.items.map((item, index) => {
               const warning = getItemRestrictionText(
                 restrictions[index],
@@ -226,14 +248,31 @@ export default function EquipmentPanel({
                     <DetailsLink item={item} />
                   </th>
                   {stats.map((stat) => (
-                    <td key={stat.var} onClick={() => onOpen(index)}>
-                      {displayValue(item, stat)}
+                    <td key={stat.var} className="p-0">
+                      <button
+                        type="button"
+                        className="btn btn-link btn-block rounded-0 px-1 py-1 py-lg-0"
+                        aria-label={`Choose ${item.name || "empty item"} by ${stat.display}`}
+                        onClick={() => onOpen(index)}
+                      >
+                        {displayValue(item, stat)}
+                      </button>
                     </td>
                   ))}
                 </tr>
               );
             })}
           </tbody>
+          <tfoot>
+            <EquipmentHeaderRow stats={stats} className="bg-dark text-white" />
+            <EquipmentTotalRow
+              stats={stats}
+              totals={totals}
+              statRestrictions={statRestrictions}
+              onToggleLocks={() => onAction({ type: "items/toggle-lock" })}
+              showWarnings={false}
+            />
+          </tfoot>
         </table>
       </div>
       {current && (
