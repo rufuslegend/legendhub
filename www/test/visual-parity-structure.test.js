@@ -27,6 +27,7 @@ function snapshot(theme, overrides = {}) {
 }
 
 function capturePage(selector, element) {
+    const elements = Array.isArray(element) ? element : (element ? [element] : []);
     function locator(entries) {
         return {
             filter(options) {
@@ -48,15 +49,15 @@ function capturePage(selector, element) {
     }
     return {
         locator(requestedSelector) {
-            return locator(requestedSelector === selector && element ? [element] : []);
+            return locator(requestedSelector === selector ? elements : []);
         }
     };
 }
 
-function captureElement({locatorVisible = true, visible = true} = {}) {
+function captureElement({locatorVisible = true, text = "Slot Lock Name Str", visible = true} = {}) {
     return {
         locatorVisible,
-        innerText: "Slot Lock Name Str",
+        innerText: text,
         querySelectorAll() {
             return [];
         },
@@ -180,6 +181,23 @@ test("capture preserves a one-side absence as an explicit target finding", async
         candidate: "present",
         occurrences: [{theme: "glass-blue", viewport: "desktop"}]
     }]);
+});
+
+test("capture prefers the first visible match and retains a hidden fallback", async function() {
+    const mixed = await capture(capturePage("#equipment-headers", [
+        captureElement({locatorVisible: false, text: "hidden first"}),
+        captureElement({text: "visible second"})
+    ]));
+    const hiddenOnly = await capture(capturePage("#equipment-headers", [
+        captureElement({locatorVisible: false, text: "hidden first"}),
+        captureElement({locatorVisible: false, text: "hidden second"})
+    ]));
+
+    assert.equal(mixed[0].text, "visible second");
+    assert.equal(mixed[0].visible, true);
+    assert.equal(hiddenOnly[0].text, "hidden first");
+    assert.equal(hiddenOnly[0].present, true);
+    assert.equal(hiddenOnly[0].visible, false);
 });
 
 test("structural comparison only evaluates structural properties enabled by target checks", function() {

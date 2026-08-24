@@ -42,7 +42,9 @@ async function captureStructuralTargets(page, scenario, side, identity) {
             });
             continue;
         }
-        const snapshot = await locator.first().evaluate(function(element, properties) {
+        const visibleLocator = locator.filter({visible: true});
+        const captureLocator = await visibleLocator.count() > 0 ? visibleLocator : locator;
+        const snapshot = await captureLocator.first().evaluate(function(element, properties) {
             function normalize(value) {
                 return String(value || "").replace(/\s+/g, " ").trim();
             }
