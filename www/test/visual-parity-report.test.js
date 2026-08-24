@@ -12,6 +12,32 @@ function png(name) {
     return fs.readFileSync(path.join(__dirname, "fixtures", "visual-parity", name));
 }
 
+function metadata(overrides = {}) {
+    return {
+        referenceSha: "0cab3ac95826a53de19b3146d277e7056495210f",
+        candidateSha: "1111111111111111111111111111111111111111",
+        generatedAt: "2026-08-24T12:34:56.000Z",
+        mode: "smoke",
+        playwrightVersion: "1.62.1",
+        chromiumVersion: "140.0.0",
+        operatingSystem: "Linux x64",
+        ...overrides
+    };
+}
+
+function result(viewport) {
+    return {
+        scenario: "builder-populated",
+        theme: "glass-blue",
+        viewport,
+        referencePng: png("reference.png"),
+        candidatePng: png("candidate.png"),
+        diffPng: png("candidate.png"),
+        image: {width: 4, height: 4, diffPixels: 1, diffRatio: 1 / 16, dimensionMismatch: false},
+        structuralFindings: []
+    };
+}
+
 test("parity report persists image and structure artifacts with escaped grouped findings", function(t) {
     const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "legendhub-visual-parity-"));
     t.after(function() {
@@ -109,4 +135,40 @@ test("parity report keeps generated artifact links relative and excludes undecla
     assert.doesNotMatch(html, /must-not-appear/);
     assert.doesNotMatch(findings, /must-not-appear/);
     assert.equal(fs.existsSync(path.join(outputDir, "reference", "outside--glass-blue--desktop.png")), true);
+});
+
+test("parity report derives and normalizes the theme and viewport matrix", function(t) {
+    const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "legendhub-visual-parity-"));
+    const suppliedOutputDir = fs.mkdtempSync(path.join(os.tmpdir(), "legendhub-visual-parity-"));
+    t.after(function() {
+        fs.rmSync(outputDir, {recursive: true, force: true});
+        fs.rmSync(suppliedOutputDir, {recursive: true, force: true});
+    });
+    const results = [result("desktop"), result("mobile")];
+
+    const derivedPaths = writeParityReport({outputDir, metadata: metadata(), results});
+    const derived = JSON.parse(fs.readFileSync(derivedPaths.findingsPath, "utf8"));
+    const derivedHtml = fs.readFileSync(derivedPaths.indexPath, "utf8");
+
+    assert.deepEqual(derived.metadata.themes, ["glass-blue"]);
+    assert.deepEqual(derived.metadata.viewports, ["desktop", "mobile"]);
+    assert.match(derivedHtml, /Glass Blue/);
+    assert.match(derivedHtml, /desktop, mobile/);
+
+    const suppliedPaths = writeParityReport({
+        outputDir: suppliedOutputDir,
+        metadata: metadata({themes: ["glass-blue", "glass-blue"], viewports: ["mobile", "desktop", "mobile"]}),
+        results
+    });
+    const supplied = JSON.parse(fs.readFileSync(suppliedPaths.findingsPath, "utf8"));
+
+    assert.deepEqual(supplied.metadata.themes, ["glass-blue"]);
+    assert.deepEqual(supplied.metadata.viewports, ["desktop", "mobile"]);
+    assert.throws(function() {
+        writeParityReport({
+            outputDir: path.join(outputDir, "mismatch"),
+            metadata: metadata({themes: ["light"]}),
+            results
+        });
+    }, /metadata\.themes.*glass-blue/);
 });

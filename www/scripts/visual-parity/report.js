@@ -40,7 +40,33 @@ function writeArtifact(outputDir, relativePath, contents) {
     fs.writeFileSync(absolute, contents);
 }
 
-function reportMetadata(metadata = {}) {
+function normalizeMatrix(values, name) {
+    if (!Array.isArray(values))
+        throw new Error(`${name} must be an array`);
+    return Array.from(new Set(values.map(function(value) {
+        if (typeof value !== "string" || value.trim() === "")
+            throw new Error(`${name} entries must be non-empty strings`);
+        return value.trim();
+    }))).sort(function(left, right) {
+        return left.localeCompare(right);
+    });
+}
+
+function matrixValues(metadata, results, metadataName, resultName) {
+    const derived = normalizeMatrix(results.map(function(result) {
+        return result[resultName];
+    }), resultName);
+    if (metadata[metadataName] === undefined)
+        return derived;
+    const supplied = normalizeMatrix(metadata[metadataName], `metadata.${metadataName}`);
+    for (const value of derived) {
+        if (!supplied.includes(value))
+            throw new Error(`metadata.${metadataName} must include result ${resultName} ${value}`);
+    }
+    return supplied;
+}
+
+function reportMetadata(metadata = {}, results = []) {
     return {
         referenceSha: metadata.referenceSha,
         candidateSha: metadata.candidateSha,
@@ -48,7 +74,9 @@ function reportMetadata(metadata = {}) {
         mode: metadata.mode,
         playwrightVersion: metadata.playwrightVersion,
         chromiumVersion: metadata.chromiumVersion,
-        operatingSystem: metadata.operatingSystem
+        operatingSystem: metadata.operatingSystem,
+        themes: matrixValues(metadata, results, "themes", "theme"),
+        viewports: matrixValues(metadata, results, "viewports", "viewport")
     };
 }
 
@@ -111,11 +139,18 @@ function renderArtifacts(results) {
     }).join("");
 }
 
+function displayTheme(theme) {
+    return theme.split("-").map(function(word) {
+        return `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`;
+    }).join(" ");
+}
+
 function renderHtml(metadata, results) {
-    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>LegendHUB visual parity report</title><style>body{font-family:system-ui,sans-serif;margin:2rem;max-width:1200px}dl{display:grid;grid-template-columns:max-content 1fr;gap:.25rem 1rem}.images{display:flex;gap:1rem;flex-wrap:wrap}.images figure{margin:0;max-width:31%}.images img{display:block;max-width:100%;border:1px solid #888}section{margin:2rem 0}li{overflow-wrap:anywhere}</style></head><body><h1>LegendHUB visual parity report</h1><dl><dt>Reference SHA</dt><dd>${escapeHtml(metadata.referenceSha)}</dd><dt>Candidate SHA</dt><dd>${escapeHtml(metadata.candidateSha)}</dd><dt>UTC time</dt><dd>${escapeHtml(metadata.generatedAt)}</dd><dt>Mode</dt><dd>${escapeHtml(metadata.mode)}</dd><dt>Playwright</dt><dd>${escapeHtml(metadata.playwrightVersion)}</dd><dt>Chromium</dt><dd>${escapeHtml(metadata.chromiumVersion)}</dd><dt>Operating system</dt><dd>${escapeHtml(metadata.operatingSystem)}</dd></dl><h2>Captures by scenario, theme, and viewport</h2>${renderArtifacts(results)}<h2>Structural findings by scenario and root property</h2>${renderFindings(results)}</body></html>`;
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>LegendHUB visual parity report</title><style>body{font-family:system-ui,sans-serif;margin:2rem;max-width:1200px}dl{display:grid;grid-template-columns:max-content 1fr;gap:.25rem 1rem}.images{display:flex;gap:1rem;flex-wrap:wrap}.images figure{margin:0;max-width:31%}.images img{display:block;max-width:100%;border:1px solid #888}section{margin:2rem 0}li{overflow-wrap:anywhere}</style></head><body><h1>LegendHUB visual parity report</h1><dl><dt>Reference SHA</dt><dd>${escapeHtml(metadata.referenceSha)}</dd><dt>Candidate SHA</dt><dd>${escapeHtml(metadata.candidateSha)}</dd><dt>UTC time</dt><dd>${escapeHtml(metadata.generatedAt)}</dd><dt>Mode</dt><dd>${escapeHtml(metadata.mode)}</dd><dt>Playwright</dt><dd>${escapeHtml(metadata.playwrightVersion)}</dd><dt>Chromium</dt><dd>${escapeHtml(metadata.chromiumVersion)}</dd><dt>Operating system</dt><dd>${escapeHtml(metadata.operatingSystem)}</dd><dt>Themes</dt><dd>${escapeHtml(metadata.themes.map(displayTheme).join(", "))}</dd><dt>Viewports</dt><dd>${escapeHtml(metadata.viewports.join(", "))}</dd></dl><h2>Captures by scenario, theme, and viewport</h2>${renderArtifacts(results)}<h2>Structural findings by scenario and root property</h2>${renderFindings(results)}</body></html>`;
 }
 
 function writeParityReport({outputDir, metadata, results}) {
+    const safeMetadata = reportMetadata(metadata, results);
     fs.mkdirSync(outputDir, {recursive: true});
     const normalizedResults = results.map(function(result) {
         const stem = artifactStem(result);
@@ -138,7 +173,6 @@ function writeParityReport({outputDir, metadata, results}) {
             artifacts
         };
     });
-    const safeMetadata = reportMetadata(metadata);
     const findingsPath = path.join(outputDir, "findings.json");
     const indexPath = path.join(outputDir, "index.html");
     fs.writeFileSync(findingsPath, JSON.stringify({metadata: safeMetadata, results: normalizedResults}, null, 2));
