@@ -32,13 +32,18 @@ const baseEnvironment = {
     RECAPTCHA_SITEKEY: "",
 };
 
-function taggedComposeAt(tag, destination) {
-    const result = spawnSync("git", ["show", `${tag}:docker-compose.yaml`], {
+function extractTaggedCheckout(tag, destination) {
+    const archive = spawnSync("git", ["archive", "--format=tar", tag], {
         cwd: root,
-        encoding: "utf8",
+        encoding: null,
+        maxBuffer: 64 * 1024 * 1024,
     });
-    assert.equal(result.status, 0, result.stderr);
-    fs.writeFileSync(destination, result.stdout);
+    assert.equal(archive.status, 0, archive.stderr.toString());
+    const extraction = spawnSync("tar", ["-x", "-C", destination], {
+        encoding: "utf8",
+        input: archive.stdout,
+    });
+    assert.equal(extraction.status, 0, extraction.stderr);
 }
 
 function commandFixture({base, projectDirectory, projectName}) {
@@ -73,16 +78,25 @@ function namedResources(config, resourceType) {
         .sort();
 }
 
-function assertParityContract(config, expectedPort) {
+function assertParityContract(config, expectedPort, checkoutRoot) {
     assert.equal(config.services.mysql.image, "mysql:5.7.44");
     assert.equal(config.services.www.ports, undefined);
     assert.equal(config.services.www.volumes, undefined);
     assert.equal(config.services.nginx.ports[0].published, expectedPort);
+    assert.equal(config.services.www.build.context, checkoutRoot);
+    assert.equal(fs.existsSync(path.join(config.services.www.build.context,
+        "www/Dockerfile")), true);
 
+    const mysqlConfigMount = config.services.mysql.volumes.find((volume) =>
+        volume.target === "/etc/mysql/mysql.conf.d");
     const snapshotMount = config.services.mysql.volumes.find((volume) =>
         volume.target.endsWith("01-dunwich.sql.gz"));
     const fixtureMount = config.services.mysql.volumes.find((volume) =>
         volume.target.endsWith("02-visual-parity.sql"));
+    assert.equal(mysqlConfigMount.source, path.join(checkoutRoot, "mysql/conf"));
+    assert.equal(mysqlConfigMount.read_only, true);
+    assert.equal(fs.existsSync(mysqlConfigMount.source) &&
+        fs.statSync(mysqlConfigMount.source).isDirectory(), true);
     assert.equal(snapshotMount.source, snapshot);
     assert.equal(snapshotMount.read_only, true);
     assert.equal(fixtureMount.source, fixture);
@@ -101,8 +115,8 @@ test("renders isolated current and v2.9 parity stacks from shared fixtures", (t)
     const referenceRoot = fs.mkdtempSync(path.join(root,
         ".visual-parity-compose-test-"));
     t.after(() => fs.rmSync(referenceRoot, {recursive: true, force: true}));
+    extractTaggedCheckout("v2.9.0", referenceRoot);
     const referenceBase = path.join(referenceRoot, "docker-compose.yaml");
-    taggedComposeAt("v2.9.0", referenceBase);
 
     const referenceCommand = commandFixture({
         base: referenceBase,
@@ -117,8 +131,8 @@ test("renders isolated current and v2.9 parity stacks from shared fixtures", (t)
     const reference = renderCompose(referenceCommand, "7443");
     const candidate = renderCompose(candidateCommand, "7444");
 
-    assertParityContract(reference, "7443");
-    assertParityContract(candidate, "7444");
+    assertParityContract(reference, "7443", referenceRoot);
+    assertParityContract(candidate, "7444", root);
     assert.equal(reference.name, "legendhub-parity-reference");
     assert.equal(candidate.name, "legendhub-parity-candidate");
     assert.notEqual(reference.services.nginx.ports[0].published,
