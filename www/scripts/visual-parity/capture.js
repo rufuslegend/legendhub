@@ -41,6 +41,18 @@ function firstLine(error) {
     return String(error?.message || error || "unknown error").split("\n", 1)[0];
 }
 
+function lexicallyRedactUrl(url) {
+    const privateTail = url.search(/[?#]/u);
+    const withoutPrivateTail = privateTail === -1 ? url : url.slice(0, privateTail);
+    const schemeEnd = withoutPrivateTail.indexOf("://") + 3;
+    const pathStart = withoutPrivateTail.indexOf("/", schemeEnd);
+    const authorityEnd = pathStart === -1 ? withoutPrivateTail.length : pathStart;
+    const authority = withoutPrivateTail.slice(schemeEnd, authorityEnd);
+    const userinfoEnd = authority.lastIndexOf("@");
+    const redactedAuthority = userinfoEnd === -1 ? authority : authority.slice(userinfoEnd + 1);
+    return `${withoutPrivateTail.slice(0, schemeEnd)}${redactedAuthority}${withoutPrivateTail.slice(authorityEnd)}`;
+}
+
 function sanitizeErrorMessage(error) {
     return firstLine(error).replace(/https?:\/\/[^\s<>"']+/giu, function(rawUrl) {
         let suffix = "";
@@ -53,7 +65,7 @@ function sanitizeErrorMessage(error) {
             const parsed = new URL(candidate);
             return `${parsed.origin}${parsed.pathname}${suffix}`;
         } catch {
-            return rawUrl;
+            return `${lexicallyRedactUrl(candidate)}${suffix}`;
         }
     });
 }

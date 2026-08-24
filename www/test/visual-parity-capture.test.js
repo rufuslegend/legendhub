@@ -425,3 +425,35 @@ test("stored navigation errors redact URL credentials, queries, and fragments", 
         assert.doesNotMatch(contents, /user|CREDENTIAL_SECRET|QUERY_SECRET|FRAGMENT_SECRET/);
     }
 });
+
+test("malformed navigation URLs are conservatively redacted in results and reports", async function(t) {
+    const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "legendhub-capture-malformed-redaction-"));
+    t.after(function() {
+        fs.rmSync(outputDir, {recursive: true, force: true});
+    });
+    const secretUrl = "https://user:CREDENTIAL_SECRET@example.test:bad/private/path?token=QUERY_SECRET#FRAGMENT_SECRET";
+    const run = await runVisualParity({
+        referenceBaseUrl: "http://127.0.0.1:1",
+        candidateBaseUrl: "http://127.0.0.1:2",
+        referenceSha: REFERENCE_SHA,
+        candidateSha: CANDIDATE_SHA,
+        mode: "smoke",
+        outputDir,
+        failOnDiff: false,
+        scenarios: [PAGE_SCENARIO],
+        browserType: {
+            launch: async function() {
+                throw new Error(`page.goto: navigation failed at ${secretUrl}`);
+            }
+        }
+    });
+
+    assert.equal(run.exitCode, 2);
+    const returnedErrors = JSON.stringify(run.results.flatMap(result => result.errors));
+    const findings = fs.readFileSync(run.reportPaths.findingsPath, "utf8");
+    const htmlReport = fs.readFileSync(run.reportPaths.indexPath, "utf8");
+    for (const contents of [returnedErrors, findings, htmlReport]) {
+        assert.match(contents, /page\.goto: navigation failed at https:\/\/example\.test:bad\/private\/path/);
+        assert.doesNotMatch(contents, /user|CREDENTIAL_SECRET|QUERY_SECRET|FRAGMENT_SECRET/);
+    }
+});
