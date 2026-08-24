@@ -237,7 +237,7 @@ export default function EquipmentPanel({
                   >
                     {SLOT_LABELS[item.slot] || item.slot}
                   </WarningCell>
-                  <td className="text-center">
+                  <td className="text-center py-md-1 py-lg-0">
                     <button
                       type="button"
                       className="btn btn-link p-0 builder-table-action builder-lock-action"
@@ -256,7 +256,7 @@ export default function EquipmentPanel({
                   <th scope="row" className="py-1 py-lg-0">
                     <button
                       type="button"
-                      className="btn btn-link p-0 builder-table-action"
+                      className="btn btn-link p-0 text-reset font-weight-bold builder-table-action"
                       onClick={() => onOpen(index)}
                     >
                       {item.name || "-"}

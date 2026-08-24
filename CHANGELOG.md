@@ -20,7 +20,7 @@ with version 2.6.0.
 - Restored the Builder's compact equipment table, hover and keyboard-focus explanations for red warning cells, and scrolling inside long item-selection windows.
 - Restored centered Builder equipment headers and totals at both ends of the table.
 - Kept long Columns and Filters windows scrollable on small screens without moving the page behind them.
-- Restored centered, compact Builder equipment rows and kept slot and total values on one line.
+- Restored centered, compact Builder equipment rows, including lock controls, kept slot and total values on one line, and returned item names to their familiar emphasis.
 - Restored the Builder's compact Character and Variant action icons and the stat-quest bonuses with their original help text.
 - Restored Markdown line breaks in guides and notes, and returned editor preview cards to their familiar “Preview” heading.
 - Fixed the notification menu's middle action so its text remains readable in every theme.

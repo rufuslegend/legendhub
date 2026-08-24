@@ -304,7 +304,11 @@ test("Builder equipment body rows preserve legacy alignment wrapping and density
         const style = getComputedStyle(element);
         return {textAlign: style.textAlign, whiteSpace: style.whiteSpace, paddingTop: style.paddingTop, paddingBottom: style.paddingBottom};
     })).toEqual({textAlign: "center", whiteSpace: "nowrap", paddingTop: "0px", paddingBottom: "0px"});
-    await expect(lockCell).toHaveCSS("text-align", "center");
+    expect(await lockCell.evaluate(element => {
+        const style = getComputedStyle(element);
+        return {textAlign: style.textAlign, paddingTop: style.paddingTop, paddingBottom: style.paddingBottom};
+    })).toEqual({textAlign: "center", paddingTop: "0px", paddingBottom: "0px"});
+    expect(Math.round(await itemRow.evaluate(element => element.getBoundingClientRect().height))).toBe(19);
     expect(await nameCell.evaluate(element => {
         const style = getComputedStyle(element);
         return {paddingTop: style.paddingTop, paddingBottom: style.paddingBottom};
@@ -364,6 +368,22 @@ test("Builder Glass table actions stay visually integrated and keyboard visible"
     await actions[1].focus();
     await expect(actions[1]).toHaveCSS("outline-style", "solid");
     await expect(actions[1].locator(".fa-lock, .fa-unlock")).toHaveCount(1);
+});
+
+// Catches the semantic item-name button losing the legacy row-header color
+// and emphasis while remaining keyboard operable.
+test("Builder item-name actions preserve legacy table emphasis", async function({context, page}) {
+    await context.addCookies([{name: "theme", value: "glass-blue", url: baseUrl}]);
+    await page.goto(`${baseUrl}/builder/`);
+    const row = equipmentTable(page).locator("tbody tr").nth(1);
+    const nameCell = row.locator("th, td").nth(2);
+    const nameAction = row.getByRole("button", {name: "Limited light", exact: true});
+    const cellColor = await nameCell.evaluate(element => getComputedStyle(element).color);
+
+    expect(await nameAction.evaluate(element => {
+        const style = getComputedStyle(element);
+        return {color: style.color, fontWeight: style.fontWeight};
+    })).toEqual({color: cellColor, fontWeight: "700"});
 });
 
 // Catches either total-row bulk control changing every lock without the legacy
