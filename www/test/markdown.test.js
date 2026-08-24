@@ -18,6 +18,25 @@ test("renders expected Markdown formatting", function() {
         "<a href=\"https://example.test/guide\">focus</a>.</p>\n");
 });
 
+// Catches the server renderer collapsing legacy soft line breaks and making
+// command sequences read as one continuous paragraph.
+test("preserves soft line breaks in Smithing-style instructions", function() {
+    const html = renderMarkdown(
+        "You will use the following commands:\n" +
+        "recipe smithing\n" +
+        "recipe smithing [name]\n" +
+        "smith [tool/component] [tool/component] [component] [component] etc\n" +
+        "other items in the room can impact your ability to execute a smithing iteration."
+    );
+
+    assert.equal(html,
+        "<p>You will use the following commands:<br>\n" +
+        "recipe smithing<br>\n" +
+        "recipe smithing [name]<br>\n" +
+        "smith [tool/component] [tool/component] [component] [component] etc<br>\n" +
+        "other items in the room can impact your ability to execute a smithing iteration.</p>\n");
+});
+
 // Catches a renderer mutation that permits unsafe Markdown link protocols.
 test("does not render unsafe Markdown links", function() {
     const html = renderMarkdown("[dangerous link](javascript:alert(1))");

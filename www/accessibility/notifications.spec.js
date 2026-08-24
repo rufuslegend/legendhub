@@ -1,6 +1,7 @@
 "use strict";
 
 const Module = require("node:module");
+const AxeBuilder = require("@axe-core/playwright").default;
 const {expect, test} = require("@playwright/test");
 const fulfillLocalBrowserScript = require("./support/local-browser-scripts");
 const publicPageData = require("./support/public-page-data");
@@ -219,4 +220,40 @@ test("notification trigger opens and closes from both keyboard activation keys",
     await expect(trigger).toBeFocused();
     await page.keyboard.press("Space");
     await expect(page.locator(".popover")).toBeHidden();
+});
+
+// Catches the semantic mark-read button retaining its native pale fill or a
+// low-contrast link color instead of matching the popover in every theme.
+test("middle notification action remains readable in every theme", async function({context, page}) {
+    for (const theme of [
+        "glass-blue",
+        "glass-emerald",
+        "glass-ruby",
+        "glass-amethyst",
+        "glass-amber",
+        "light",
+        "dark",
+        "solarized-dark",
+        "high-contrast"
+    ]) {
+        await context.addCookies([{name: "theme", value: theme, url: baseUrl}]);
+        await page.goto(`${baseUrl}/`);
+        await page.locator("[data-notification-popover]").filter({visible: true}).click();
+        const popover = page.locator(".popover");
+        await expect(popover).toBeVisible();
+        await expect.poll(async function() {
+            return popover.evaluate(element => getComputedStyle(element).opacity);
+        }).toBe("1");
+        const markRead = popover.getByRole("button", {name: "Mark all as read"});
+        await expect(markRead).toHaveCSS(
+            "background-color",
+            "rgba(0, 0, 0, 0)"
+        );
+
+        const results = await new AxeBuilder({page})
+            .include(".popover [data-mark-notifications-read]")
+            .withRules(["color-contrast"])
+            .analyze();
+        expect(results.violations, `${theme}: ${JSON.stringify(results.violations)}`).toEqual([]);
+    }
 });

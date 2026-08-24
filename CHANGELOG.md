@@ -22,6 +22,8 @@ with version 2.6.0.
 - Kept long Columns and Filters windows scrollable on small screens without moving the page behind them.
 - Restored centered, compact Builder equipment rows and kept slot and total values on one line.
 - Restored the Builder's compact Character and Variant action icons and the stat-quest bonuses with their original help text.
+- Restored Markdown line breaks in guides and notes, and returned editor preview cards to their familiar “Preview” heading.
+- Fixed the notification menu's middle action so its text remains readable in every theme.
 
 ## [2.9.0] - 2026-08-22
 

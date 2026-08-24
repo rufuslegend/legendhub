@@ -849,6 +849,46 @@ test("React migration: editor pages mount one named root from inert route props"
     }
 });
 
+// Catches the shared React preview exposing its field-specific accessible name
+// as new visible wording instead of the legacy "Preview" card heading.
+test("React migration: every editor keeps the legacy Preview heading", async function({page}) {
+    for (const editor of [
+        {path: "/items/edit.html?id=101", heading: "Edit Item", label: "Notes Markdown preview"},
+        {path: "/mobs/edit.html?id=201", heading: "Edit Mob", label: "Notes Markdown preview"},
+        {path: "/quests/edit.html?id=301", heading: "Edit Quest", label: "Content Markdown preview"},
+        {path: "/wiki/edit.html?id=401", heading: "Edit Wiki Page", label: "Content Markdown preview"}
+    ]) {
+        await openEditor(page, editor.path, editor.heading);
+        const preview = page.getByRole("region", {name: editor.label, exact: true});
+        await expect(preview).toBeVisible();
+        await expect(preview.locator(".card-header")).toHaveText("Preview");
+    }
+});
+
+// Catches the React preview collapsing the legacy soft line breaks used by
+// command-oriented Wiki and notes content.
+test("React migration: Markdown preview preserves Smithing-style soft line breaks", async function({page}) {
+    await openEditor(page, "/wiki/edit.html?id=401", "Edit Wiki Page");
+    const content = [
+        "You will use the following commands:",
+        "recipe smithing",
+        "recipe smithing [name]",
+        "smith [tool/component] [tool/component] [component] [component] etc",
+        "other items in the room can impact your ability to execute a smithing iteration."
+    ].join("\n");
+    await page.locator("textarea").fill(content);
+
+    const paragraph = page.getByRole("region", {name: "Content Markdown preview"}).locator("p").first();
+    await expect(paragraph.locator("br")).toHaveCount(4);
+    expect(await paragraph.evaluate(element => element.innerHTML)).toBe(
+        "You will use the following commands:<br>\n" +
+        "recipe smithing<br>\n" +
+        "recipe smithing [name]<br>\n" +
+        "smith [tool/component] [tool/component] [component] [component] etc<br>\n" +
+        "other items in the room can impact your ability to execute a smithing iteration."
+    );
+});
+
 test("React migration: Markdown preview keeps ordinary formatting and removes malicious HTML and URLs", async function({page}) {
     await openEditor(page, "/wiki/edit.html?id=401", "Edit Wiki Page");
     const content = [

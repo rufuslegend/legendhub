@@ -2,6 +2,7 @@ import DOMPurify from "dompurify";
 import MarkdownIt from "markdown-it";
 
 const markdown = new MarkdownIt({
+    breaks: true,
     html: true,
     linkify: true,
     typographer: false
@@ -41,11 +42,9 @@ export default function MarkdownPreview({id, label, value}) {
     finally {
         DOMPurify.removeHook("uponSanitizeAttribute", rejectDataUri);
     }
-    const headingId = `${id}-heading`;
-
     return (
-        <div className="card" role="region" aria-labelledby={headingId}>
-            <div className="card-header" id={headingId}>{label} Markdown preview</div>
+        <div className="card" role="region" aria-label={`${label} Markdown preview`}>
+            <div className="card-header">Preview</div>
             <div className="card-body" dangerouslySetInnerHTML={{__html: html}} />
         </div>
     );
