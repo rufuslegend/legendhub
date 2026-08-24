@@ -32,9 +32,16 @@ function selectorFor(target, side) {
 async function captureStructuralTargets(page, scenario, side, identity) {
     const snapshots = [];
     for (const target of scenario.structuralTargets) {
-        const locator = page.locator(selectorFor(target, side)).filter({visible: true});
-        if (await locator.count() === 0)
+        const locator = page.locator(selectorFor(target, side));
+        if (await locator.count() === 0) {
+            snapshots.push({
+                ...identity,
+                target: target.name,
+                checks: target.checks,
+                present: false
+            });
             continue;
+        }
         const snapshot = await locator.first().evaluate(function(element, properties) {
             function normalize(value) {
                 return String(value || "").replace(/\s+/g, " ").trim();
@@ -64,6 +71,7 @@ async function captureStructuralTargets(page, scenario, side, identity) {
                 ...properties.identity,
                 target: properties.target.name,
                 checks: properties.target.checks,
+                present: true,
                 text: element.innerText.replace(/\s+/g, " ").trim(),
                 icons: Array.from(element.querySelectorAll("i[class], svg[data-icon]"), iconIdentity),
                 childOrder: Array.from(element.children, childIdentity),
@@ -163,8 +171,10 @@ function compareStructuralSnapshots(referenceSnapshots, candidateSnapshots, opti
         const reference = referenceByKey.get(key);
         const candidate = candidateByKey.get(key);
         const identity = reference || candidate;
-        if (!reference || !candidate) {
-            addDifference(identity, "target", reference ? "present" : "missing", candidate ? "present" : "missing");
+        const referencePresent = Boolean(reference) && reference.present !== false;
+        const candidatePresent = Boolean(candidate) && candidate.present !== false;
+        if (!referencePresent || !candidatePresent) {
+            addDifference(identity, "target", referencePresent ? "present" : "missing", candidatePresent ? "present" : "missing");
             continue;
         }
 

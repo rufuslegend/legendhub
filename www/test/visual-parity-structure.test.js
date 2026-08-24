@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 const {
+    captureStructuralTargets,
     compareStructuralSnapshots
 } = require("../scripts/visual-parity/structure");
 
@@ -23,6 +24,71 @@ function snapshot(theme, overrides = {}) {
         rect: {x: 10, y: 20, width: 420, height: 32},
         ...overrides
     };
+}
+
+function capturePage(selector, element) {
+    function locator(entries) {
+        return {
+            filter(options) {
+                return locator(options.visible ? entries.filter(function(entry) {
+                    return entry.locatorVisible;
+                }) : entries);
+            },
+            async count() {
+                return entries.length;
+            },
+            first() {
+                return {
+                    async evaluate(callback, properties) {
+                        return callback(entries[0], properties);
+                    }
+                };
+            }
+        };
+    }
+    return {
+        locator(requestedSelector) {
+            return locator(requestedSelector === selector && element ? [element] : []);
+        }
+    };
+}
+
+function captureElement({locatorVisible = true, visible = true} = {}) {
+    return {
+        locatorVisible,
+        innerText: "Slot Lock Name Str",
+        querySelectorAll() {
+            return [];
+        },
+        children: [],
+        getClientRects() {
+            return visible ? [{}] : [];
+        },
+        getBoundingClientRect() {
+            return {x: 10, y: 20, width: 420, height: 32};
+        },
+        scrollWidth: 420,
+        clientWidth: 420
+    };
+}
+
+async function capture(page, side = "reference") {
+    const getComputedStyle = globalThis.getComputedStyle;
+    globalThis.getComputedStyle = function(element) {
+        return {lineHeight: "16px", visibility: element.locatorVisible ? "visible" : "hidden"};
+    };
+    try {
+        return await captureStructuralTargets(page, {
+            structuralTargets: [{name: "equipment headers", selector: "#equipment-headers", checks: {}}]
+        }, side, {
+            scenario: "builder-populated",
+            theme: "glass-blue",
+            viewport: "desktop"
+        });
+    }
+    finally {
+        globalThis.getComputedStyle = getComputedStyle;
+    }
 }
 
 test("structural comparison reports every enabled strict difference independently", function() {
@@ -65,6 +131,55 @@ test("structural comparison reports a missing target and ignores sub-pixel geome
         occurrences: [{theme: "glass-blue", viewport: "desktop"}]
     }]);
     assert.deepEqual(compareStructuralSnapshots(reference, candidate, {geometryTolerance: 1}), []);
+});
+
+test("capture retains an absent declared target and comparison reports it on both sides", async function() {
+    const reference = await capture(capturePage("#equipment-headers"));
+    const candidate = await capture(capturePage("#equipment-headers"));
+
+    assert.equal(reference.length, 1);
+    assert.equal(reference[0].present, false);
+    assert.doesNotThrow(function() {
+        JSON.stringify(reference[0]);
+    });
+    assert.deepEqual(compareStructuralSnapshots(reference, candidate), [{
+        scenario: "builder-populated",
+        target: "equipment headers",
+        property: "target",
+        reference: "missing",
+        candidate: "missing",
+        occurrences: [{theme: "glass-blue", viewport: "desktop"}]
+    }]);
+});
+
+test("capture retains a hidden target as present so comparison reports visibility", async function() {
+    const reference = await capture(capturePage("#equipment-headers", captureElement()));
+    const candidate = await capture(capturePage("#equipment-headers", captureElement({locatorVisible: false})));
+
+    assert.equal(candidate[0].present, true);
+    assert.equal(candidate[0].visible, false);
+    assert.deepEqual(compareStructuralSnapshots(reference, candidate), [{
+        scenario: "builder-populated",
+        target: "equipment headers",
+        property: "visible",
+        reference: true,
+        candidate: false,
+        occurrences: [{theme: "glass-blue", viewport: "desktop"}]
+    }]);
+});
+
+test("capture preserves a one-side absence as an explicit target finding", async function() {
+    const reference = await capture(capturePage("#equipment-headers"));
+    const candidate = await capture(capturePage("#equipment-headers", captureElement()));
+
+    assert.deepEqual(compareStructuralSnapshots(reference, candidate), [{
+        scenario: "builder-populated",
+        target: "equipment headers",
+        property: "target",
+        reference: "missing",
+        candidate: "present",
+        occurrences: [{theme: "glass-blue", viewport: "desktop"}]
+    }]);
 });
 
 test("structural comparison only evaluates structural properties enabled by target checks", function() {
