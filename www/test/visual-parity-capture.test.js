@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const childProcess = require("node:child_process");
 const crypto = require("node:crypto");
+const {EventEmitter} = require("node:events");
 const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
@@ -10,7 +11,7 @@ const path = require("node:path");
 const test = require("node:test");
 const {PNG} = require("pngjs");
 
-const {runVisualParity} = require("../scripts/visual-parity/capture");
+const {observePage, runVisualParity} = require("../scripts/visual-parity/capture");
 
 const REFERENCE_SHA = "0cab3ac95826a53de19b3146d277e7056495210f";
 const CANDIDATE_SHA = "1111111111111111111111111111111111111111";
@@ -77,10 +78,12 @@ function legacyAngularHtml() {
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"></head><body><main id="target">Loading</main>
     <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.0/angular.min.js"></script>
     <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.0/angular-cookies.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.0/angular-sanitize.min.js"></script>
     <script>
     document.querySelector("#target").textContent = typeof angular === "undefined"
         ? "blocked"
-        : angular.version.full + "|" + angular.module("ngCookies").name;
+        : angular.version.full + "|" + angular.module("ngCookies").name + "|" +
+            angular.module("ngSanitize").name;
     </script></body></html>`;
 }
 
@@ -344,7 +347,7 @@ test("frozen reference receives pinned AngularJS while the candidate stays block
     });
 
     assert.equal(run.exitCode, 0);
-    assert.equal(run.results[0].referenceStructuralSnapshots[0].text, "1.8.0|ngCookies");
+    assert.equal(run.results[0].referenceStructuralSnapshots[0].text, "1.8.0|ngCookies|ngSanitize");
     assert.equal(run.results[0].candidateStructuralSnapshots[0].text, "blocked");
 });
 
@@ -352,7 +355,8 @@ test("vendored AngularJS reference fixtures match upstream 1.8.0", function() {
     const vendorRoot = path.join(__dirname, "../../scripts/fixtures/visual-parity/angularjs-1.8.0");
     const fixtures = [
         ["angular.min.js", "566f18cb8bc23558701c2cc4f934fe50bcc85629d1aaf5d589f835f2b3e57a9f"],
-        ["angular-cookies.min.js", "eed97b74e2128f3d340325dd9cbfb9b8f70a1a5ade70eccca990d45483aa8700"]
+        ["angular-cookies.min.js", "eed97b74e2128f3d340325dd9cbfb9b8f70a1a5ade70eccca990d45483aa8700"],
+        ["angular-sanitize.min.js", "958e6aa9b32f5ef3e86acf16d2413f08baa02f68fbe38baa5d8916282ae1b882"]
     ];
 
     for (const [filename, expectedHash] of fixtures) {
@@ -361,6 +365,30 @@ test("vendored AngularJS reference fixtures match upstream 1.8.0", function() {
         assert.equal(crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex"), expectedHash);
     }
     assert.match(fs.readFileSync(path.join(vendorRoot, "LICENSE.md"), "utf8"), /The MIT License/);
+});
+
+test("network observation resets at an intentional navigation boundary", async function() {
+    const page = new EventEmitter();
+    const baseUrl = "https://example.test";
+    const request = function(pathname) {
+        return {
+            method: function() { return "POST"; },
+            url: function() { return `${baseUrl}${pathname}`; }
+        };
+    };
+    const stale = request("/api/stale");
+    const current = request("/api/current");
+    const observer = observePage(page, baseUrl);
+
+    page.emit("request", stale);
+    observer.reset();
+    page.emit("request", current);
+    page.emit("requestfinished", stale);
+    assert.equal(observer.idleFor(), 0);
+
+    page.emit("requestfinished", current);
+    await new Promise(function(resolve) { setTimeout(resolve, 275); });
+    assert.equal(observer.idleFor() >= 250, true);
 });
 
 test("full-page capture waits for delayed document layout to settle", async function(t) {

@@ -115,29 +115,29 @@ async function installRequestPolicy(context, baseUrl, scenario, side) {
 
 function observePage(page, baseUrl) {
     const errors = [];
-    let inFlight = 0;
+    const inFlight = new Set();
     let idleSince = Date.now();
 
     function requestStarted(request) {
         if (!sameOrigin(request.url(), baseUrl))
             return;
-        inFlight += 1;
+        inFlight.add(request);
         idleSince = 0;
     }
 
     function requestEnded(request) {
         if (!sameOrigin(request.url(), baseUrl))
-            return;
-        inFlight = Math.max(0, inFlight - 1);
-        if (inFlight === 0)
+            return false;
+        const tracked = inFlight.delete(request);
+        if (tracked && inFlight.size === 0)
             idleSince = Date.now();
+        return tracked;
     }
 
     page.on("request", requestStarted);
     page.on("requestfinished", requestEnded);
     page.on("requestfailed", function(request) {
-        requestEnded(request);
-        if (sameOrigin(request.url(), baseUrl))
+        if (requestEnded(request))
             errors.push(`application request failed: ${safeRequestPath(request)}`);
     });
     page.on("response", function(response) {
@@ -155,8 +155,12 @@ function observePage(page, baseUrl) {
 
     return {
         errors,
+        reset: function() {
+            inFlight.clear();
+            idleSince = Date.now();
+        },
         idleFor: function() {
-            return inFlight === 0 && idleSince ? Date.now() - idleSince : 0;
+            return inFlight.size === 0 && idleSince ? Date.now() - idleSince : 0;
         }
     };
 }
@@ -202,7 +206,7 @@ async function authenticate(page, baseUrl) {
         throw new Error("authentication did not redirect away from /login.html");
 }
 
-async function executeAction(page, action, side) {
+async function executeAction(page, action, side, observer) {
     const selector = selectorFor(action.target, side);
     const locator = await visibleLocator(page, selector, `${action.type} action target`);
     switch (action.type) {
@@ -232,6 +236,7 @@ async function executeAction(page, action, side) {
             localStorage.setItem("cln", lists);
             localStorage.setItem("scl", "Hero!Tank");
         }, {lists: BUILDER_LISTS});
+        observer.reset();
         await requireSuccessfulNavigation(await page.reload(), "Builder state reload");
         return;
     }
@@ -330,11 +335,12 @@ async function captureSide(context, entry, side, baseUrl) {
         if (scenario.authenticated)
             await authenticate(page, baseUrl);
 
+        observer.reset();
         const response = await page.goto(new URL(scenario.route, baseUrl).href);
         await requireSuccessfulNavigation(response, "scenario navigation");
         await visibleLocator(page, selectorFor(scenario.ready, side), "readiness selector");
         for (const action of scenario.actions || [])
-            await executeAction(page, action, side);
+            await executeAction(page, action, side, observer);
         await page.evaluate(async function() {
             await document.fonts.ready;
         });
@@ -565,4 +571,4 @@ async function runVisualParity(options) {
     };
 }
 
-module.exports = {BUILDER_LISTS, runVisualParity};
+module.exports = {BUILDER_LISTS, observePage, runVisualParity};

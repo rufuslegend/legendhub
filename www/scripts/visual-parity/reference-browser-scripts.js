@@ -12,6 +12,10 @@ const scripts = new Map([
     [
         "https://ajax.googleapis.com/ajax/libs/angularjs/1.8.0/angular-cookies.min.js",
         "angular-cookies.min.js"
+    ],
+    [
+        "https://ajax.googleapis.com/ajax/libs/angularjs/1.8.0/angular-sanitize.min.js",
+        "angular-sanitize.min.js"
     ]
 ].map(function([url, filename]) {
     return [url, fs.readFileSync(path.join(vendorRoot, filename))];
