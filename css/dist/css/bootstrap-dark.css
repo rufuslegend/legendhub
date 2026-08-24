@@ -8972,7 +8972,8 @@ body {
   min-height: 100vh;
 }
 body > .container,
-body > .container-fluid {
+body > .container-fluid,
+body > [data-react-root] {
   flex: 1 0 auto;
 }
 
