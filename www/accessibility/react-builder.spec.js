@@ -467,6 +467,77 @@ test("Builder picker scrolls within the viewport and locks the page behind it", 
     await expect(page.locator("body")).not.toHaveClass(/modal-open/);
 });
 
+// Catches the item picker inheriting the generic Builder dialog width, moving
+// its primary search below the comparison card, or dropping the total row.
+test("Builder item picker restores the wide search-first comparison layout", async function({context, page}) {
+    await context.addCookies([{name: "theme", value: "glass-blue", url: baseUrl}]);
+    await page.setViewportSize({width: 1280, height: 720});
+    await page.goto(`${baseUrl}/builder/`);
+    await equipmentTable(page).locator("tbody tr").nth(1).getByRole("button", {name: "Limited light", exact: true}).click();
+
+    const dialog = page.getByRole("dialog", {name: "Choose Item"});
+    const dialogBox = await dialog.locator(".modal-dialog").boundingBox();
+    expect(dialogBox).not.toBeNull();
+    expect(dialogBox.width).toBeGreaterThan(1100);
+
+    const searchBox = await dialog.getByLabel("Search items").boundingBox();
+    const comparisonHeadingBox = await dialog.getByRole("heading", {name: "Current Item and Stats", exact: true}).boundingBox();
+    expect(searchBox).not.toBeNull();
+    expect(comparisonHeadingBox).not.toBeNull();
+    expect(searchBox.y).toBeLessThan(comparisonHeadingBox.y);
+
+    const comparisonTable = dialog.locator("table").first();
+    await expect(comparisonTable.getByRole("row").filter({hasText: /^Total/})).toHaveCount(1);
+});
+
+// Catches the result grid losing the familiar row separation, hover cue, or
+// visible sorting vocabulary while its headers remain interactive buttons.
+test("Builder item picker restores result-table and sort affordances", async function({context, page}) {
+    await context.addCookies([{name: "theme", value: "glass-blue", url: baseUrl}]);
+    await page.setViewportSize({width: 1280, height: 720});
+    await page.goto(`${baseUrl}/builder/`);
+    await equipmentTable(page).locator("tbody tr").nth(1).getByRole("button", {name: "Limited light", exact: true}).click();
+
+    const dialog = page.getByRole("dialog", {name: "Choose Item"});
+    const resultTable = dialog.locator("table").nth(1);
+    const resultRows = resultTable.locator("tbody tr");
+    const firstRowColor = await resultRows.nth(0).evaluate(element => getComputedStyle(element).backgroundColor);
+    const secondRowColor = await resultRows.nth(1).evaluate(element => getComputedStyle(element).backgroundColor);
+    expect(firstRowColor).not.toBe(secondRowColor);
+    expect(await resultRows.nth(0).locator("td").first().evaluate(element => getComputedStyle(element).borderLeftWidth)).not.toBe("0px");
+
+    const hoverColor = secondRowColor;
+    await resultRows.nth(1).hover();
+    await expect.poll(() => resultRows.nth(1).evaluate(element => getComputedStyle(element).backgroundColor)).not.toBe(hoverColor);
+
+    const headers = resultTable.getByRole("columnheader");
+    await expect(resultTable.locator("thead i.fas[class*='fa-sort']")).toHaveCount(await headers.count());
+    await headers.first().getByRole("button", {name: "Name", exact: true}).click();
+    await expect(headers.first().getByRole("button", {name: "Name descending", exact: true}).locator("i.fa-sort-down")).toHaveCount(1);
+});
+
+// Catches locked choices dimming only their names without explaining why the
+// result grid cannot currently replace the equipped item.
+test("Builder item picker explains and consistently styles locked choices", async function({context, page}) {
+    await context.addCookies([{name: "theme", value: "glass-blue", url: baseUrl}]);
+    await page.goto(`${baseUrl}/builder/`);
+    await equipmentTable(page).locator("tbody tr").nth(1).getByRole("button", {name: "Limited light", exact: true}).click();
+
+    const dialog = page.getByRole("dialog", {name: "Choose Item"});
+    const lockMessage = dialog.getByText("This slot is locked. Unlock the current item to choose a replacement.", {exact: true});
+    await expect(lockMessage).toBeVisible();
+
+    const resultTable = dialog.locator("table").nth(1);
+    const firstResult = resultTable.locator("tbody tr").first();
+    await expect(firstResult.getByRole("button", {name: "-", exact: true})).toBeDisabled();
+    await expect(firstResult.locator("td").nth(1)).toHaveCSS("opacity", "0.65");
+
+    await dialog.getByRole("button", {name: "Unlock current item", exact: true}).click();
+    await expect(lockMessage).toHaveCount(0);
+    await expect(firstResult.getByRole("button", {name: "-", exact: true})).toBeEnabled();
+    await expect(firstResult.locator("td").nth(1)).toHaveCSS("opacity", "1");
+});
+
 // Catches the shared Builder Columns picker clipping lower choices or
 // scrolling the document behind it on a short mobile screen.
 test("Builder Columns scrolls as a modal and locks the page behind it", async function({page}) {

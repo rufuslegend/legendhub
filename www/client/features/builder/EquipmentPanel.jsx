@@ -204,6 +204,12 @@ export default function EquipmentPanel({
       : state.sortDir === "+"
         ? " ascending"
         : " descending";
+  const sortIconClass = (stat) =>
+    state.sortStat !== stat
+      ? "fa-sort"
+      : state.sortDir === "+"
+        ? "fa-sort-up"
+        : "fa-sort-down";
   const changePage = (nextPage) =>
     onAction({
       type: "ui/patch",
@@ -296,14 +302,25 @@ export default function EquipmentPanel({
           label="Choose Item"
           onClose={onClose}
           initialFocus="#itemChoiceSearch"
+          size="xl"
         >
           <div className="modal-body">
-            <div className="card mb-3">
+            <label htmlFor="itemChoiceSearch">Search items</label>
+            <input
+              id="itemChoiceSearch"
+              className="form-control"
+              placeholder="Search…"
+              value={state.searchString}
+              onChange={(event) =>
+                onAction({ type: "search/text", value: event.target.value })
+              }
+            />
+            <div className="card my-3">
               <h3 className="h5 m-3">Current Item and Stats</h3>
               <div className="table-responsive">
-                <table className="table table-sm mb-0">
+                <table className="table table-striped table-sm mb-0">
                   <thead className="thead-dark">
-                    <tr>
+                    <tr className="text-center">
                       <th>Slot</th>
                       <th>Lock</th>
                       <th>Name</th>
@@ -313,8 +330,22 @@ export default function EquipmentPanel({
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td>{SLOT_LABELS[current.slot] || current.slot}</td>
+                    <tr className="bg-secondary text-white text-center">
+                      <td />
+                      <td />
+                      <th scope="row" className="font-weight-normal text-nowrap">
+                        Total
+                      </th>
+                      {stats.map((stat) => (
+                        <td key={stat.var} className="text-nowrap">
+                          {totals[stat.var] ?? ""}
+                        </td>
+                      ))}
+                    </tr>
+                    <tr className="text-center">
+                      <td className="bg-primary text-white text-nowrap">
+                        {SLOT_LABELS[current.slot] || current.slot}
+                      </td>
                       <td>
                         <button
                           type="button"
@@ -331,7 +362,7 @@ export default function EquipmentPanel({
                           />
                         </button>
                       </td>
-                      <th>
+                      <th scope="row">
                         {current.name}
                         <DetailsLink item={current} />
                       </th>
@@ -342,17 +373,17 @@ export default function EquipmentPanel({
                   </tbody>
                 </table>
               </div>
+              {current.locked && (
+                <p
+                  id="builder-picker-lock-status"
+                  className="text-warning mx-3 mb-3"
+                  role="status"
+                >
+                  This slot is locked. Unlock the current item to choose a
+                  replacement.
+                </p>
+              )}
             </div>
-            <label htmlFor="itemChoiceSearch">Search items</label>
-            <input
-              id="itemChoiceSearch"
-              className="form-control"
-              placeholder="Search…"
-              value={state.searchString}
-              onChange={(event) =>
-                onAction({ type: "search/text", value: event.target.value })
-              }
-            />
             {(current.slot === 14 || current.slot === 15) && (
               <label className="d-block mt-3" htmlFor="wield-slot-filter">
                 Slot Filter
@@ -424,57 +455,87 @@ export default function EquipmentPanel({
               </div>
             ) : (
               <>
-                <table className="table table-sm mt-3">
-                  <thead className="thead-dark">
-                    <tr>
-                      <th>
-                        <button
-                          className="btn btn-link p-0 text-white builder-table-action"
-                          type="button"
-                          onClick={() =>
-                            onAction({ type: "search/sort", stat: "name" })
-                          }
-                        >
-                          Name{sortLabel("name")}
-                        </button>
-                      </th>
-                      {stats.map((stat) => (
-                        <th key={stat.var}>
+                <div className="table-responsive">
+                  <table className="table table-striped table-bordered table-hover table-sm mt-3 builder-picker-results">
+                    <thead className="thead-dark">
+                      <tr>
+                        <th>
                           <button
                             className="btn btn-link p-0 text-white builder-table-action"
                             type="button"
                             onClick={() =>
-                              onAction({ type: "search/sort", stat: stat.var })
+                              onAction({ type: "search/sort", stat: "name" })
                             }
                           >
-                            {stat.short}
-                            {sortLabel(stat.var)}
+                            Name
+                            <span className="sr-only">
+                              {sortLabel("name")}
+                            </span>
+                            <i
+                              className={`fas ${sortIconClass("name")} ml-1`}
+                              aria-hidden="true"
+                            />
                           </button>
                         </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {choices.map((item) => (
-                      <tr key={item.id}>
-                        <td>
-                          <button
-                            className="btn btn-link p-0 builder-table-action"
-                            type="button"
-                            disabled={current.locked}
-                            onClick={() => onPick(item)}
-                          >
-                            {item.name}
-                          </button>
-                          <DetailsLink item={item} />
-                        </td>
                         {stats.map((stat) => (
-                          <td key={stat.var}>{displayValue(item, stat)}</td>
+                          <th key={stat.var}>
+                            <button
+                              className="btn btn-link p-0 text-white builder-table-action"
+                              type="button"
+                              onClick={() =>
+                                onAction({
+                                  type: "search/sort",
+                                  stat: stat.var,
+                                })
+                              }
+                            >
+                              {stat.short}
+                              <span className="sr-only">
+                                {sortLabel(stat.var)}
+                              </span>
+                              <i
+                                className={`fas ${sortIconClass(stat.var)} ml-1`}
+                                aria-hidden="true"
+                              />
+                            </button>
+                          </th>
                         ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {choices.map((item) => (
+                        <tr
+                          key={item.id}
+                          className={
+                            current.locked
+                              ? "builder-picker-result-disabled"
+                              : undefined
+                          }
+                        >
+                          <td>
+                            <button
+                              className="btn btn-link p-0 builder-table-action"
+                              type="button"
+                              disabled={current.locked}
+                              aria-describedby={
+                                current.locked
+                                  ? "builder-picker-lock-status"
+                                  : undefined
+                              }
+                              onClick={() => onPick(item)}
+                            >
+                              {item.name}
+                            </button>
+                            <DetailsLink item={item} />
+                          </td>
+                          {stats.map((stat) => (
+                            <td key={stat.var}>{displayValue(item, stat)}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
                 {totalPages > 1 && (
                   <nav aria-label="Item result navigation">
                     <ul className="pagination">

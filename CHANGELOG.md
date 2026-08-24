@@ -26,6 +26,7 @@ with version 2.6.0.
 - Restored emoji shortcodes in guides, notes, histories, and editor previews.
 - Kept the footer at the bottom of short account, search, Builder, and editing pages after the interface update.
 - Returned item-search column headings to their familiar plain appearance while retaining keyboard sorting.
+- Restored the Builder item picker's wide comparison layout, familiar result-table cues, visible sorting indicators, and clearer locked-item guidance.
 - Fixed the notification menu's middle action so its text remains readable in every theme.
 
 ## [2.9.0] - 2026-08-22

@@ -8991,6 +8991,11 @@ body > [data-react-root] {
   min-height: 1rem;
 }
 
+.builder-picker-result-disabled > td:not(:first-child) {
+  color: #8a8a8a;
+  opacity: 0.65;
+}
+
 .builder-stat-action {
   min-height: 1.5rem;
 }

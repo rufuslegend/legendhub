@@ -44,6 +44,11 @@ body {
   min-height: 1rem;
 }
 
+.builder-picker-result-disabled > td:not(:first-child) {
+  color: $btn-link-disabled-color;
+  opacity: $btn-disabled-opacity;
+}
+
 .builder-stat-action {
   min-height: 1.5rem;
 }

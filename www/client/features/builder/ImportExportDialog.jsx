@@ -21,7 +21,7 @@ function focusableElements(element) {
     return Array.from(element?.querySelectorAll("a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])") || []).filter(entry => !entry.hidden);
 }
 
-export function BuilderModal({children, label, onClose, initialFocus}) {
+export function BuilderModal({children, label, onClose, initialFocus, size = "lg"}) {
     const ref = useRef(null);
     const triggerRef = useRef(null);
     const closeRef = useRef(onClose);
@@ -74,7 +74,7 @@ export function BuilderModal({children, label, onClose, initialFocus}) {
             triggerRef.current?.focus();
         };
     }, []);
-    return <div ref={ref} className="modal d-block" role="dialog" aria-modal="true" aria-label={label} tabIndex="-1"><div className="modal-dialog modal-lg modal-dialog-scrollable" role="document"><div className="modal-content"><div className="modal-header"><h2 className="modal-title h5">{label}</h2><button type="button" className="close" aria-label="Close" onClick={() => closeRef.current()}><span aria-hidden="true">×</span></button></div>{children}</div></div></div>;
+    return <div ref={ref} className="modal d-block" role="dialog" aria-modal="true" aria-label={label} tabIndex="-1"><div className={`modal-dialog modal-${size} modal-dialog-scrollable`} role="document"><div className="modal-content"><div className="modal-header"><h2 className="modal-title h5">{label}</h2><button type="button" className="close" aria-label="Close" onClick={() => closeRef.current()}><span aria-hidden="true">×</span></button></div>{children}</div></div></div>;
 }
 
 function CopyField({id, label, value, onCopied}) {
