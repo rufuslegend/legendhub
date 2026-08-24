@@ -13,6 +13,7 @@ const ACTION_TYPES = new Set(["click", "fill", "hover", "press", "select", "set-
 const STRUCTURAL_CHECKS = new Set(["text", "icons", "childOrder", "wrapping"]);
 const MODES = new Set(["smoke", "full"]);
 const REPORT_ROOT = "data/parity-report";
+const REPOSITORY_ROOT = path.resolve(__dirname, "../../..");
 
 function timestamp() {
     return new Date().toISOString().replace(/[:.]/g, "-");
@@ -37,9 +38,9 @@ function validateSha(value, option) {
 }
 
 function validateOutputDir(value) {
-    const root = path.resolve(REPORT_ROOT);
-    const outputDir = path.resolve(value);
-    if (path.isAbsolute(value) || (outputDir !== root && !outputDir.startsWith(`${root}${path.sep}`)))
+    const root = path.resolve(REPOSITORY_ROOT, REPORT_ROOT);
+    const outputDir = path.resolve(REPOSITORY_ROOT, value);
+    if (outputDir !== root && !outputDir.startsWith(`${root}${path.sep}`))
         throw new Error("output-dir must remain under data/parity-report");
     return value;
 }

@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const path = require("node:path");
 const test = require("node:test");
 
 const {
@@ -96,8 +97,32 @@ test("parseVisualParityArgs keeps supplied output directories under data/parity-
         parseVisualParityArgs([...valid, "--output-dir=data/parity-report/test-run/nested"]).outputDir,
         "data/parity-report/test-run/nested"
     );
+    const operatorReportDirectory = path.resolve(__dirname, "../../data/parity-report/test-run");
+    assert.equal(
+        parseVisualParityArgs([...valid, `--output-dir=${operatorReportDirectory}`]).outputDir,
+        operatorReportDirectory
+    );
     assert.throws(() => parseVisualParityArgs([...valid, "--output-dir=/tmp/outside"]), /output-dir.*data\/parity-report/);
     assert.throws(() => parseVisualParityArgs([...valid, "--output-dir=data/parity-report/../../outside"]), /output-dir.*data\/parity-report/);
+});
+
+test("parseVisualParityArgs accepts the operator report directory when npm runs from www", function() {
+    const repositoryRoot = path.resolve(__dirname, "../..");
+    const operatorReportDirectory = path.join(repositoryRoot, "data/parity-report/test-run");
+    const originalWorkingDirectory = process.cwd();
+
+    try {
+        process.chdir(path.join(repositoryRoot, "www"));
+        assert.equal(parseVisualParityArgs([
+            "--reference-base-url=https://localhost:7443",
+            "--candidate-base-url=https://localhost:7444",
+            `--reference-sha=${REFERENCE_SHA}`,
+            "--candidate-sha=1111111111111111111111111111111111111111",
+            `--output-dir=${operatorReportDirectory}`
+        ]).outputDir, operatorReportDirectory);
+    } finally {
+        process.chdir(originalWorkingDirectory);
+    }
 });
 
 test("buildCaptureMatrix expands smoke and full modes exactly", function() {
