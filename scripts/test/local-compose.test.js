@@ -67,6 +67,10 @@ test("renders a persistent production-shaped local HTTPS stack", () => {
 
     assert.equal(services.www.ports, undefined);
     assert.equal(services.www.volumes, undefined);
+    assert.equal(services.www.environment.RECAPTCHA_SITEKEY,
+        "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI");
+    assert.equal(services.www.environment.RECAPTCHA_SECRET,
+        "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe");
     assert.equal(services.mysql.volumes.find((volume) =>
         volume.target === "/docker-entrypoint-initdb.d/01-dunwich.sql.gz").source,
     path.join(localState, "backups/dunwich-latest.sql.gz"));

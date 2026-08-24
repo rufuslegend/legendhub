@@ -62,6 +62,11 @@ environment, and generated credentials beneath the ignored
 volume is first created. Re-running the setup command with a newer snapshot
 does not change an existing database volume.
 
+The local overlay supplies Google's published reCAPTCHA v2 test credentials,
+so registration can exercise the normal browser and server verification path
+on `localhost`. The widget displays Google's test-only warning and must never
+be used as evidence that Dunwich or production CAPTCHA configuration works.
+
 Use the wrapper for normal Compose operations:
 
 ```sh
