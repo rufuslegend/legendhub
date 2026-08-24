@@ -84,6 +84,22 @@ test("parseVisualParityArgs rejects invalid CLI input", function() {
     assert.throws(() => parseVisualParityArgs([...valid, "--mode=all"]), /mode.*smoke\|full/);
 });
 
+test("parseVisualParityArgs keeps supplied output directories under data/parity-report", function() {
+    const valid = [
+        "--reference-base-url=https://localhost:7443",
+        "--candidate-base-url=https://localhost:7444",
+        `--reference-sha=${REFERENCE_SHA}`,
+        "--candidate-sha=1111111111111111111111111111111111111111"
+    ];
+
+    assert.equal(
+        parseVisualParityArgs([...valid, "--output-dir=data/parity-report/test-run/nested"]).outputDir,
+        "data/parity-report/test-run/nested"
+    );
+    assert.throws(() => parseVisualParityArgs([...valid, "--output-dir=/tmp/outside"]), /output-dir.*data\/parity-report/);
+    assert.throws(() => parseVisualParityArgs([...valid, "--output-dir=data/parity-report/../../outside"]), /output-dir.*data\/parity-report/);
+});
+
 test("buildCaptureMatrix expands smoke and full modes exactly", function() {
     assert.deepEqual(
         buildCaptureMatrix({mode: "smoke", scenarios: [{name: "home"}]}),

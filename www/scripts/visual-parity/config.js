@@ -1,3 +1,5 @@
+const path = require("node:path");
+
 const REFERENCE_SHA = "0cab3ac95826a53de19b3146d277e7056495210f";
 const THEMES = [
     "light", "dark", "solarized-dark", "high-contrast", "glass-blue",
@@ -9,6 +11,7 @@ const VIEWPORTS = {
 };
 const ACTION_TYPES = new Set(["click", "fill", "hover", "press", "select", "set-builder-state"]);
 const MODES = new Set(["smoke", "full"]);
+const REPORT_ROOT = "data/parity-report";
 
 function timestamp() {
     return new Date().toISOString().replace(/[:.]/g, "-");
@@ -29,6 +32,14 @@ function normalizedHttpsUrl(value, option) {
 function validateSha(value, option) {
     if (!/^[a-f0-9]{40}$/i.test(value || ""))
         throw new Error(`${option} must be a 40-character SHA`);
+    return value;
+}
+
+function validateOutputDir(value) {
+    const root = path.resolve(REPORT_ROOT);
+    const outputDir = path.resolve(value);
+    if (path.isAbsolute(value) || (outputDir !== root && !outputDir.startsWith(`${root}${path.sep}`)))
+        throw new Error("output-dir must remain under data/parity-report");
     return value;
 }
 
@@ -76,7 +87,7 @@ function parseVisualParityArgs(argv) {
         referenceSha,
         candidateSha: validateSha(values["candidate-sha"], "candidate-sha"),
         mode,
-        outputDir: values["output-dir"] || `data/parity-report/${timestamp()}`,
+        outputDir: values["output-dir"] ? validateOutputDir(values["output-dir"]) : `data/parity-report/${timestamp()}`,
         failOnDiff: values["fail-on-diff"] === true
     };
 }
