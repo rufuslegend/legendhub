@@ -1,0 +1,7 @@
+services:
+  nginx:
+    ports:
+      - target: 443
+        published: ${LEGENDHUB_PARITY_HTTPS_PORT:?Set LEGENDHUB_PARITY_HTTPS_PORT}
+        host_ip: "::1"
+        protocol: tcp

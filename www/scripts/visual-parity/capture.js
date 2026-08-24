@@ -34,6 +34,16 @@ const CAPTURE_STYLES = `
 html { scroll-behavior: auto !important; }
 `;
 
+function browserLaunchOptions(platform = os.platform()) {
+    if (platform === "darwin") {
+        return {
+            headless: true,
+            args: ["--host-resolver-rules=MAP localhost [::1]"]
+        };
+    }
+    return {headless: true};
+}
+
 function selectorFor(value, side) {
     return typeof value === "string" ? value : value[side];
 }
@@ -501,7 +511,7 @@ async function runVisualParity(options) {
     let harnessError;
 
     try {
-        browser = await (options.browserType || chromium).launch({headless: true});
+        browser = await (options.browserType || chromium).launch(browserLaunchOptions());
         chromiumVersion = browser.version();
         for (const entry of matrix)
             results.push(await captureEntry(browser, entry, options, activeContexts));
@@ -571,4 +581,4 @@ async function runVisualParity(options) {
     };
 }
 
-module.exports = {BUILDER_LISTS, observePage, runVisualParity};
+module.exports = {BUILDER_LISTS, browserLaunchOptions, observePage, runVisualParity};

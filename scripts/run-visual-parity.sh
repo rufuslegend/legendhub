@@ -72,8 +72,17 @@ certificate_key_file="${state_directory}/tls/localhost-key.pem"
 fixture_file="${candidate_root}/scripts/fixtures/visual-parity.sql"
 nginx_config_file="${candidate_root}/nginx/parity.conf"
 parity_overlay="${candidate_root}/docker-compose.parity.yaml"
+darwin_parity_overlay="${candidate_root}/docker-compose.parity-darwin.yaml"
+parity_platform="$(uname -s)" || {
+  printf 'visual-parity: could not determine the local platform\n' >&2
+  exit 1
+}
+parity_compose_arguments=(-f "$parity_overlay")
+if [[ "$parity_platform" == "Darwin" ]]; then
+  parity_compose_arguments+=(-f "$darwin_parity_overlay")
+fi
 
-for required_file in \
+required_files=(
   "$environment_file" \
   "$snapshot_file" \
   "$certificate_file" \
@@ -81,7 +90,13 @@ for required_file in \
   "$fixture_file" \
   "$nginx_config_file" \
   "$parity_overlay" \
-  "${candidate_root}/docker-compose.yaml"; do
+  "${candidate_root}/docker-compose.yaml"
+)
+if [[ "$parity_platform" == "Darwin" ]]; then
+  required_files+=("$darwin_parity_overlay")
+fi
+
+for required_file in "${required_files[@]}"; do
   if [[ ! -f "$required_file" || ! -s "$required_file" ]]; then
     printf 'visual-parity: required local state is missing; run prepare-local-stack.sh first\n' >&2
     exit 1
@@ -193,7 +208,7 @@ compose_for() {
     --project-name "$project_name" \
     --env-file "$environment_file" \
     -f "${checkout_root}/docker-compose.yaml" \
-    -f "$parity_overlay" \
+    "${parity_compose_arguments[@]}" \
     "$@"
 }
 
@@ -217,7 +232,7 @@ print_compose_command() {
     --project-name "$project_name"
     --env-file "$environment_file"
     -f "${checkout_root}/docker-compose.yaml"
-    -f "$parity_overlay"
+    "${parity_compose_arguments[@]}"
     "$@"
   )
 
@@ -306,7 +321,7 @@ safe_down() {
     --project-name "$project_name" \
     --env-file "$environment_file" \
     -f "${checkout_root}/docker-compose.yaml" \
-    -f "$parity_overlay" \
+    "${parity_compose_arguments[@]}" \
     down --volumes --remove-orphans
 }
 
@@ -356,10 +371,19 @@ wait_until_ready() {
   local https_port="$4"
   local url="$5"
   local attempt
+  local -a curl_arguments=(--fail --silent --show-error --max-time 5)
+
+  if [[ "$parity_platform" == "Darwin" ]]; then
+    curl_arguments+=(--resolve "localhost:${https_port}:[::1]")
+  fi
 
   for attempt in {1..30}; do
-    if curl --fail --silent --show-error --max-time 5 "${url}/" \
+    if curl "${curl_arguments[@]}" "${url}/" \
       >/dev/null 2>&1; then
+      if [[ "$parity_platform" == "Darwin" ]]; then
+        printf 'visual-parity: verified trusted ::1 HTTPS readiness for %s\n' \
+          "$stack_name"
+      fi
       return 0
     fi
     sleep 1

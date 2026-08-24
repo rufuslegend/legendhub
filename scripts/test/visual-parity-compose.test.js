@@ -8,6 +8,7 @@ const test = require("node:test");
 
 const root = path.resolve(__dirname, "../..");
 const overlay = path.join(root, "docker-compose.parity.yaml");
+const darwinOverlay = path.join(root, "docker-compose.parity-darwin.yaml");
 const snapshot = path.join(root,
     "data/local-stack/backups/dunwich-latest.sql.gz");
 const fixture = path.join(root, "scripts/fixtures/visual-parity.sql");
@@ -46,13 +47,14 @@ function extractTaggedCheckout(tag, destination) {
     assert.equal(extraction.status, 0, extraction.stderr);
 }
 
-function commandFixture({base, projectDirectory, projectName}) {
+function commandFixture({base, extraOverlays = [], projectDirectory, projectName}) {
     return [
         "compose",
         "--project-directory", projectDirectory,
         "--project-name", projectName,
         "-f", base,
         "-f", overlay,
+        ...extraOverlays.flatMap((extraOverlay) => ["-f", extraOverlay]),
         "config",
         "--format", "json",
     ];
@@ -78,11 +80,20 @@ function namedResources(config, resourceType) {
         .sort();
 }
 
-function assertParityContract(config, expectedPort, checkoutRoot) {
+function assertParityContract(config, expectedPort, checkoutRoot,
+    expectedHostIps = ["127.0.0.1"]) {
     assert.equal(config.services.mysql.image, "mysql:5.7.44");
     assert.equal(config.services.www.ports, undefined);
     assert.equal(config.services.www.volumes, undefined);
-    assert.equal(config.services.nginx.ports[0].published, expectedPort);
+    assert.deepEqual(config.services.nginx.ports.map((port) => ({
+        hostIp: port.host_ip,
+        published: port.published,
+        target: port.target,
+    })), expectedHostIps.map((hostIp) => ({
+        hostIp,
+        published: expectedPort,
+        target: 443,
+    })));
     assert.equal(config.services.www.build.context, checkoutRoot);
     assert.equal(fs.existsSync(path.join(config.services.www.build.context,
         "www/Dockerfile")), true);
@@ -141,4 +152,35 @@ test("renders isolated current and v2.9 parity stacks from shared fixtures", (t)
         namedResources(candidate, "networks"));
     assert.notDeepEqual(namedResources(reference, "volumes"),
         namedResources(candidate, "volumes"));
+});
+
+test("Darwin parity overlay adds IPv6 without removing IPv4 isolation", (t) => {
+    const referenceRoot = fs.mkdtempSync(path.join(root,
+        ".visual-parity-compose-test-"));
+    t.after(() => fs.rmSync(referenceRoot, {recursive: true, force: true}));
+    extractTaggedCheckout("v2.9.0", referenceRoot);
+
+    for (const fixture of [
+        {
+            base: path.join(referenceRoot, "docker-compose.yaml"),
+            checkoutRoot: referenceRoot,
+            port: "7443",
+            projectName: "legendhub-parity-reference",
+        },
+        {
+            base: path.join(root, "docker-compose.yaml"),
+            checkoutRoot: root,
+            port: "7444",
+            projectName: "legendhub-parity-candidate",
+        },
+    ]) {
+        const config = renderCompose(commandFixture({
+            base: fixture.base,
+            extraOverlays: [darwinOverlay],
+            projectDirectory: fixture.checkoutRoot,
+            projectName: fixture.projectName,
+        }), fixture.port);
+        assertParityContract(config, fixture.port, fixture.checkoutRoot,
+            ["127.0.0.1", "::1"]);
+    }
 });

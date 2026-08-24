@@ -11,7 +11,7 @@ const path = require("node:path");
 const test = require("node:test");
 const {PNG} = require("pngjs");
 
-const {observePage, runVisualParity} = require("../scripts/visual-parity/capture");
+const {browserLaunchOptions, observePage, runVisualParity} = require("../scripts/visual-parity/capture");
 
 const REFERENCE_SHA = "0cab3ac95826a53de19b3146d277e7056495210f";
 const CANDIDATE_SHA = "1111111111111111111111111111111111111111";
@@ -389,6 +389,14 @@ test("network observation resets at an intentional navigation boundary", async f
     page.emit("requestfinished", current);
     await new Promise(function(resolve) { setTimeout(resolve, 275); });
     assert.equal(observer.idleFor() >= 250, true);
+});
+
+test("macOS parity Chromium uses the IPv6 localhost socket pool", function() {
+    assert.deepEqual(browserLaunchOptions("darwin"), {
+        headless: true,
+        args: ["--host-resolver-rules=MAP localhost [::1]"]
+    });
+    assert.deepEqual(browserLaunchOptions("linux"), {headless: true});
 });
 
 test("full-page capture waits for delayed document layout to settle", async function(t) {

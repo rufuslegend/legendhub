@@ -152,6 +152,9 @@ exit "${dollar}{FAKE_LSOF_STATUS:-1}"
 
 const dateFake = `#!/usr/bin/env bash\nprintf '%s\\n' '${timestamp}'\n`;
 const sleepFake = "#!/usr/bin/env bash\nexit 0\n";
+const unameFake = String.raw`#!/usr/bin/env bash
+printf '%s\n' "${dollar}{FAKE_UNAME:-Darwin}"
+`;
 
 let workspace;
 let fakeBin;
@@ -193,8 +196,8 @@ function readRecords(file) {
         (record) => record.split("\0").slice(0, -1));
 }
 
-function composePrefix(checkout, project) {
-    return [
+function composePrefix(checkout, project, platform = "Darwin") {
+    const prefix = [
         "compose",
         "--project-directory", checkout,
         "--project-name", project,
@@ -202,9 +205,14 @@ function composePrefix(checkout, project) {
         "-f", path.join(checkout, "docker-compose.yaml"),
         "-f", path.join(candidateRoot, "docker-compose.parity.yaml"),
     ];
+    if (platform === "Darwin") {
+        prefix.push("-f", path.join(candidateRoot,
+            "docker-compose.parity-darwin.yaml"));
+    }
+    return prefix;
 }
 
-function printableCompose(checkout, project, suffix) {
+function printableCompose(checkout, project, suffix, platform = "Darwin") {
     const port = project.endsWith("reference") ? "7443" : "7444";
     return [
         `LEGENDHUB_PARITY_HTTPS_PORT=${port}`,
@@ -213,7 +221,7 @@ function printableCompose(checkout, project, suffix) {
             "scripts/fixtures/visual-parity.sql")}`,
         `LEGENDHUB_PARITY_NGINX_CONFIG=${path.join(candidateRoot,
             "nginx/parity.conf")}`,
-        "docker", ...composePrefix(checkout, project), ...suffix,
+        "docker", ...composePrefix(checkout, project, platform), ...suffix,
     ].join(" ");
 }
 
@@ -291,6 +299,7 @@ beforeEach(() => {
     writeExecutable(path.join(fakeBin, "lsof"), lsofFake);
     writeExecutable(path.join(fakeBin, "date"), dateFake);
     writeExecutable(path.join(fakeBin, "sleep"), sleepFake);
+    writeExecutable(path.join(fakeBin, "uname"), unameFake);
 });
 
 afterEach(() => {
@@ -584,6 +593,32 @@ test("renders and starts only mysql, www, and nginx before capture", () => {
     assert.ok(referenceReady >= 0 && candidateReady > referenceReady);
     assert.ok(capture > candidateReady);
     assert.equal(readRecords(logs.curl).flat().includes("-k"), false);
+    for (const [port, curlCall] of [
+        ["7443", readRecords(logs.curl)[0]],
+        ["7444", readRecords(logs.curl)[1]],
+    ]) {
+        assert.ok(curlCall.includes("--resolve"), curlCall);
+        assert.ok(curlCall.includes(`localhost:${port}:[::1]`), curlCall);
+    }
+    assertNoForbiddenTarget(result);
+});
+
+test("non-Darwin operation retains the IPv4-only Compose path", () => {
+    const result = runOperator(["--mode", "smoke"], {FAKE_UNAME: "Linux"});
+
+    assert.equal(result.status, 0, result.stderr);
+    const composeCalls = readRecords(logs.docker).filter((call) =>
+        call[0] === "compose");
+    assert.equal(composeCalls.every((call) =>
+        !call.includes(path.join(candidateRoot,
+            "docker-compose.parity-darwin.yaml"))), true);
+    assert.equal(readRecords(logs.curl).flat().includes("--resolve"), false);
+    assert.deepEqual(downCalls(), [
+        [...composePrefix(referenceRoot, "legendhub-parity-reference", "Linux"),
+            "down", "--volumes", "--remove-orphans"],
+        [...composePrefix(candidateRoot, "legendhub-parity-candidate", "Linux"),
+            "down", "--volumes", "--remove-orphans"],
+    ]);
     assertNoForbiddenTarget(result);
 });
 
@@ -592,6 +627,7 @@ test("cleans both exact projects after startup failure and preserves status", ()
         FAKE_DOCKER_FAIL_PATTERN: [
             `${candidateRoot}/docker-compose.yaml`,
             "-f", `${candidateRoot}/docker-compose.parity.yaml`,
+            "-f", `${candidateRoot}/docker-compose.parity-darwin.yaml`,
             "up", "--build", "-d", "mysql", "www", "nginx",
         ].join(" "),
         FAKE_DOCKER_FAIL_STATUS: "27",
