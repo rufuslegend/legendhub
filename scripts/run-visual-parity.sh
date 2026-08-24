@@ -56,6 +56,15 @@ case "$mode" in
     ;;
 esac
 
+reuse_images="${LEGENDHUB_PARITY_REUSE_IMAGES:-0}"
+case "$reuse_images" in
+  0|1) ;;
+  *)
+    printf 'visual-parity: LEGENDHUB_PARITY_REUSE_IMAGES must be 0 or 1\n' >&2
+    exit 64
+    ;;
+esac
+
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 candidate_root="$(cd "${script_dir}/.." && pwd -P)"
 state_directory_input="${LEGENDHUB_LOCAL_STATE_DIR:-${candidate_root}/data/local-stack}"
@@ -420,9 +429,14 @@ start_stack() {
   local checkout_root="$3"
   local https_port="$4"
   local status
+  local -a start_arguments=(up --build -d mysql www nginx)
+
+  if [[ "$reuse_images" -eq 1 ]]; then
+    start_arguments=(up --no-build -d mysql www nginx)
+  fi
 
   compose_for "$project_name" "$checkout_root" "$https_port" \
-    up --build -d mysql www nginx || {
+    "${start_arguments[@]}" || {
       status="$?"
       printf 'visual-parity: %s startup failed for %s services mysql www nginx\n' \
         "$stack_name" "$project_name" >&2

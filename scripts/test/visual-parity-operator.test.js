@@ -622,6 +622,21 @@ test("non-Darwin operation retains the IPv4-only Compose path", () => {
     assertNoForbiddenTarget(result);
 });
 
+test("explicit image reuse bypasses builds without changing the default", () => {
+    const result = runOperator(["--mode", "smoke"], {
+        LEGENDHUB_PARITY_REUSE_IMAGES: "1",
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    const composeCalls = readRecords(logs.docker).filter((call) =>
+        call[0] === "compose");
+    const startCalls = composeCalls.filter((call) => call.includes("up"));
+    assert.equal(startCalls.length, 2);
+    assert.equal(startCalls.every((call) => call.includes("--no-build")), true);
+    assert.equal(startCalls.some((call) => call.includes("--build")), false);
+    assertNoForbiddenTarget(result);
+});
+
 test("cleans both exact projects after startup failure and preserves status", () => {
     const result = runOperator(["--mode", "smoke"], {
         FAKE_DOCKER_FAIL_PATTERN: [
