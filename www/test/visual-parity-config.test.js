@@ -17,7 +17,7 @@ const validScenario = {
     route: "/",
     ready: "main",
     capture: {kind: "page"},
-    structuralTargets: [{name: "main", selector: "main"}]
+    structuralTargets: [{name: "main", selector: "main", checks: {text: true}}]
 };
 
 function scenarioWith(change) {
@@ -130,6 +130,34 @@ test("validateManifest returns valid scenarios and rejects invalid schema paths"
     assert.throws(() => validateManifest(scenarioWith({
         masks: [{kind: "timestamp", selector: "body"}]
     })), /valid-scenario\.masks\[0\]\.selector/);
+});
+
+test("validateManifest accepts explicit structural checks and rejects unknown or invalid flags", function() {
+    assert.deepEqual(validateManifest(scenarioWith({
+        structuralTargets: [{
+            name: "main",
+            selector: "main",
+            checks: {text: true, icons: true, childOrder: true, wrapping: true}
+        }]
+    })), [
+        {
+            ...validScenario,
+            structuralTargets: [{
+                name: "main",
+                selector: "main",
+                checks: {text: true, icons: true, childOrder: true, wrapping: true}
+            }]
+        }
+    ]);
+    assert.throws(() => validateManifest(scenarioWith({
+        structuralTargets: [{name: "main", selector: "main", checks: {content: true}}]
+    })), /valid-scenario\.structuralTargets\[0\]\.checks\.content/);
+    assert.throws(() => validateManifest(scenarioWith({
+        structuralTargets: [{name: "main", selector: "main"}]
+    })), /valid-scenario\.structuralTargets\[0\]\.checks/);
+    assert.throws(() => validateManifest(scenarioWith({
+        structuralTargets: [{name: "main", selector: "main", checks: {text: "yes"}}]
+    })), /valid-scenario\.structuralTargets\[0\]\.checks\.text/);
 });
 
 test("SCENARIOS declares the fixed initial visual parity surface", function() {

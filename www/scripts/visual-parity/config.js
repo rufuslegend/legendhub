@@ -10,6 +10,7 @@ const VIEWPORTS = {
     mobile: {width: 375, height: 667}
 };
 const ACTION_TYPES = new Set(["click", "fill", "hover", "press", "select", "set-builder-state"]);
+const STRUCTURAL_CHECKS = new Set(["text", "icons", "childOrder", "wrapping"]);
 const MODES = new Set(["smoke", "full"]);
 const REPORT_ROOT = "data/parity-report";
 
@@ -125,6 +126,17 @@ function assertSelector(value, path) {
         throw new Error(`${path} must be a selector`);
 }
 
+function assertStructuralChecks(value, path) {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+        throw new Error(`${path} must be an object`);
+    for (const [name, enabled] of Object.entries(value)) {
+        if (!STRUCTURAL_CHECKS.has(name))
+            throw new Error(`${path}.${name} must be text, icons, childOrder, or wrapping`);
+        if (enabled !== true)
+            throw new Error(`${path}.${name} must be true when declared`);
+    }
+}
+
 function validateManifest(scenarios) {
     if (!Array.isArray(scenarios))
         throw new Error("scenarios must be an array");
@@ -156,6 +168,7 @@ function validateManifest(scenarios) {
             if (!target || typeof target.name !== "string" || target.name.trim() === "")
                 throw new Error(`${targetPath}.name must be a non-empty string`);
             assertSelector(target.selector, `${targetPath}.selector`);
+            assertStructuralChecks(target.checks, `${targetPath}.checks`);
         });
         if (scenario.actions !== undefined) {
             if (!Array.isArray(scenario.actions))
@@ -202,6 +215,7 @@ function buildCaptureMatrix({mode, scenarios}) {
 module.exports = {
     ACTION_TYPES,
     REFERENCE_SHA,
+    STRUCTURAL_CHECKS,
     THEMES,
     VIEWPORTS,
     buildCaptureMatrix,

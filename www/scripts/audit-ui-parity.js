@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 "use strict";
 
+const {
+    captureStructuralTargets,
+    compareStructuralSnapshots
+} = require("./visual-parity/structure");
+
 const THEMES = [
     "light",
     "dark",
@@ -17,27 +22,6 @@ const VIEWPORTS = {
     desktop: {width: 1280, height: 720},
     mobile: {width: 375, height: 667}
 };
-
-const STYLE_PROPERTIES = [
-    "backgroundColor",
-    "borderRadius",
-    "borderTopColor",
-    "borderTopWidth",
-    "boxShadow",
-    "color",
-    "display",
-    "fontSize",
-    "fontWeight",
-    "lineHeight",
-    "maxWidth",
-    "overflowY",
-    "paddingBottom",
-    "paddingLeft",
-    "paddingRight",
-    "paddingTop",
-    "textAlign",
-    "whiteSpace"
-];
 
 const SCENARIOS = [
     {
@@ -116,96 +100,7 @@ const SCENARIOS = [
     }
 ];
 
-function snapshotKey(snapshot) {
-    return [snapshot.scenario, snapshot.target, snapshot.theme, snapshot.viewport].join("\u0000");
-}
-
-function comparableNumber(value) {
-    return Math.round(Number(value) * 100) / 100;
-}
-
-function compareSnapshots(referenceSnapshots, candidateSnapshots, options = {}) {
-    const geometryTolerance = options.geometryTolerance ?? 1;
-    const referenceByKey = new Map(referenceSnapshots.map(snapshot => [snapshotKey(snapshot), snapshot]));
-    const candidateByKey = new Map(candidateSnapshots.map(snapshot => [snapshotKey(snapshot), snapshot]));
-    const keys = Array.from(new Set([...referenceByKey.keys(), ...candidateByKey.keys()])).sort();
-    const differences = [];
-
-    function addDifference(snapshot, property, reference, candidate) {
-        differences.push({
-            scenario: snapshot.scenario,
-            target: snapshot.target,
-            property,
-            reference,
-            candidate,
-            occurrence: {theme: snapshot.theme, viewport: snapshot.viewport}
-        });
-    }
-
-    for (const key of keys) {
-        const reference = referenceByKey.get(key);
-        const candidate = candidateByKey.get(key);
-        const identity = reference || candidate;
-        if (!reference || !candidate) {
-            addDifference(identity, "target", reference ? "present" : "missing", candidate ? "present" : "missing");
-            continue;
-        }
-
-        const styleProperties = Array.from(new Set([
-            ...Object.keys(reference.styles || {}),
-            ...Object.keys(candidate.styles || {})
-        ])).sort();
-        for (const property of styleProperties) {
-            const referenceValue = reference.styles?.[property] ?? "missing";
-            const candidateValue = candidate.styles?.[property] ?? "missing";
-            if (referenceValue !== candidateValue)
-                addDifference(reference, property, referenceValue, candidateValue);
-        }
-
-        for (const property of ["x", "y", "width", "height"]) {
-            const referenceValue = comparableNumber(reference.rect?.[property]);
-            const candidateValue = comparableNumber(candidate.rect?.[property]);
-            if (!Number.isFinite(referenceValue) || !Number.isFinite(candidateValue)) {
-                if (referenceValue !== candidateValue)
-                    addDifference(reference, property, referenceValue, candidateValue);
-            }
-            else if (Math.abs(referenceValue - candidateValue) > geometryTolerance) {
-                addDifference(reference, property, referenceValue, candidateValue);
-            }
-        }
-    }
-
-    const consolidated = new Map();
-    for (const difference of differences) {
-        const key = [
-            difference.scenario,
-            difference.target,
-            difference.property,
-            JSON.stringify(difference.reference),
-            JSON.stringify(difference.candidate)
-        ].join("\u0000");
-        if (!consolidated.has(key)) {
-            consolidated.set(key, {
-                scenario: difference.scenario,
-                target: difference.target,
-                property: difference.property,
-                reference: difference.reference,
-                candidate: difference.candidate,
-                occurrences: []
-            });
-        }
-        consolidated.get(key).occurrences.push(difference.occurrence);
-    }
-
-    return Array.from(consolidated.values())
-        .map(finding => ({
-            ...finding,
-            occurrences: finding.occurrences.sort((left, right) =>
-                `${left.theme}\u0000${left.viewport}`.localeCompare(`${right.theme}\u0000${right.viewport}`))
-        }))
-        .sort((left, right) =>
-            `${left.scenario}\u0000${left.target}\u0000${left.property}`.localeCompare(`${right.scenario}\u0000${right.target}\u0000${right.property}`));
-}
+const compareSnapshots = compareStructuralSnapshots;
 
 function normalizedBaseUrl(value, optionName) {
     if (!value)
@@ -243,20 +138,6 @@ function parseArguments(argv) {
     };
 }
 
-async function captureTarget(locator, identity) {
-    if (await locator.count() === 0)
-        return null;
-    return locator.first().evaluate((element, properties) => {
-        const style = getComputedStyle(element);
-        const rect = element.getBoundingClientRect();
-        return {
-            ...properties.identity,
-            styles: Object.fromEntries(properties.names.map(name => [name, style[name]])),
-            rect: {x: rect.x, y: rect.y, width: rect.width, height: rect.height}
-        };
-    }, {identity, names: STYLE_PROPERTIES});
-}
-
 async function captureDeployment(browser, baseUrl, side) {
     const snapshots = [];
     for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
@@ -270,17 +151,22 @@ async function captureDeployment(browser, baseUrl, side) {
                 await page.locator(readySelector).filter({visible: true}).first().waitFor({state: "visible", timeout: 15000});
                 if (scenario.actionSelector)
                     await page.locator(scenario.actionSelector).filter({visible: true}).first().click();
-                for (const target of scenario.targets) {
-                    const selector = side === "reference" && target.referenceSelector ? target.referenceSelector : target.selector;
-                    const snapshot = await captureTarget(page.locator(selector), {
-                        scenario: scenario.name,
-                        target: target.name,
-                        theme,
-                        viewport: viewportName
-                    });
-                    if (snapshot)
-                        snapshots.push(snapshot);
-                }
+                const structuralScenario = {
+                    structuralTargets: scenario.targets.map(function(target) {
+                        return {
+                            name: target.name,
+                            selector: target.referenceSelector
+                                ? {reference: target.referenceSelector, candidate: target.selector}
+                                : target.selector,
+                            checks: {}
+                        };
+                    })
+                };
+                snapshots.push(...await captureStructuralTargets(page, structuralScenario, side, {
+                    scenario: scenario.name,
+                    theme,
+                    viewport: viewportName
+                }));
             }
             await context.close();
         }

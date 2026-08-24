@@ -116,3 +116,27 @@ test("UI parity audit fails only when requested and differences exist", function
     assert.equal(buildAuditResult(reference, different, {failOnDiff: true}).exitCode, 1);
     assert.equal(buildAuditResult(reference, reference, {failOnDiff: true}).exitCode, 0);
 });
+
+// Keeps the legacy export on the shared structural comparator so operator
+// scripts can adopt declared checks without changing their output contract.
+test("UI parity comparison exposes declared structural findings through its compatibility export", function() {
+    const reference = [{
+        ...snapshot("light", "desktop"),
+        checks: {text: true},
+        text: "Slot Lock Name Str"
+    }];
+    const candidate = [{
+        ...snapshot("light", "desktop"),
+        checks: {text: true},
+        text: "Slot Lock Title Str"
+    }];
+
+    assert.deepEqual(compareSnapshots(reference, candidate), [{
+        scenario: "builder",
+        target: "equipment slot",
+        property: "text",
+        reference: "Slot Lock Name Str",
+        candidate: "Slot Lock Title Str",
+        occurrences: [{theme: "light", viewport: "desktop"}]
+    }]);
+});
