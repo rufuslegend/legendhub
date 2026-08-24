@@ -5,6 +5,7 @@
     "scripts": {
         "build:client": "vite build",
         "audit:ui-parity": "node scripts/audit-ui-parity.js",
+        "parity:visual": "node scripts/audit-visual-parity.js",
         "dev:client": "vite build --watch",
         "pretest": "npm run build:client",
         "test": "node --test",

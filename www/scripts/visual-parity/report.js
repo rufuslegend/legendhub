@@ -135,7 +135,10 @@ function renderFindings(results) {
 
 function renderArtifacts(results) {
     return results.map(function(result) {
-        return `<section><h3>${escapeHtml(result.scenario)} — ${escapeHtml(result.theme)} — ${escapeHtml(result.viewport)}</h3><dl><dt>Pixels</dt><dd>${escapeHtml(result.image.diffPixels)} (${escapeHtml(result.image.diffRatio)})</dd><dt>Dimensions</dt><dd>${escapeHtml(result.image.width)} × ${escapeHtml(result.image.height)}${result.image.dimensionMismatch ? " (mismatch)" : ""}</dd></dl><div class="images"><figure><figcaption>Reference</figcaption><img src="${escapeHtml(result.artifacts.reference)}" alt="Reference screenshot"></figure><figure><figcaption>Candidate</figcaption><img src="${escapeHtml(result.artifacts.candidate)}" alt="Candidate screenshot"></figure><figure><figcaption>Diff</figcaption><img src="${escapeHtml(result.artifacts.diff)}" alt="Pixel difference"></figure></div><p><a href="${escapeHtml(result.artifacts.structure)}">Structural findings JSON</a></p></section>`;
+        const errors = (result.errors || []).length === 0 ? "" : `<h4>Scenario errors</h4><ul>${result.errors.map(function(error) {
+            return `<li>${escapeHtml(error.side)}: ${escapeHtml(error.message)}</li>`;
+        }).join("")}</ul>`;
+        return `<section><h3>${escapeHtml(result.scenario)} — ${escapeHtml(result.theme)} — ${escapeHtml(result.viewport)}</h3>${errors}<dl><dt>Pixels</dt><dd>${escapeHtml(result.image.diffPixels)} (${escapeHtml(result.image.diffRatio)})</dd><dt>Dimensions</dt><dd>${escapeHtml(result.image.width)} × ${escapeHtml(result.image.height)}${result.image.dimensionMismatch ? " (mismatch)" : ""}</dd></dl><div class="images"><figure><figcaption>Reference</figcaption><img src="${escapeHtml(result.artifacts.reference)}" alt="Reference screenshot"></figure><figure><figcaption>Candidate</figcaption><img src="${escapeHtml(result.artifacts.candidate)}" alt="Candidate screenshot"></figure><figure><figcaption>Diff</figcaption><img src="${escapeHtml(result.artifacts.diff)}" alt="Pixel difference"></figure></div><p><a href="${escapeHtml(result.artifacts.structureReference)}">Reference structure JSON</a> · <a href="${escapeHtml(result.artifacts.structureCandidate)}">Candidate structure JSON</a> · <a href="${escapeHtml(result.artifacts.structure)}">Structural findings JSON</a></p></section>`;
     }).join("");
 }
 
@@ -158,18 +161,23 @@ function writeParityReport({outputDir, metadata, results}) {
             reference: relativeArtifactPath(outputDir, "reference", `${stem}.png`),
             candidate: relativeArtifactPath(outputDir, "candidate", `${stem}.png`),
             diff: relativeArtifactPath(outputDir, "diff", `${stem}.png`),
-            structure: relativeArtifactPath(outputDir, "structure", `${stem}.json`)
+            structure: relativeArtifactPath(outputDir, "structure", `${stem}.json`),
+            structureReference: relativeArtifactPath(outputDir, "structure", "reference", `${stem}.json`),
+            structureCandidate: relativeArtifactPath(outputDir, "structure", "candidate", `${stem}.json`)
         };
         writeArtifact(outputDir, artifacts.reference, result.referencePng);
         writeArtifact(outputDir, artifacts.candidate, result.candidatePng);
         writeArtifact(outputDir, artifacts.diff, result.diffPng);
         writeArtifact(outputDir, artifacts.structure, JSON.stringify(result.structuralFindings || [], null, 2));
+        writeArtifact(outputDir, artifacts.structureReference, JSON.stringify(result.referenceStructuralSnapshots || [], null, 2));
+        writeArtifact(outputDir, artifacts.structureCandidate, JSON.stringify(result.candidateStructuralSnapshots || [], null, 2));
         return {
             scenario: result.scenario,
             theme: result.theme,
             viewport: result.viewport,
             image: serializedImage(result.image),
             structuralFindings: result.structuralFindings || [],
+            errors: result.errors || [],
             artifacts
         };
     });
