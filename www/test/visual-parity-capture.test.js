@@ -7,6 +7,7 @@ const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
+const {PNG} = require("pngjs");
 
 const {runVisualParity} = require("../scripts/visual-parity/capture");
 
@@ -28,6 +29,17 @@ const STATE_SCENARIO = {
     route: "/",
     ready: "#target",
     capture: {kind: "locator", selector: "#target"},
+    structuralTargets: [{
+        name: "target",
+        selector: "#target",
+        checks: {text: true}
+    }]
+};
+const PAGE_SCENARIO = {
+    name: "controlled-page",
+    route: "/",
+    ready: "#target",
+    capture: {kind: "page"},
     structuralTargets: [{
         name: "target",
         selector: "#target",
@@ -58,6 +70,36 @@ function stateHtml() {
 
 function externalAssetHtml(withApplicationError) {
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.0.13/css/all.css"><style>#target{height:20px;width:64px}</style></head><body><main id="target">Stable</main>${withApplicationError ? "<script>console.error('application failure')</script>" : ""}</body></html>`;
+}
+
+function delayedLayoutHtml() {
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><style>html,body{margin:0}#target{height:20px}</style></head><body><main id="target">Stable</main><script>
+    const observer = new MutationObserver(function(records) {
+        const captureStyleAdded = records.some(function(record) {
+            return Array.from(record.addedNodes).some(function(node) {
+                return node.tagName === "STYLE" && node.textContent.includes("caret-color");
+            });
+        });
+        if (!captureStyleAdded)
+            return;
+        observer.disconnect();
+        let remaining = 8;
+        function grow() {
+            const block = document.createElement("div");
+            block.style.height = "100px";
+            document.body.append(block);
+            remaining -= 1;
+            if (remaining > 0)
+                requestAnimationFrame(grow);
+        }
+        requestAnimationFrame(grow);
+    });
+    observer.observe(document.head, {childList: true});
+    </script></body></html>`;
+}
+
+function structuralHtml(includeTarget) {
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"></head><body><div id="ready">Ready</div>${includeTarget ? '<main id="target">Stable</main>' : ""}</body></html>`;
 }
 
 async function startServer(render) {
@@ -267,4 +309,119 @@ test("blocked third-party diagnostics are ignored while application console erro
     const applicationError = await runVisualParity({...options, outputDir: path.join(outputDir, "application-error")});
     assert.equal(applicationError.exitCode, 2);
     assert.equal(applicationError.results.every(result => result.errors.some(error => error.message === "browser console error")), true);
+});
+
+test("full-page capture waits for delayed document layout to settle", async function(t) {
+    const reference = await startServer(delayedLayoutHtml);
+    const candidate = await startServer(delayedLayoutHtml);
+    const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "legendhub-capture-layout-"));
+    t.after(async function() {
+        await Promise.all([reference.close(), candidate.close()]);
+        fs.rmSync(outputDir, {recursive: true, force: true});
+    });
+
+    const run = await runVisualParity({
+        referenceBaseUrl: reference.baseUrl,
+        candidateBaseUrl: candidate.baseUrl,
+        referenceSha: REFERENCE_SHA,
+        candidateSha: CANDIDATE_SHA,
+        mode: "smoke",
+        outputDir,
+        failOnDiff: true,
+        scenarios: [PAGE_SCENARIO]
+    });
+
+    assert.equal(run.exitCode, 0);
+    assert.deepEqual(run.results.map(result => PNG.sync.read(result.referencePng).height), [820, 820]);
+    assert.deepEqual(run.results.map(result => PNG.sync.read(result.candidatePng).height), [820, 820]);
+});
+
+test("one-side and both-side missing structural targets are findings and scenario errors", async function(t) {
+    let referenceHasTarget = true;
+    let candidateHasTarget = false;
+    const reference = await startServer(function() { return structuralHtml(referenceHasTarget); });
+    const candidate = await startServer(function() { return structuralHtml(candidateHasTarget); });
+    const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "legendhub-capture-missing-"));
+    t.after(async function() {
+        await Promise.all([reference.close(), candidate.close()]);
+        fs.rmSync(outputDir, {recursive: true, force: true});
+    });
+    const scenario = {
+        ...PAGE_SCENARIO,
+        name: "missing-structural-target",
+        ready: "#ready"
+    };
+    const options = {
+        referenceBaseUrl: reference.baseUrl,
+        candidateBaseUrl: candidate.baseUrl,
+        referenceSha: REFERENCE_SHA,
+        candidateSha: CANDIDATE_SHA,
+        mode: "smoke",
+        failOnDiff: false,
+        scenarios: [scenario]
+    };
+
+    const oneSide = await runVisualParity({...options, outputDir: path.join(outputDir, "one-side")});
+    assert.equal(oneSide.exitCode, 2);
+    assert.equal(oneSide.errorCount, 2);
+    assert.equal(oneSide.results.flatMap(result => result.structuralFindings).length, 1);
+    assert.deepEqual(oneSide.results.flatMap(result => result.structuralFindings)[0], {
+        scenario: "missing-structural-target",
+        target: "target",
+        property: "target",
+        reference: "present",
+        candidate: "missing",
+        occurrences: [
+            {theme: "glass-blue", viewport: "desktop"},
+            {theme: "glass-blue", viewport: "mobile"}
+        ]
+    });
+
+    referenceHasTarget = false;
+    const bothSides = await runVisualParity({...options, outputDir: path.join(outputDir, "both-sides")});
+    assert.equal(bothSides.exitCode, 2);
+    assert.equal(bothSides.errorCount, 4);
+    assert.equal(bothSides.results.flatMap(result => result.structuralFindings).length, 1);
+    assert.deepEqual(bothSides.results.flatMap(result => result.structuralFindings)[0], {
+        scenario: "missing-structural-target",
+        target: "target",
+        property: "target",
+        reference: "missing",
+        candidate: "missing",
+        occurrences: [
+            {theme: "glass-blue", viewport: "desktop"},
+            {theme: "glass-blue", viewport: "mobile"}
+        ]
+    });
+});
+
+test("stored navigation errors redact URL credentials, queries, and fragments", async function(t) {
+    const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "legendhub-capture-redaction-"));
+    t.after(function() {
+        fs.rmSync(outputDir, {recursive: true, force: true});
+    });
+    const secretUrl = "https://user:CREDENTIAL_SECRET@example.test/private/path?QUERY_SECRET=1#FRAGMENT_SECRET";
+    const run = await runVisualParity({
+        referenceBaseUrl: "http://127.0.0.1:1",
+        candidateBaseUrl: "http://127.0.0.1:2",
+        referenceSha: REFERENCE_SHA,
+        candidateSha: CANDIDATE_SHA,
+        mode: "smoke",
+        outputDir,
+        failOnDiff: false,
+        scenarios: [PAGE_SCENARIO],
+        browserType: {
+            launch: async function() {
+                throw new Error(`page.goto: navigation failed at ${secretUrl}`);
+            }
+        }
+    });
+
+    assert.equal(run.exitCode, 2);
+    const findings = fs.readFileSync(run.reportPaths.findingsPath, "utf8");
+    const htmlReport = fs.readFileSync(run.reportPaths.indexPath, "utf8");
+    for (const contents of [findings, htmlReport]) {
+        assert.match(contents, /page\.goto: navigation failed at https:\/\/example\.test\/private\/path/);
+        assert.doesNotMatch(contents, /user|CREDENTIAL_SECRET|QUERY_SECRET|FRAGMENT_SECRET/);
+    }
 });

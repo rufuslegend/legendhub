@@ -41,6 +41,23 @@ function firstLine(error) {
     return String(error?.message || error || "unknown error").split("\n", 1)[0];
 }
 
+function sanitizeErrorMessage(error) {
+    return firstLine(error).replace(/https?:\/\/[^\s<>"']+/giu, function(rawUrl) {
+        let suffix = "";
+        let candidate = rawUrl;
+        while (/[\])},.;!?]$/.test(candidate)) {
+            suffix = `${candidate.slice(-1)}${suffix}`;
+            candidate = candidate.slice(0, -1);
+        }
+        try {
+            const parsed = new URL(candidate);
+            return `${parsed.origin}${parsed.pathname}${suffix}`;
+        } catch {
+            return rawUrl;
+        }
+    });
+}
+
 function safeRequestPath(request) {
     try {
         const parsed = new URL(request.url());
@@ -239,6 +256,50 @@ async function waitForSettledBox(locator, label) {
     throw new Error(`${label} did not settle at a stable bounding box`);
 }
 
+async function waitForPageLayoutSettled(page) {
+    await page.evaluate(function(timeoutMilliseconds) {
+        function elementMetrics(element) {
+            const rect = element.getBoundingClientRect();
+            return {
+                x: rect.x,
+                y: rect.y,
+                width: rect.width,
+                height: rect.height,
+                scrollWidth: element.scrollWidth,
+                scrollHeight: element.scrollHeight,
+                clientWidth: element.clientWidth,
+                clientHeight: element.clientHeight
+            };
+        }
+        function pageMetrics() {
+            return {
+                scrollX,
+                scrollY,
+                document: elementMetrics(document.documentElement),
+                body: elementMetrics(document.body)
+            };
+        }
+        return new Promise(function(resolve, reject) {
+            const startedAt = performance.now();
+            let previous;
+            function sample() {
+                const current = pageMetrics();
+                if (previous && JSON.stringify(previous) === JSON.stringify(current)) {
+                    resolve();
+                    return;
+                }
+                if (performance.now() - startedAt > timeoutMilliseconds) {
+                    reject(new Error("full-page layout did not settle across two animation frames"));
+                    return;
+                }
+                previous = current;
+                requestAnimationFrame(sample);
+            }
+            requestAnimationFrame(sample);
+        });
+    }, 10000);
+}
+
 async function captureSide(context, entry, side, baseUrl) {
     const {scenario, theme, viewportName} = entry;
     const page = await context.newPage();
@@ -277,6 +338,7 @@ async function captureSide(context, entry, side, baseUrl) {
             await waitForSettledBox(locator, "capture locator");
             png = await locator.screenshot({animations: "disabled", mask: masks});
         } else {
+            await waitForPageLayoutSettled(page);
             png = await page.screenshot({animations: "disabled", fullPage: true, mask: masks});
         }
         structuralSnapshots = await captureStructuralTargets(page, scenario, side, {
@@ -291,9 +353,16 @@ async function captureSide(context, entry, side, baseUrl) {
     return {
         png: png || transparentPng(),
         structuralSnapshots,
-        errors: Array.from(new Set(observer.errors)).map(function(message) {
-            return {side, message};
-        })
+        errors: [
+            ...Array.from(new Set(observer.errors)).map(function(message) {
+                return {side, message};
+            }),
+            ...structuralSnapshots.filter(function(snapshot) {
+                return snapshot.present === false;
+            }).map(function(snapshot) {
+                return {side, message: `missing structural target: ${snapshot.target}`};
+            })
+        ]
     };
 }
 
@@ -393,6 +462,14 @@ function errorCount(results) {
     }, 0);
 }
 
+function sanitizeResultErrors(results) {
+    for (const result of results) {
+        result.errors = result.errors.map(function(error) {
+            return {side: error.side, message: sanitizeErrorMessage(error.message)};
+        });
+    }
+}
+
 async function runVisualParity(options) {
     const scenarios = validateManifest(options.scenarios || SCENARIOS);
     const matrix = buildCaptureMatrix({mode: options.mode, scenarios});
@@ -450,6 +527,7 @@ async function runVisualParity(options) {
     }
 
     attachConsolidatedFindings(results);
+    sanitizeResultErrors(results);
     const metadata = {
         referenceSha: options.referenceSha,
         candidateSha: options.candidateSha,
