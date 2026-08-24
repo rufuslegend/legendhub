@@ -120,14 +120,31 @@ if [[ "$reference_head" != "$required_reference_sha" ]]; then
   printf 'visual-parity: cached reference worktree is not at the required commit\n' >&2
   exit 1
 fi
-if [[ -n "$(git -C "$reference_root" status --porcelain)" ]]; then
+reference_status="$(git -C "$reference_root" status --porcelain)" || {
+  reference_status_code="$?"
+  printf 'visual-parity: could not inspect cached reference worktree status\n' >&2
+  exit "$reference_status_code"
+}
+if [[ -n "$reference_status" ]]; then
   printf 'visual-parity: cached reference worktree is modified; inspect it without resetting or removing it\n' >&2
   exit 1
 fi
 if git -C "$reference_root" symbolic-ref -q HEAD >/dev/null 2>&1; then
-  printf 'visual-parity: cached reference worktree is not detached; inspect it without resetting or removing it\n' >&2
-  exit 1
+  symbolic_ref_status=0
+else
+  symbolic_ref_status="$?"
 fi
+case "$symbolic_ref_status" in
+  0)
+    printf 'visual-parity: cached reference worktree is not detached; inspect it without resetting or removing it\n' >&2
+    exit 1
+    ;;
+  1) ;;
+  *)
+    printf 'visual-parity: could not inspect whether cached reference is detached\n' >&2
+    exit "$symbolic_ref_status"
+    ;;
+esac
 if [[ ! -s "${reference_root}/docker-compose.yaml" ]]; then
   printf 'visual-parity: cached reference worktree is incomplete\n' >&2
   exit 1
@@ -225,15 +242,31 @@ print_cleanup_command() {
 has_stale_resources() {
   local project_name="$1"
   local containers
+  local inspection_status
   local networks
   local volumes
 
   containers="$(docker ps --all --quiet --no-trunc \
-    --filter "label=com.docker.compose.project=${project_name}")"
+    --filter "label=com.docker.compose.project=${project_name}")" || {
+      inspection_status="$?"
+      printf 'visual-parity: could not inspect containers for %s (status %s)\n' \
+        "$project_name" "$inspection_status" >&2
+      return 2
+    }
   networks="$(docker network ls --quiet \
-    --filter "label=com.docker.compose.project=${project_name}")"
+    --filter "label=com.docker.compose.project=${project_name}")" || {
+      inspection_status="$?"
+      printf 'visual-parity: could not inspect networks for %s (status %s)\n' \
+        "$project_name" "$inspection_status" >&2
+      return 2
+    }
   volumes="$(docker volume ls --quiet \
-    --filter "label=com.docker.compose.project=${project_name}")"
+    --filter "label=com.docker.compose.project=${project_name}")" || {
+      inspection_status="$?"
+      printf 'visual-parity: could not inspect volumes for %s (status %s)\n' \
+        "$project_name" "$inspection_status" >&2
+      return 2
+    }
   [[ -n "$containers" || -n "$networks" || -n "$volumes" ]]
 }
 
@@ -245,12 +278,21 @@ for project_spec in \
   checkout_root="${project_remainder%%|*}"
   https_port="${project_remainder##*|}"
   if has_stale_resources "$project_name"; then
-    printf 'visual-parity: retained or stale Docker resources belong to %s\n' \
-      "$project_name" >&2
-    printf 'visual-parity: inspect them, then run exactly:\n' >&2
-    print_cleanup_command "$project_name" "$checkout_root" "$https_port" >&2
-    exit 1
+    stale_resource_status=0
+  else
+    stale_resource_status="$?"
   fi
+  case "$stale_resource_status" in
+    0)
+      printf 'visual-parity: retained or stale Docker resources belong to %s\n' \
+        "$project_name" >&2
+      printf 'visual-parity: inspect them, then run exactly:\n' >&2
+      print_cleanup_command "$project_name" "$checkout_root" "$https_port" >&2
+      exit 1
+      ;;
+    1) ;;
+    *) exit "$stale_resource_status" ;;
+  esac
 done
 
 safe_down() {

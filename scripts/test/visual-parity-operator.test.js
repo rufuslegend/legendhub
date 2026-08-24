@@ -49,15 +49,18 @@ if [[ "${dollar}*" == "-C ${dollar}reference_root rev-parse HEAD" ]]; then
   exit 0
 fi
 if [[ "${dollar}*" == "-C ${dollar}reference_root status --porcelain" ]]; then
+  if [[ "${dollar}{FAKE_REFERENCE_STATUS_EXIT_STATUS:-0}" != 0 ]]; then
+    exit "${dollar}FAKE_REFERENCE_STATUS_EXIT_STATUS"
+  fi
   printf '%s' "${dollar}{FAKE_REFERENCE_STATUS:-}"
   exit 0
 fi
 if [[ "${dollar}*" == "-C ${dollar}reference_root symbolic-ref -q HEAD" ]]; then
-  if [[ "${dollar}{FAKE_REFERENCE_ATTACHED:-0}" == 1 ]]; then
+  symbolic_ref_status="${dollar}{FAKE_SYMBOLIC_REF_STATUS:-1}"
+  if [[ "${dollar}symbolic_ref_status" == 0 ]]; then
     printf 'refs/heads/unexpected-reference-branch\n'
-    exit 0
   fi
-  exit 1
+  exit "${dollar}symbolic_ref_status"
 fi
 
 printf 'unexpected fake git command\n' >&2
@@ -260,6 +263,14 @@ function downCalls() {
         call[0] === "compose" && call.includes("down"));
 }
 
+function assertNoExternalEventAfter(eventFragment) {
+    const events = fs.readFileSync(logs.events, "utf8").trimEnd().split("\n");
+    const failedIndex = events.findIndex((event) => event.includes(eventFragment));
+    assert.notEqual(failedIndex, -1, `missing event containing ${eventFragment}`);
+    assert.deepEqual(events.slice(failedIndex + 1).filter((event) =>
+        /^(git|docker|npm|curl)\|/.test(event)), []);
+}
+
 beforeEach(() => {
     workspace = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),
         "legendhub-parity-operator-")));
@@ -348,10 +359,12 @@ test("creates the cached reference as a detached worktree at the fixed SHA", () 
     assertNoForbiddenTarget(result);
 });
 
-test("reuses a clean detached reference without resetting or removing it", () => {
+test("reuses a clean status-1 detached reference without resetting or removing it", () => {
     createReferenceWorktree();
 
-    const result = runOperator(["--mode", "smoke"]);
+    const result = runOperator(["--mode", "smoke"], {
+        FAKE_SYMBOLIC_REF_STATUS: "1",
+    });
 
     assert.equal(result.status, 0, result.stderr);
     const gitCalls = readRecords(logs.git);
@@ -375,6 +388,20 @@ test("rejects a dirty cached reference before Docker without modifying it", () =
     assertNoForbiddenTarget(result);
 });
 
+test("fails closed when reference status inspection fails", () => {
+    createReferenceWorktree();
+
+    const result = runOperator(["--mode", "smoke"], {
+        FAKE_REFERENCE_STATUS_EXIT_STATUS: "71",
+    });
+
+    assert.equal(result.status, 71);
+    assert.match(result.stderr, /could not inspect cached reference worktree status/);
+    assert.deepEqual(readRecords(logs.docker), []);
+    assertNoExternalEventAfter("status --porcelain");
+    assertNoForbiddenTarget(result);
+});
+
 test("rejects a cached reference checked out at another commit", () => {
     createReferenceWorktree();
 
@@ -392,7 +419,7 @@ test("rejects an attached cached reference without detaching or resetting it", (
     createReferenceWorktree();
 
     const result = runOperator(["--mode", "smoke"], {
-        FAKE_REFERENCE_ATTACHED: "1",
+        FAKE_SYMBOLIC_REF_STATUS: "0",
     });
 
     assert.notEqual(result.status, 0);
@@ -401,6 +428,20 @@ test("rejects an attached cached reference without detaching or resetting it", (
     const gitCalls = readRecords(logs.git);
     assert.equal(gitCalls.some((call) => call.includes("checkout")), false);
     assert.equal(gitCalls.some((call) => call.includes("reset")), false);
+    assertNoForbiddenTarget(result);
+});
+
+test("fails closed when detached-reference inspection returns status 128", () => {
+    createReferenceWorktree();
+
+    const result = runOperator(["--mode", "smoke"], {
+        FAKE_SYMBOLIC_REF_STATUS: "128",
+    });
+
+    assert.equal(result.status, 128);
+    assert.match(result.stderr, /could not inspect whether cached reference is detached/);
+    assert.deepEqual(readRecords(logs.docker), []);
+    assertNoExternalEventAfter("symbolic-ref -q HEAD");
     assertNoForbiddenTarget(result);
 });
 
@@ -450,6 +491,39 @@ for (const project of [
             assertNoForbiddenTarget(result);
         });
     }
+}
+
+for (const failureCase of [
+    {
+        name: "container",
+        command: "ps --all --quiet --no-trunc --filter",
+    },
+    {
+        name: "network",
+        command: "network ls --quiet --filter",
+    },
+    {
+        name: "volume",
+        command: "volume ls --quiet --filter",
+    },
+]) {
+    test(`fails closed when ${failureCase.name} stale-resource inspection fails`, () => {
+        const project = "legendhub-parity-reference";
+        const failurePattern = `${failureCase.command} ` +
+            `label=com.docker.compose.project=${project}`;
+        const result = runOperator(["--mode", "smoke"], {
+            FAKE_DOCKER_FAIL_PATTERN: failurePattern,
+            FAKE_DOCKER_FAIL_STATUS: "72",
+        });
+
+        assert.equal(result.status, 2);
+        assert.match(result.stderr,
+            new RegExp(`could not inspect ${failureCase.name}s for ${project}`));
+        assertNoExternalEventAfter(failurePattern);
+        assert.deepEqual(readRecords(logs.npm), []);
+        assert.deepEqual(readRecords(logs.curl), []);
+        assertNoForbiddenTarget(result);
+    });
 }
 
 test("renders and starts only mysql, www, and nginx before capture", () => {
