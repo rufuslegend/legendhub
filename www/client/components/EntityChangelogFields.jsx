@@ -11,6 +11,14 @@ export default function EntityChangelogFields({id, label, onChange, rows, value}
                     rel="noopener noreferrer"
                 >
                     markdown
+                </a>{" "}
+                and{" "}
+                <a
+                    href="https://github.com/showdownjs/showdown/wiki/Emojis"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
+                    emoji
                 </a>.
             </p>
             <div className="form-row">

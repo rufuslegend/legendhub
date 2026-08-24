@@ -889,6 +889,28 @@ test("React migration: Markdown preview preserves Smithing-style soft line break
     );
 });
 
+// Catches the shared editor helper or live preview dropping the legacy emoji
+// shortcode support during the Markdown renderer migration.
+test("React migration: editors advertise and preview legacy emoji shortcodes", async function({page}) {
+    await openEditor(page, "/wiki/edit.html?id=401", "Edit Wiki Page");
+    await expect(page.getByRole("link", {name: "emoji", exact: true})).toHaveAttribute(
+        "href",
+        "https://github.com/showdownjs/showdown/wiki/Emojis"
+    );
+
+    await page.locator("textarea").fill(
+        "Ready :smile: :+1: unknown :not_a_legendhub_emoji: " +
+        "code `:smile:` emoticon :)"
+    );
+
+    const paragraph = page.getByRole("region", {name: "Content Markdown preview"})
+        .locator("p").first();
+    await expect(paragraph).toHaveText(
+        "Ready 😄 👍 unknown :not_a_legendhub_emoji: code :smile: emoticon :)"
+    );
+    await expect(paragraph.locator("code")).toHaveText(":smile:");
+});
+
 test("React migration: Markdown preview keeps ordinary formatting and removes malicious HTML and URLs", async function({page}) {
     await openEditor(page, "/wiki/edit.html?id=401", "Edit Wiki Page");
     const content = [

@@ -23,6 +23,7 @@ with version 2.6.0.
 - Restored centered, compact Builder equipment rows, including lock controls, kept slot and total values on one line, and returned item names to their familiar emphasis.
 - Restored the Builder's compact Character and Variant action icons and the stat-quest bonuses with their original help text.
 - Restored Markdown line breaks in guides and notes, and returned editor preview cards to their familiar “Preview” heading.
+- Restored emoji shortcodes in guides, notes, histories, and editor previews.
 - Fixed the notification menu's middle action so its text remains readable in every theme.
 
 ## [2.9.0] - 2026-08-22

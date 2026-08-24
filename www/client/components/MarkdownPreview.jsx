@@ -1,12 +1,13 @@
 import DOMPurify from "dompurify";
 import MarkdownIt from "markdown-it";
+import {full as emoji} from "markdown-it-emoji";
 
 const markdown = new MarkdownIt({
     breaks: true,
     html: true,
     linkify: true,
     typographer: false
-});
+}).use(emoji, {shortcuts: {}});
 const uriWhitespace = /[\u0000-\u0020\u00A0\u1680\u180E\u2000-\u2029\u205F\u3000]/g;
 
 function rejectDataUri(_node, hookEvent) {

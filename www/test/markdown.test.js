@@ -37,6 +37,19 @@ test("preserves soft line breaks in Smithing-style instructions", function() {
         "other items in the room can impact your ability to execute a smithing iteration.</p>\n");
 });
 
+// Catches the Markdown renderer dropping the legacy emoji shortcode support
+// while preserving literal shortcode-like text in code and unknown names.
+test("renders legacy emoji shortcodes without changing code or unknown names", function() {
+    const html = renderMarkdown(
+        "Ready :smile: :+1: unknown :not_a_legendhub_emoji: " +
+        "code `:smile:` emoticon :)"
+    );
+
+    assert.equal(html,
+        "<p>Ready 😄 👍 unknown :not_a_legendhub_emoji: " +
+        "code <code>:smile:</code> emoticon :)</p>\n");
+});
+
 // Catches a renderer mutation that permits unsafe Markdown link protocols.
 test("does not render unsafe Markdown links", function() {
     const html = renderMarkdown("[dangerous link](javascript:alert(1))");
