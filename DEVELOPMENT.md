@@ -173,6 +173,55 @@ and Filters dialogs, and a Builder collapsible section and Columns dialog.
 Authenticated pages and editor states still require separate automated
 coverage and manual testing.
 
+## Local Angular-to-React visual parity
+
+Run the parity harness from the repository root after preparing the
+production-shaped local state described above:
+
+```sh
+# fast Glass Blue matrix, automatic cleanup
+./scripts/run-visual-parity.sh --mode smoke
+
+# all nine themes at desktop and mobile
+./scripts/run-visual-parity.sh --mode full
+
+# retain both disposable stacks for manual inspection
+./scripts/run-visual-parity.sh --mode smoke --keep
+
+# release-gate behavior after the accepted report is clean
+./scripts/run-visual-parity.sh --mode full --fail-on-diff
+```
+
+Each run writes an ignored report beneath
+`data/parity-report/<UTC timestamp>-<candidate short SHA>/`. Open `index.html`
+for the matrix summary and use `findings.json`, the reference/candidate/diff
+PNGs, and the paired structural JSON files to triage each cell. Visual and
+structural differences are findings and exit successfully by default;
+scenario or harness errors exit `2` and must be resolved before accepting the
+report.
+
+The two disposable projects serve the frozen Angular reference at
+`https://localhost:7443` and the candidate at `https://localhost:7444`. By
+default, the wrapper runs `docker compose down --volumes --remove-orphans` for
+both exact parity projects after success, failure, or an interrupt once their
+lifecycle has started. `--keep` retains them and prints the exact bounded log
+and cleanup commands instead; inspect them, then run both printed cleanup
+commands before the next parity run. This lifecycle is separate from the
+existing `legendhub-local` project.
+
+Use the frozen reference as the reproducible baseline. If a finding is
+ambiguous because the fixture or frozen checkout may differ from current
+player-facing behavior, compare only the affected state with
+`https://www.legendhub.org` as live-production arbitration evidence. Do not
+make the live site the automated reference, and do not change or deploy a
+remote environment while triaging a local report.
+
+Masks must stay limited to a precisely declared unstable element, such as the
+registration CAPTCHA. Never mask a page, a broad container, or a genuine
+product difference to make the report pass. Keep report-only behavior while
+accepted findings remain; enable `--fail-on-diff` only after review has reduced
+the accepted finding count to zero.
+
 ## Cross-deployment UI parity audit
 
 The UI parity audit compares mapped shared-shell, Builder, Item Search, and
