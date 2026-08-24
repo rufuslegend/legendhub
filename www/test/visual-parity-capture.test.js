@@ -56,6 +56,10 @@ function stateHtml() {
     </script></body></html>`;
 }
 
+function externalAssetHtml(withApplicationError) {
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.0.13/css/all.css"><style>#target{height:20px;width:64px}</style></head><body><main id="target">Stable</main>${withApplicationError ? "<script>console.error('application failure')</script>" : ""}</body></html>`;
+}
+
 async function startServer(render) {
     const server = http.createServer(function(_request, response) {
         const rendered = render();
@@ -234,4 +238,33 @@ test("browser contexts expose the required deterministic state", async function(
         "1280x720|1|en-US|America/Chicago|reduce|glass-blue|true|lists|Hero!Tank",
         "375x667|1|en-US|America/Chicago|reduce|glass-blue|true|lists|Hero!Tank"
     ]);
+});
+
+test("blocked third-party diagnostics are ignored while application console errors fail", async function(t) {
+    let withApplicationError = false;
+    const reference = await startServer(function() { return externalAssetHtml(withApplicationError); });
+    const candidate = await startServer(function() { return externalAssetHtml(withApplicationError); });
+    const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "legendhub-capture-console-"));
+    t.after(async function() {
+        await Promise.all([reference.close(), candidate.close()]);
+        fs.rmSync(outputDir, {recursive: true, force: true});
+    });
+
+    const options = {
+        referenceBaseUrl: reference.baseUrl,
+        candidateBaseUrl: candidate.baseUrl,
+        referenceSha: REFERENCE_SHA,
+        candidateSha: CANDIDATE_SHA,
+        mode: "smoke",
+        failOnDiff: true,
+        scenarios: [SCENARIO]
+    };
+    const policyOnly = await runVisualParity({...options, outputDir: path.join(outputDir, "policy-only")});
+    assert.equal(policyOnly.exitCode, 0);
+    assert.equal(policyOnly.errorCount, 0);
+
+    withApplicationError = true;
+    const applicationError = await runVisualParity({...options, outputDir: path.join(outputDir, "application-error")});
+    assert.equal(applicationError.exitCode, 2);
+    assert.equal(applicationError.results.every(result => result.errors.some(error => error.message === "browser console error")), true);
 });

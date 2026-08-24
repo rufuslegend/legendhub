@@ -113,7 +113,8 @@ function observePage(page, baseUrl) {
             errors.push(`HTTP ${response.status()}: ${safeRequestPath(response.request())}`);
     });
     page.on("console", function(message) {
-        if (message.type() === "error")
+        const locationUrl = message.location().url;
+        if (message.type() === "error" && (!locationUrl || sameOrigin(locationUrl, baseUrl)))
             errors.push("browser console error");
     });
     page.on("pageerror", function(error) {
