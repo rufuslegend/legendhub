@@ -9,6 +9,7 @@ const fulfillLocalBrowserScript = require("../../accessibility/support/local-bro
 const {buildCaptureMatrix, validateManifest} = require("./config");
 const {comparePngBuffers} = require("./images");
 const {writeParityReport} = require("./report");
+const fulfillReferenceBrowserScript = require("./reference-browser-scripts");
 const {SCENARIOS} = require("./scenarios");
 const {captureStructuralTargets, compareStructuralSnapshots} = require("./structure");
 
@@ -97,12 +98,14 @@ function sameOrigin(url, baseUrl) {
     }
 }
 
-async function installRequestPolicy(context, baseUrl, scenario) {
+async function installRequestPolicy(context, baseUrl, scenario, side) {
     const allowCaptcha = hasCaptchaMask(scenario);
     await context.route(/^https?:\/\//, async function(route) {
         const requestUrl = route.request().url();
         if (sameOrigin(requestUrl, baseUrl))
             return route.continue();
+        if (side === "reference" && await fulfillReferenceBrowserScript(route))
+            return;
         const hostname = new URL(requestUrl).hostname;
         if (allowCaptcha && CAPTCHA_HOSTS.has(hostname))
             return route.continue();
@@ -378,7 +381,7 @@ async function captureSide(context, entry, side, baseUrl) {
     };
 }
 
-async function createContext(browser, entry, baseUrl) {
+async function createContext(browser, entry, baseUrl, side) {
     const context = await browser.newContext({
         viewport: entry.viewport,
         deviceScaleFactor: 1,
@@ -390,7 +393,7 @@ async function createContext(browser, entry, baseUrl) {
         {name: "theme", value: entry.theme, url: baseUrl},
         {name: "cookie-consent", value: "true", url: baseUrl}
     ]);
-    await installRequestPolicy(context, baseUrl, entry.scenario);
+    await installRequestPolicy(context, baseUrl, entry.scenario, side);
     return context;
 }
 
@@ -407,10 +410,10 @@ async function captureEntry(browser, entry, options, activeContexts) {
     const closeErrors = [];
 
     try {
-        const referenceContext = await createContext(browser, entry, options.referenceBaseUrl);
+        const referenceContext = await createContext(browser, entry, options.referenceBaseUrl, "reference");
         contexts.push({context: referenceContext, side: "reference"});
         activeContexts.add(referenceContext);
-        const candidateContext = await createContext(browser, entry, options.candidateBaseUrl);
+        const candidateContext = await createContext(browser, entry, options.candidateBaseUrl, "candidate");
         contexts.push({context: candidateContext, side: "candidate"});
         activeContexts.add(candidateContext);
         reference = await captureSide(referenceContext, entry, "reference", options.referenceBaseUrl);

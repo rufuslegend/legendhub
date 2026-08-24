@@ -224,3 +224,25 @@ test("SCENARIOS declares the fixed initial visual parity surface", function() {
     ]);
     assert.deepEqual(validateManifest(SCENARIOS), SCENARIOS);
 });
+
+test("real parity selectors address visible reference and candidate targets", function() {
+    const scenarios = Object.fromEntries(SCENARIOS.map(scenario => [scenario.name, scenario]));
+
+    assert.equal(scenarios["registration-panel"].ready, "#loginCollapse");
+    assert.deepEqual(scenarios["notifications-popover"].ready, {
+        reference: "#not-pop-1, #not-pop-2",
+        candidate: "[data-notification-popover]"
+    });
+    assert.deepEqual(scenarios["items-results"].ready, {
+        reference: "body[ng-controller='items'] .container-fluid",
+        candidate: "[data-react-root='items'] .container-fluid"
+    });
+    assert.deepEqual(scenarios["builder-item-picker"].structuralTargets[0].selector, {
+        reference: "#itemChoiceModal",
+        candidate: "[role='dialog'][aria-label='Choose Item']"
+    });
+    assert.equal(
+        scenarios["responsive-navigation"].actions[0].target,
+        "button.navbar-toggler, a.navbar-brand"
+    );
+});

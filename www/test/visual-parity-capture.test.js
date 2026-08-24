@@ -2,6 +2,7 @@
 
 const assert = require("node:assert/strict");
 const childProcess = require("node:child_process");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
@@ -70,6 +71,17 @@ function stateHtml() {
 
 function externalAssetHtml(withApplicationError) {
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.0.13/css/all.css"><style>#target{height:20px;width:64px}</style></head><body><main id="target">Stable</main>${withApplicationError ? "<script>console.error('application failure')</script>" : ""}</body></html>`;
+}
+
+function legacyAngularHtml() {
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"></head><body><main id="target">Loading</main>
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.0/angular.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.0/angular-cookies.min.js"></script>
+    <script>
+    document.querySelector("#target").textContent = typeof angular === "undefined"
+        ? "blocked"
+        : angular.version.full + "|" + angular.module("ngCookies").name;
+    </script></body></html>`;
 }
 
 function delayedLayoutHtml() {
@@ -309,6 +321,46 @@ test("blocked third-party diagnostics are ignored while application console erro
     const applicationError = await runVisualParity({...options, outputDir: path.join(outputDir, "application-error")});
     assert.equal(applicationError.exitCode, 2);
     assert.equal(applicationError.results.every(result => result.errors.some(error => error.message === "browser console error")), true);
+});
+
+test("frozen reference receives pinned AngularJS while the candidate stays blocked", async function(t) {
+    const reference = await startServer(legacyAngularHtml);
+    const candidate = await startServer(legacyAngularHtml);
+    const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "legendhub-capture-angularjs-"));
+    t.after(async function() {
+        await Promise.all([reference.close(), candidate.close()]);
+        fs.rmSync(outputDir, {recursive: true, force: true});
+    });
+
+    const run = await runVisualParity({
+        referenceBaseUrl: reference.baseUrl,
+        candidateBaseUrl: candidate.baseUrl,
+        referenceSha: REFERENCE_SHA,
+        candidateSha: CANDIDATE_SHA,
+        mode: "smoke",
+        outputDir,
+        failOnDiff: false,
+        scenarios: [SCENARIO]
+    });
+
+    assert.equal(run.exitCode, 0);
+    assert.equal(run.results[0].referenceStructuralSnapshots[0].text, "1.8.0|ngCookies");
+    assert.equal(run.results[0].candidateStructuralSnapshots[0].text, "blocked");
+});
+
+test("vendored AngularJS reference fixtures match upstream 1.8.0", function() {
+    const vendorRoot = path.join(__dirname, "../../scripts/fixtures/visual-parity/angularjs-1.8.0");
+    const fixtures = [
+        ["angular.min.js", "566f18cb8bc23558701c2cc4f934fe50bcc85629d1aaf5d589f835f2b3e57a9f"],
+        ["angular-cookies.min.js", "eed97b74e2128f3d340325dd9cbfb9b8f70a1a5ade70eccca990d45483aa8700"]
+    ];
+
+    for (const [filename, expectedHash] of fixtures) {
+        const filePath = path.join(vendorRoot, filename);
+        assert.equal(fs.existsSync(filePath), true, `${filename} must be vendored`);
+        assert.equal(crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex"), expectedHash);
+    }
+    assert.match(fs.readFileSync(path.join(vendorRoot, "LICENSE.md"), "utf8"), /The MIT License/);
 });
 
 test("full-page capture waits for delayed document layout to settle", async function(t) {

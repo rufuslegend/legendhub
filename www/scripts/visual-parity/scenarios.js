@@ -22,7 +22,7 @@ const builderRoot = pair(
 );
 const itemsRoot = pair(
     "body[ng-controller='items'] .container-fluid",
-    "[data-react-root='items'] main.container-fluid"
+    "[data-react-root='items'] .container-fluid"
 );
 const accountRoot = pair(
     "body[ng-controller='account'] .container",
@@ -35,7 +35,7 @@ const editorRoot = function(legacyController, reactRoot) {
     );
 };
 
-const notificationButton = "[data-notification-popover]";
+const notificationButton = pair("#not-pop-1, #not-pop-2", "[data-notification-popover]");
 const standardContainer = ".container";
 const standardResults = ".container-fluid";
 const builderColumns = pair(
@@ -46,7 +46,7 @@ const builderColumns = pair(
 const SCENARIOS = [
     page("home-shell", "/", ".container-fluid.px-5", [target("home content", ".container-fluid.px-5", ["text"])]),
     page("login", "/login.html", "#loginCollapse", [target("login card", "form[name='login']", ["text", "childOrder"])]),
-    page("registration-panel", "/login.html", "#registerCollapse", [
+    page("registration-panel", "/login.html", "#loginCollapse", [
         target("registration card", "form[name='register']", ["text", "childOrder"]),
         target("captcha", ".g-recaptcha")
     ], {
@@ -75,7 +75,10 @@ const SCENARIOS = [
         seed: {builderState: {cln: "Parity", scl: "Parity"}},
         actions: [{type: "click", target: builderColumns}]
     }),
-    page("builder-item-picker", "/builder/", builderRoot, [target("item picker", "#itemChoiceModal", ["text", "icons", "childOrder", "wrapping"])], {
+    page("builder-item-picker", "/builder/", builderRoot, [target("item picker", pair(
+        "#itemChoiceModal",
+        "[role='dialog'][aria-label='Choose Item']"
+    ), ["text", "icons", "childOrder", "wrapping"])], {
         seed: {builderState: {cln: "Parity", scl: "Parity"}},
         actions: [{type: "click", target: pair(
             ".table-bordered tbody tr:nth-child(2) th[ng-click]",
@@ -127,7 +130,7 @@ const SCENARIOS = [
     ], {authenticated: true}),
     page("wiki-smithing-format", "/wiki/details.html?id=900002", standardContainer, [target("wiki content", standardContainer, ["text", "childOrder", "wrapping"])]),
     page("responsive-navigation", "/", "header", [target("navigation menu", "#navbarSupportedContent", ["text", "icons", "childOrder", "wrapping"])], {
-        actions: [{type: "click", target: "button.navbar-toggler"}]
+        actions: [{type: "click", target: "button.navbar-toggler, a.navbar-brand"}]
     })
 ];
 
