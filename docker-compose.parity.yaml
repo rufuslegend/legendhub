@@ -1,0 +1,50 @@
+services:
+    mysql:
+        image: mysql:5.7.44
+        volumes: !override
+            - database:/var/lib/mysql
+            - database-logs:/var/log
+            - type: bind
+              source: ./mysql/conf
+              target: /etc/mysql/mysql.conf.d
+              read_only: true
+            - type: bind
+              source: ${LEGENDHUB_PARITY_STATE_DIR:?set LEGENDHUB_PARITY_STATE_DIR}/backups/dunwich-latest.sql.gz
+              target: /docker-entrypoint-initdb.d/01-dunwich.sql.gz
+              read_only: true
+            - type: bind
+              source: ${LEGENDHUB_PARITY_FIXTURE:?set LEGENDHUB_PARITY_FIXTURE}
+              target: /docker-entrypoint-initdb.d/02-visual-parity.sql
+              read_only: true
+    www:
+        ports: !reset []
+        volumes: !reset []
+        environment:
+            RECAPTCHA_SITEKEY: 6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI
+            RECAPTCHA_SECRET: 6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe
+    nginx:
+        image: nginx:1.27-alpine
+        depends_on:
+            www:
+                condition: service_started
+        networks:
+            - legendhub
+        ports:
+            - target: 443
+              published: ${LEGENDHUB_PARITY_HTTPS_PORT:?set LEGENDHUB_PARITY_HTTPS_PORT}
+              host_ip: 127.0.0.1
+              protocol: tcp
+        volumes:
+            - type: bind
+              source: ${LEGENDHUB_PARITY_NGINX_CONFIG:?set LEGENDHUB_PARITY_NGINX_CONFIG}
+              target: /etc/nginx/conf.d/default.conf
+              read_only: true
+            - type: bind
+              source: ${LEGENDHUB_PARITY_STATE_DIR:?set LEGENDHUB_PARITY_STATE_DIR}/tls/localhost.pem
+              target: /etc/nginx/tls/localhost.pem
+              read_only: true
+            - type: bind
+              source: ${LEGENDHUB_PARITY_STATE_DIR:?set LEGENDHUB_PARITY_STATE_DIR}/tls/localhost-key.pem
+              target: /etc/nginx/tls/localhost-key.pem
+              read_only: true
+        restart: unless-stopped
