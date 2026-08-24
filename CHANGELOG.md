@@ -21,6 +21,7 @@ with version 2.6.0.
 - Restored centered Builder equipment headers and totals at both ends of the table.
 - Kept long Columns and Filters windows scrollable on small screens without moving the page behind them.
 - Restored centered, compact Builder equipment rows and kept slot and total values on one line.
+- Restored the Builder's compact Character and Variant action icons and the stat-quest bonuses with their original help text.
 
 ## [2.9.0] - 2026-08-22
 

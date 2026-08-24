@@ -194,6 +194,56 @@ test("Builder preserves persisted characters, variants, totals, panels, and expo
     await expect(page.getByRole("button", {name: "Export", exact: true})).toBeFocused();
 });
 
+// Catches the Character and Variant selector actions regressing from the
+// compact legacy icon controls back to visible word labels.
+test("Builder character and variant actions use their legacy icons", async function({page}) {
+    await page.goto(`${baseUrl}/builder/`);
+    const cases = [
+        ["Delete Character", "fa-trash"],
+        ["Edit Character", "fa-edit"],
+        ["Add Character", "fa-plus"],
+        ["Delete Variant", "fa-trash"],
+        ["Edit Variant", "fa-edit"],
+        ["Add Variant", "fa-clone"]
+    ];
+
+    for (const [name, icon] of cases) {
+        const button = page.getByRole("button", {name, exact: true});
+        await expect(button).toBeVisible();
+        await expect(button).toHaveText("");
+        await expect(button.locator(`i.fas.${icon}`)).toHaveCount(1);
+    }
+});
+
+// Catches the below-244 stat-quest bonus and its original per-stat help text
+// disappearing from the React Stats card.
+test("Builder shows stat-quest bonuses with hover and focus help", async function({page}) {
+    await page.goto(`${baseUrl}/builder/`);
+    const stats = page.locator('[aria-labelledby="builder-stats-heading"]');
+    const bonuses = stats.locator(".builder-stat-quest-bonus");
+    await expect(bonuses).toHaveCount(6);
+    expect((await bonuses.allTextContents()).map(value => value.trim())).toEqual(["3", "3", "3", "3", "3", "3"]);
+
+    const help = bonuses;
+    expect(await help.evaluateAll(elements => elements.map(element => element.getAttribute("aria-label")))).toEqual([
+        "...has been rewarded for aiding a goddess!",
+        "...is smarter than the average Cyclops!",
+        "...has bested the tricks and traps on the island of Circe!",
+        "...has ventured into the Realm of the Dead and returned to tell the tale!",
+        "...drank the nectar of the Black Lotus and lived to tell the tale!",
+        "...has learned of the art and spirit of music."
+    ]);
+    expect(await help.evaluateAll(elements => elements.map(element => element.tabIndex))).toEqual([0, 0, 0, 0, 0, 0]);
+    await help.first().hover();
+    await expect(page.locator(".tooltip.show")).toContainText("...has been rewarded for aiding a goddess!");
+    await stats.getByRole("heading", {name: "Stats", exact: true}).hover();
+    await expect(page.locator(".tooltip.show")).toHaveCount(0);
+    await help.nth(1).focus();
+    await expect(page.locator(".tooltip.show")).toContainText("...is smarter than the average Cyclops!");
+    await page.locator("#strInput").fill("146");
+    await expect(bonuses).toHaveCount(0);
+});
+
 // Catches the long equipment table losing its repeated footer navigation or
 // making a stat value clickable only through a non-semantic table-cell handler.
 test("Builder equipment footer repeats totals and stat cells use real controls", async function({page}) {
