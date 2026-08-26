@@ -2,6 +2,7 @@ let router = require("express").Router();
 let apiUtils = require("./api/utils");
 let {renderMarkdown} = require("../markdown");
 let {booleanParam, buildListUrl, integerParam, pageParam, sortParam, stringParam} = require("./list-params");
+let {requireSameOrigin} = require("./request-security");
 
 const WIKI_SORT_FIELDS = ["modifiedOn", "title", "categoryName", "subcategoryName"];
 
@@ -120,8 +121,8 @@ router.get(["/details.html"], async function(req, res, next) {
         res.locals.user.notifications = await apiUtils.handleNotifications(req.cookies.loginToken, res.locals.user.notifications, 'wiki page', req.query.id);
 
     let query = `
-    {
-        getWikiPageById(id:${req.query.id}) {
+    query WikiDetails($id: Int!) {
+        getWikiPageById(id: $id) {
             id
             title
             categoryId
@@ -144,7 +145,9 @@ router.get(["/details.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(query);
+        var data = await apiUtils.postAsync(query, undefined, {
+            id: integerParam(req.query.id)
+        });
     }
     catch (e) {
         return next(e);
@@ -189,8 +192,8 @@ router.get(["/details.html"], async function(req, res, next) {
 
 router.get(["/history.html"], async function(req, res, next) {
     let query = `
-    {
-        getWikiPageHistoryById(id:${req.query.id}) {
+    query WikiHistory($id: Int!) {
+        getWikiPageHistoryById(id: $id) {
             wikiPage {
                 id
                 title
@@ -215,7 +218,9 @@ router.get(["/history.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(query);
+        var data = await apiUtils.postAsync(query, undefined, {
+            id: integerParam(req.query.id)
+        });
     }
     catch (e) {
         return next(e);
@@ -268,8 +273,8 @@ router.get(["/edit.html"], async function(req, res, next) {
         return res.redirect(`/login.html?returnUrl=${encodeURIComponent(res.locals.url.path)}`);
 
     let query = `
-    {
-        getWikiPageById(id:${req.query.id}) {
+    query WikiEdit($id: Int!) {
+        getWikiPageById(id: $id) {
             id
             title
             categoryId
@@ -291,7 +296,9 @@ router.get(["/edit.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(query);
+        var data = await apiUtils.postAsync(query, undefined, {
+            id: integerParam(req.query.id)
+        });
     }
     catch (e) {
         return next(e);
@@ -396,9 +403,9 @@ router.get(["/add.html"], async function(req, res, next) {
     res.render("wiki/modify", {title, vm});
 });
 
-router.get(["/revert.html"], async function(req, res, next) {
+router.post(["/revert.html"], requireSameOrigin, async function(req, res, next) {
     if (!res.locals.user)
-        return res.redirect(`/login.html?returnUrl=${encodeURIComponent(res.locals.url.path)}`);
+        return res.redirect("/login.html");
 
     let query = `
     mutation($authToken: String!, $historyId: Int!) {
@@ -415,7 +422,7 @@ router.get(["/revert.html"], async function(req, res, next) {
     try {
         var data = await apiUtils.postAsync(query, req.ip, {
             authToken: req.cookies.loginToken,
-            historyId: Number(req.query.id)
+            historyId: integerParam(req.body.id)
         });
     }
     catch (e) {
@@ -438,13 +445,13 @@ router.get(["/revert.html"], async function(req, res, next) {
     res.redirect(`/wiki/details.html?id=${data.id}`);
 });
 
-router.get(["/delete.html"], async function(req, res, next) {
+router.post(["/delete.html"], requireSameOrigin, async function(req, res, next) {
     if (!res.locals.user)
-        return res.redirect(`/login.html?returnUrl=${encodeURIComponent(res.locals.url.path)}`);
+        return res.redirect("/login.html");
 
     let deleteQuery = `
-    mutation {
-        deleteWikiPage (authToken:"${req.cookies.loginToken}", id:${req.query.id}) {
+    mutation($authToken: String!, $id: Int!) {
+        deleteWikiPage(authToken: $authToken, id: $id) {
             token,
             expires
         }
@@ -452,7 +459,10 @@ router.get(["/delete.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(deleteQuery, req.ip);
+        var data = await apiUtils.postAsync(deleteQuery, req.ip, {
+            authToken: req.cookies.loginToken,
+            id: integerParam(req.body.id)
+        });
     }
     catch (e) {
         return next(e);

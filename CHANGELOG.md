@@ -8,10 +8,22 @@ with version 2.6.0.
 ### Changed
 
 - Modernized the client foundation behind LegendHUB's pages while preserving the familiar sign-in, account, search, list, editing, Builder, theme, and saved-preference workflows.
+- Rebuilt the Character Builder with the current interactive interface while keeping saved characters, variants, item choices, imports, exports, calculated totals, and warnings working as before.
+- Restored saved Builder equipment, rune charms, item details, keyboard-friendly dialogs, and copy controls after the interface update.
+- Made item search, filters, visible columns, sorting, and paging respond without the legacy browser framework while keeping shareable search links and saved column choices.
+- Made item editing safer and easier to use with a keyboard, including searchable mob and quest choices, save feedback, and a safe Markdown preview.
+- Made mob, quest, and wiki editing safer and easier to use with a keyboard, with live save feedback and sanitized Markdown previews.
+- Fixed restoring older mob, quest, and wiki revisions so renewed sign-ins and return links work correctly.
+- Made item, mob, quest, and wiki details show their notes and guides immediately, including when JavaScript is unavailable.
+- Made the shared navigation, theme chooser, notification menu, and cookie banner work without the legacy browser framework while keeping all nine themes and saved preferences intact.
+- Made the Mobs, Quests, and Wiki lists easier to navigate: names and sortable headings are now ordinary links, while the separate new-tab details action remains available. Their mobile area and category menus now work with keyboard controls and return you to the menu button after closing.
+- Made notification preferences and password changes easier to use with a keyboard, kept focus in the active account workflow, and improved clarity for assistive technology while preserving secure sign-in renewal.
 
 ### Fixed
 
 - Hardened sign-in renewal so private session data is not written to server diagnostics.
+- Prevented crafted page titles, search links, and saved theme values from changing page markup.
+- Protected sign-out, deletion, and revision restoration from cross-site requests while preserving their existing confirmations and destinations.
 - Hardened item search so editable result data is loaded safely into the interactive page.
 - Protected saved Builder characters when startup data is unavailable or an older save cannot be read, and restored confirmation before locking or unlocking every equipped item.
 - Hardened list searches, failed sign-ins, and notifications so entered or stored names remain plain text and passwords are never echoed back into the page.
@@ -28,6 +40,10 @@ with version 2.6.0.
 - Returned item-search column headings to their familiar plain appearance while retaining keyboard sorting.
 - Restored the Builder item picker's wide comparison layout, familiar result-table cues, visible sorting indicators, and clearer locked-item guidance.
 - Fixed the notification menu's middle action so its text remains readable in every theme.
+- Restored the Builder's categorized, theme-aware column chooser with clear shown/hidden icons, compact grouping, and per-character choices.
+- Restored the Builder's repeated equipment totals, keyboard-accessible stat cells, mobile Character actions, and per-character columns after deleting a character.
+- Protected saved Builder lists when item details are temporarily unavailable, with a visible Retry action that restores normal items, faux objects, rune charms, and missing-item markers without discarding the original list.
+- Restored complete Builder list-name validation, in-picker item unlocking, accessible warning associations, and compact Character/Stats spacing in every Glass theme.
 
 ## [2.9.0] - 2026-08-22
 
@@ -39,16 +55,6 @@ with version 2.6.0.
 
 ### Changed
 
-- Rebuilt the Character Builder with the current interactive interface while keeping saved characters, variants, item choices, imports, exports, calculated totals, and warnings working as before.
-- Restored saved Builder equipment, rune charms, item details, keyboard-friendly dialogs, and copy controls after the interface update.
-- Made item search, filters, visible columns, sorting, and paging respond without the legacy browser framework while keeping shareable search links and saved column choices.
-- Made item editing safer and easier to use with a keyboard, including searchable mob and quest choices, save feedback, and a safe Markdown preview.
-- Made mob, quest, and wiki editing safer and easier to use with a keyboard, with live save feedback and sanitized Markdown previews.
-- Fixed restoring older mob, quest, and wiki revisions so renewed sign-ins and return links work correctly.
-- Made item, mob, quest, and wiki details show their notes and guides immediately, including when JavaScript is unavailable.
-- Made the shared navigation, theme chooser, notification menu, and cookie banner work without the legacy browser framework while keeping all nine themes and saved preferences intact.
-- Made the Mobs, Quests, and Wiki lists easier to navigate: names and sortable headings are now ordinary links, while the separate new-tab details action remains available. Their mobile area and category menus now work with keyboard controls and return you to the menu button after closing.
-- Made notification preferences and password changes easier to use with a keyboard, kept focus in the active account workflow, and improved clarity for assistive technology while preserving secure sign-in renewal.
 - Compacted the Builder by making KSM swaps, quest modifiers, and era abilities collapsible with directional indicators, aligning era abilities in three responsive columns, and allowing the Character card to size to its contents.
 - Restyled item-search filters to match the compact, responsive column picker with clearer themed category surfaces.
 - Kept column and filter choices comfortably dark in the Dark and Solarized Dark themes.
@@ -56,10 +62,6 @@ with version 2.6.0.
 
 ### Fixed
 
-- Restored the Builder's categorized, theme-aware column chooser with clear shown/hidden icons, compact grouping, and per-character choices.
-- Restored the Builder's repeated equipment totals, keyboard-accessible stat cells, mobile Character actions, and per-character columns after deleting a character.
-- Protected saved Builder lists when item details are temporarily unavailable, with a visible Retry action that restores normal items, faux objects, rune charms, and missing-item markers without discarding the original list.
-- Restored complete Builder list-name validation, in-picker item unlocking, accessible warning associations, and compact Character/Stats spacing in every Glass theme.
 - Updated the browser library behind interactive pages to close known HTML-handling vulnerabilities while preserving existing behavior.
 - Gave the add and details icon links descriptive names for screen-reader users across Items, Mobs, Quests, and Wiki.
 - Named the Builder character and variant selectors for screen-reader users.

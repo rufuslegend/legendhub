@@ -228,7 +228,10 @@ AC: <%-vm.item.ac%>" />
                 <br><br>
                 <% } %>
                 <% if (vm.historyId && locals.user) { %>
-                <a class="btn btn-primary btn-block col-12 col-md-6" href="/items/revert.html?id=<%-vm.historyId%>" role="button">Use this version</a>
+                <form action="/items/revert.html" method="post" class="col-12 col-md-6 px-0">
+                    <input type="hidden" name="id" value="<%=vm.historyId%>">
+                    <button type="submit" class="btn btn-primary btn-block">Use this version</button>
+                </form>
                 <br><br>
                 <% } %>
             </div>
@@ -250,7 +253,10 @@ AC: <%-vm.item.ac%>" />
           </div>
           <div class="modal-footer">
               <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-              <a href="/items/delete.html?id=<%-vm.item.id%>" role="button" class="btn btn-danger">Delete</a>
+              <form action="/items/delete.html" method="post" class="m-0">
+                  <input type="hidden" name="id" value="<%=vm.item.id%>">
+                  <button type="submit" class="btn btn-danger">Delete</button>
+              </form>
           </div>
         </div>
       </div>

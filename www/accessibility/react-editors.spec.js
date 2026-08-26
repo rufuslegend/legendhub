@@ -319,13 +319,13 @@ async function openEditor(page, path, heading) {
     await expect(page.getByRole("heading", {name: heading, exact: true})).toBeVisible();
 }
 
-test("legacy characterization: anonymous add, edit, and revert routes require login", async function({context, page}) {
+test("legacy characterization: anonymous add and edit routes require login", async function({context, page}) {
     await context.clearCookies();
     for (const path of [
-        "/items/add.html", "/items/edit.html?id=101", "/items/revert.html?id=1101",
-        "/mobs/add.html", "/mobs/edit.html?id=201", "/mobs/revert.html?id=1201",
-        "/quests/add.html", "/quests/edit.html?id=301", "/quests/revert.html?id=1301",
-        "/wiki/add.html", "/wiki/edit.html?id=401", "/wiki/revert.html?id=1401"
+        "/items/add.html", "/items/edit.html?id=101",
+        "/mobs/add.html", "/mobs/edit.html?id=201",
+        "/quests/add.html", "/quests/edit.html?id=301",
+        "/wiki/add.html", "/wiki/edit.html?id=401"
     ]) {
         const response = await page.goto(`${baseUrl}${path}`);
         expect(response).not.toBeNull();
@@ -335,18 +335,21 @@ test("legacy characterization: anonymous add, edit, and revert routes require lo
     }
 });
 
-test("legacy characterization: authenticated history pages retain their revert entry points", async function({page}) {
+test("authenticated history pages submit their revert actions with POST", async function({page}) {
     for (const history of [
-        {path: "/items/history.html?id=1101", revert: "/items/revert.html?id=1101"},
-        {path: "/mobs/history.html?id=1201", revert: "/mobs/revert.html?id=1201"},
-        {path: "/quests/history.html?id=1301", revert: "/quests/revert.html?id=1301"},
-        {path: "/wiki/history.html?id=1401", revert: "/wiki/revert.html?id=1401"}
+        {path: "/items/history.html?id=1101", revert: "/items/revert.html", id: "1101"},
+        {path: "/mobs/history.html?id=1201", revert: "/mobs/revert.html", id: "1201"},
+        {path: "/quests/history.html?id=1301", revert: "/quests/revert.html", id: "1301"},
+        {path: "/wiki/history.html?id=1401", revert: "/wiki/revert.html", id: "1401"}
     ]) {
         const response = await page.goto(`${baseUrl}${history.path}`);
         expect(response).not.toBeNull();
         expect(response.status()).toBe(200);
         const revert = page.getByRole("button", {name: "Use this version", exact: true});
-        await expect(revert).toHaveAttribute("href", history.revert);
+        await expect(revert).toHaveAttribute("type", "submit");
+        await expect(revert.locator("xpath=..")).toHaveAttribute("method", "post");
+        await expect(revert.locator("xpath=..")).toHaveAttribute("action", history.revert);
+        await expect(revert.locator("xpath=../input[@name='id']")).toHaveValue(history.id);
         await revert.focus();
         await expect(revert).toBeFocused();
     }
@@ -357,28 +360,28 @@ test("revert routes preserve authenticated variables, renewed cookies, and exact
         {
             field: "revertItem",
             historyId: 1101,
-            path: "/items/revert.html?id=1101",
+            path: "/items/revert.html",
             redirect: "/items/details.html?id=101",
             token: "item-revert-token"
         },
         {
             field: "revertMob",
             historyId: 1201,
-            path: "/mobs/revert.html?id=1201",
+            path: "/mobs/revert.html",
             redirect: "/mobs/details.html?id=201",
             token: "mob-revert-token"
         },
         {
             field: "revertQuest",
             historyId: 1301,
-            path: "/quests/revert.html?id=1301",
+            path: "/quests/revert.html",
             redirect: "/quests/details.html?id=301",
             token: "quest-revert-token"
         },
         {
             field: "revertWikiPage",
             historyId: 1401,
-            path: "/wiki/revert.html?id=1401",
+            path: "/wiki/revert.html",
             redirect: "/wiki/details.html?id=401",
             token: "wiki-revert-token"
         }
@@ -386,7 +389,11 @@ test("revert routes preserve authenticated variables, renewed cookies, and exact
 
     for (const revert of cases) {
         await context.addCookies([{name: "loginToken", value: "editor-token", url: baseUrl}]);
-        const response = await page.request.get(`${baseUrl}${revert.path}`, {maxRedirects: 0});
+        const response = await page.request.post(`${baseUrl}${revert.path}`, {
+            form: {id: String(revert.historyId)},
+            headers: {Origin: baseUrl},
+            maxRedirects: 0
+        });
         expect(response.status()).toBe(302);
         expect(response.headers().location).toBe(revert.redirect);
         expect(response.headers()["set-cookie"]).toBe(
@@ -409,16 +416,20 @@ test("revert routes preserve authenticated variables, renewed cookies, and exact
 
 test("revert routes preserve GraphQL failures without cookies or redirects", async function({context, page}) {
     const cases = [
-        {field: "revertItem", historyId: 1101, path: "/items/revert.html?id=1101"},
-        {field: "revertMob", historyId: 1201, path: "/mobs/revert.html?id=1201"},
-        {field: "revertQuest", historyId: 1301, path: "/quests/revert.html?id=1301"},
-        {field: "revertWikiPage", historyId: 1401, path: "/wiki/revert.html?id=1401"}
+        {field: "revertItem", historyId: 1101, path: "/items/revert.html"},
+        {field: "revertMob", historyId: 1201, path: "/mobs/revert.html"},
+        {field: "revertQuest", historyId: 1301, path: "/quests/revert.html"},
+        {field: "revertWikiPage", historyId: 1401, path: "/wiki/revert.html"}
     ];
 
     for (const revert of cases) {
         failingRevertField = revert.field;
         await context.addCookies([{name: "loginToken", value: "editor-token", url: baseUrl}]);
-        const response = await page.request.get(`${baseUrl}${revert.path}`, {maxRedirects: 0});
+        const response = await page.request.post(`${baseUrl}${revert.path}`, {
+            form: {id: String(revert.historyId)},
+            headers: {Origin: baseUrl},
+            maxRedirects: 0
+        });
         expect(response.status()).toBe(422);
         expect(response.headers().location).toBeUndefined();
         expect(response.headers()["set-cookie"]).toBeUndefined();
@@ -1166,7 +1177,7 @@ for (const editor of [
         await expect(saving).toBeFocused();
         await expect(page.getByRole("button", {name: `Saving ${editor.entity.toLowerCase()}`}))
             .toBeDisabled();
-        await page.locator("form").evaluate(form => form.requestSubmit());
+        await page.locator("[data-react-root] form").evaluate(form => form.requestSubmit());
         expect(requestCount).toBe(1);
         releaseRequest();
 

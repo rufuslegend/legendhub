@@ -92,12 +92,12 @@ module.exports.handleNotifications = async function(authToken, notifications, ob
     }
 
     let query = `
-    mutation {
-        markNotificationAsRead(authToken:"${authToken}",objectType:"${objectType}",objectId:${objectId})
+    mutation MarkNotificationRead($authToken: String!, $objectType: String!, $objectId: Int!) {
+        markNotificationAsRead(authToken: $authToken, objectType: $objectType, objectId: $objectId)
     }
     `;
     try {
-        await module.exports.postAsync(query);
+        await module.exports.postAsync(query, undefined, {authToken, objectType, objectId});
     }
     catch (e) {
         console.error(e);

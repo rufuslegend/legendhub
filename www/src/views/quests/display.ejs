@@ -84,7 +84,10 @@
         <%}%>
         <br><br>
         <%if (vm.historyId && locals.user) {%>
-        <a class="btn btn-primary btn-block col-6 col-md-3" href="/quests/revert.html?id=<%-vm.historyId%>" role="button">Use this version</a>
+        <form action="/quests/revert.html" method="post" class="col-6 col-md-3 px-0">
+            <input type="hidden" name="id" value="<%=vm.historyId%>">
+            <button type="submit" class="btn btn-primary btn-block">Use this version</button>
+        </form>
         <br><br>
         <%}%>
 	</div>
@@ -104,7 +107,10 @@
           </div>
           <div class="modal-footer">
               <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-              <a href="/quests/delete.html?id=<%-vm.quest.id%>" role="button" class="btn btn-danger">Delete</a>
+              <form action="/quests/delete.html" method="post" class="m-0">
+                  <input type="hidden" name="id" value="<%=vm.quest.id%>">
+                  <button type="submit" class="btn btn-danger">Delete</button>
+              </form>
           </div>
         </div>
       </div>

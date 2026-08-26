@@ -66,7 +66,9 @@ test("account route renders all notification settings", async function() {
         wikiPageUpdated: false,
         changelogAdded: true
     };
-    const router = loadAccountRoute(async function(query) {
+    let captured;
+    const router = loadAccountRoute(async function(query, ip, variables) {
+        captured = {query, ip, variables};
         for (const setting of Object.keys(notificationSettings))
             assert.match(query, new RegExp(`\\b${setting}\\b`));
         return {getNotificationSettings: notificationSettings};
@@ -91,6 +93,9 @@ test("account route renders all notification settings", async function() {
 
     assert.equal(rendered.view, "account/index");
     assert.deepEqual(rendered.locals.vm.notificationSettings, notificationSettings);
+    assert.doesNotMatch(captured.query, /account-token/);
+    assert.equal(captured.ip, undefined);
+    assert.deepEqual(captured.variables, {authToken: "account-token"});
 });
 
 test("notification mutation preserves every boolean field", async function() {

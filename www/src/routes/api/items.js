@@ -4,6 +4,7 @@ let graphql = require("graphql");
 let { GraphQLDateTime } = require("graphql-scalars");
 let auth = require("./auth");
 let apiUtils = require("./utils");
+let {resolveItemSort} = require("./item-sort");
 
 String.prototype.format = function() {
     a = this;
@@ -504,16 +505,7 @@ let getItems = function(searchString, filterString, sortBy, sortAsc, page, rows)
                         }
                     }
 
-                    // validate sorting
-                    if (sortBy == null) {
-                        actualSortBy = noSearch ? "ModifiedOn" : "Name";
-                    }
-                    else {
-                        for (let i = 0; i < results.length; ++i) {
-                            if (results[i].Var.toLowerCase() === sortBy.toLowerCase())
-                                actualSortBy = results[i].Var;
-                        }
-                    }
+                    const actualSortBy = resolveItemSort(sortBy, noSearch, results);
 
                     mysql.query(`${ itemSelectSQL } FROM Items WHERE Deleted = 0 AND (? = '' OR Name LIKE ?)${filterQuery} ORDER BY ${actualSortBy} ${sortAsc ? "ASC" : "DESC"} LIMIT ${(page - 1) * rows}, ${rows + 1}`,
                         [searchString, "%" + searchString + "%"],

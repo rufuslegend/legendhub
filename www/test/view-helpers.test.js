@@ -5,7 +5,15 @@ const ejs = require("ejs");
 const path = require("node:path");
 const test = require("node:test");
 
-const {serializeJsonForHtml} = require("../src/view-helpers");
+const {normalizeTheme, serializeJsonForHtml} = require("../src/view-helpers");
+
+test("normalizeTheme accepts supported themes and rejects stylesheet injection", function() {
+    assert.equal(normalizeTheme("glass-emerald"), "glass-emerald");
+    assert.equal(normalizeTheme("solarized-dark"), "solarized-dark");
+    assert.equal(normalizeTheme('glass-blue\" onload=\"alert(1)'), "glass-blue");
+    assert.equal(normalizeTheme(["dark", "light"]), "glass-blue");
+    assert.equal(normalizeTheme(undefined), "glass-blue");
+});
 
 test("serializeJsonForHtml round-trips values without HTML-significant characters", async function(t) {
     const values = [
@@ -33,6 +41,7 @@ test("items page serializes editable results through the shared HTML-safe contra
     const editableName = "</script><img src=x onerror=alert(1)>&\u2028";
     const html = await ejs.renderFile(path.join(__dirname, "../src/views/items/index.ejs"), {
         cookies: {},
+        normalizeTheme,
         serializeJsonForHtml,
         title: "Items",
         url: {path: "/items/"},
@@ -47,7 +56,8 @@ test("items page serializes editable results through the shared HTML-safe contra
             page: 1,
             query: {},
             results: [{name: editableName}],
-            selectedColumns: []
+            selectedColumns: [],
+            urls: {canonical: "/items/index.html?page=1"}
         }
     });
     const propsMatch = html.match(
@@ -59,4 +69,43 @@ test("items page serializes editable results through the shared HTML-safe contra
     const parsed = JSON.parse(propsMatch[1]);
     assert.equal(parsed.results[0].name === editableName, true,
         "escaped item props must preserve the original value");
+});
+
+// Catches request and cookie values closing document-head elements or injecting attributes.
+test("items page escapes hostile title, canonical parameters, and theme cookies", async function() {
+    const hostileTitle = '</title><script data-release-xss>location="//attacker.invalid"</script>';
+    const html = await ejs.renderFile(path.join(__dirname, "../src/views/items/index.ejs"), {
+        cookies: {theme: 'glass-blue\" onload=\"alert(1)'},
+        normalizeTheme,
+        serializeJsonForHtml,
+        title: hostileTitle,
+        url: {path: "/items/"},
+        user: null,
+        version: "test",
+        vm: {
+            constants: {},
+            itemStatCategories: [],
+            itemStatInfo: [],
+            moreResults: false,
+            noSearch: false,
+            page: 2,
+            query: {
+                search: '\"><img src=x onerror=alert(1)>',
+                sortBy: "name",
+                sortAsc: true
+            },
+            results: [],
+            selectedColumns: [],
+            urls: {
+                canonical: "/items/index.html?search=%22%3E%3Cimg+src%3Dx+onerror%3Dalert%281%29%3E&sortBy=name&sortAsc=true&page=2"
+            }
+        }
+    });
+
+    assert.doesNotMatch(html, /<script data-release-xss>/);
+    assert.match(html, /<title>&lt;\/title&gt;&lt;script data-release-xss&gt;/);
+    assert.match(html, /href="\/css\/bootstrap-glass-blue\.min\.css\?v=test"/);
+    assert.doesNotMatch(html, /onload="alert\(1\)"/);
+    assert.match(html,
+        /href="https:\/\/www\.legendhub\.org\/items\/index\.html\?search=%22%3E%3Cimg\+src%3Dx\+onerror%3Dalert%281%29%3E&amp;sortBy=name&amp;sortAsc=true&amp;page=2" rel="canonical"/);
 });

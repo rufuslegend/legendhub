@@ -6,7 +6,7 @@ const logger = require("morgan");
 const path = require("path");
 
 const createErrorHandlers = require("./error-handlers");
-const {serializeJsonForHtml} = require("./view-helpers");
+const {normalizeTheme, serializeJsonForHtml} = require("./view-helpers");
 const authRouter = require("./routes/auth");
 const createFeedbackRouter = require("./routes/feedback");
 
@@ -58,6 +58,7 @@ module.exports = function createApp(options = {}) {
     app.use(express.json());
     app.use(express.urlencoded({ extended: false }));
     app.use(function(req, res, next) {
+        res.locals.normalizeTheme = normalizeTheme;
         res.locals.serializeJsonForHtml = serializeJsonForHtml;
         next();
     });

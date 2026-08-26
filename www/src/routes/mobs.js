@@ -3,6 +3,7 @@ let itemApi = require("./api/items");
 let apiUtils = require("./api/utils");
 let {renderMarkdown} = require("../markdown");
 let {booleanParam, buildListUrl, integerParam, pageParam, sortParam, stringParam} = require("./list-params");
+let {requireSameOrigin} = require("./request-security");
 
 const MOB_SORT_FIELDS = ["modifiedOn", "name", "areaName", "xp", "gold", "aggro"];
 
@@ -124,8 +125,8 @@ router.get(["/details.html"], async function(req, res, next) {
         res.locals.user.notifications = await apiUtils.handleNotifications(req.cookies.loginToken, res.locals.user.notifications, 'mob', req.query.id);
 
     let getMobQuery = `
-    {
-        getMobById(id:${req.query.id}) {
+    query MobDetails($id: Int!) {
+        getMobById(id: $id) {
             id
             name
             xp
@@ -158,7 +159,9 @@ router.get(["/details.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(getMobQuery);
+        var data = await apiUtils.postAsync(getMobQuery, undefined, {
+            id: integerParam(req.query.id)
+        });
     }
     catch (e) {
         return next(e);
@@ -204,8 +207,8 @@ router.get(["/details.html"], async function(req, res, next) {
 
 router.get(["/history.html"], async function(req, res, next) {
     let getMobQuery = `
-    {
-        getMobHistoryById(id:${req.query.id}) {
+    query MobHistory($id: Int!) {
+        getMobHistoryById(id: $id) {
             mob {
                 id
                 name
@@ -241,7 +244,9 @@ router.get(["/history.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(getMobQuery);
+        var data = await apiUtils.postAsync(getMobQuery, undefined, {
+            id: integerParam(req.query.id)
+        });
     }
     catch (e) {
         return next(e);
@@ -295,8 +300,8 @@ router.get(["/edit.html"], async function(req, res, next) {
         return res.redirect(`/login.html?returnUrl=${encodeURIComponent(res.locals.url.path)}`);
 
     let getMobQuery = `
-    {
-        getMobById(id:${req.query.id}) {
+    query MobEdit($id: Int!) {
+        getMobById(id: $id) {
             id
             name
             xp
@@ -317,7 +322,9 @@ router.get(["/edit.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(getMobQuery);
+        var data = await apiUtils.postAsync(getMobQuery, undefined, {
+            id: integerParam(req.query.id)
+        });
     }
     catch (e) {
         return next(e);
@@ -407,9 +414,9 @@ router.get(["/add.html"], async function(req, res, next) {
     res.render("mobs/modify", {title, vm});
 });
 
-router.get(["/revert.html"], async function(req, res, next) {
+router.post(["/revert.html"], requireSameOrigin, async function(req, res, next) {
     if (!res.locals.user)
-        return res.redirect(`/login.html?returnUrl=${encodeURIComponent(res.locals.url.path)}`);
+        return res.redirect("/login.html");
 
     let revertQuery = `
     mutation($authToken: String!, $historyId: Int!) {
@@ -426,7 +433,7 @@ router.get(["/revert.html"], async function(req, res, next) {
     try {
         var data = await apiUtils.postAsync(revertQuery, req.ip, {
             authToken: req.cookies.loginToken,
-            historyId: Number(req.query.id)
+            historyId: integerParam(req.body.id)
         });
     }
     catch (e) {
@@ -449,13 +456,13 @@ router.get(["/revert.html"], async function(req, res, next) {
     res.redirect(`/mobs/details.html?id=${data.id}`);
 });
 
-router.get(["/delete.html"], async function(req, res, next) {
+router.post(["/delete.html"], requireSameOrigin, async function(req, res, next) {
     if (!res.locals.user)
-        return res.redirect(`/login.html?returnUrl=${encodeURIComponent(res.locals.url.path)}`);
+        return res.redirect("/login.html");
 
     let deleteQuery = `
-    mutation {
-        deleteMob (authToken:"${req.cookies.loginToken}", id:${req.query.id}) {
+    mutation($authToken: String!, $id: Int!) {
+        deleteMob(authToken: $authToken, id: $id) {
             token,
             expires
         }
@@ -463,7 +470,10 @@ router.get(["/delete.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(deleteQuery, req.ip);
+        var data = await apiUtils.postAsync(deleteQuery, req.ip, {
+            authToken: req.cookies.loginToken,
+            id: integerParam(req.body.id)
+        });
     }
     catch (e) {
         return next(e);

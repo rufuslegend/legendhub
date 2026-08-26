@@ -3,6 +3,7 @@ let itemApi = require("./api/items");
 let apiUtils = require("./api/utils");
 let {renderMarkdown} = require("../markdown");
 let {booleanParam, buildListUrl, integerParam, pageParam, sortParam, stringParam} = require("./list-params");
+let {requireSameOrigin} = require("./request-security");
 
 const QUEST_SORT_FIELDS = ["modifiedOn", "title", "areaName"];
 
@@ -122,8 +123,8 @@ router.get(["/details.html"], async function(req, res, next) {
         res.locals.user.notifications = await apiUtils.handleNotifications(req.cookies.loginToken, res.locals.user.notifications, 'quest', req.query.id);
 
     let query = `
-    {
-        getQuestById(id:${req.query.id}) {
+    query QuestDetails($id: Int!) {
+        getQuestById(id: $id) {
             id
             title
             areaId
@@ -154,7 +155,9 @@ router.get(["/details.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(query);
+        var data = await apiUtils.postAsync(query, undefined, {
+            id: integerParam(req.query.id)
+        });
     }
     catch (e) {
         return next(e);
@@ -200,8 +203,8 @@ router.get(["/details.html"], async function(req, res, next) {
 
 router.get(["/history.html"], async function(req, res, next) {
     let query = `
-    {
-        getQuestHistoryById(id:${req.query.id}) {
+    query QuestHistory($id: Int!) {
+        getQuestHistoryById(id: $id) {
             quest {
                 id
                 title
@@ -234,7 +237,9 @@ router.get(["/history.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(query);
+        var data = await apiUtils.postAsync(query, undefined, {
+            id: integerParam(req.query.id)
+        });
     }
     catch (e) {
         return next(e);
@@ -288,8 +293,8 @@ router.get(["/edit.html"], async function(req, res, next) {
         return res.redirect(`/login.html?returnUrl=${encodeURIComponent(res.locals.url.path)}`);
 
     let query = `
-    {
-        getQuestById(id:${req.query.id}) {
+    query QuestEdit($id: Int!) {
+        getQuestById(id: $id) {
             id
             title
             eraId
@@ -309,7 +314,9 @@ router.get(["/edit.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(query);
+        var data = await apiUtils.postAsync(query, undefined, {
+            id: integerParam(req.query.id)
+        });
     }
     catch (e) {
         return next(e);
@@ -399,9 +406,9 @@ router.get(["/add.html"], async function(req, res, next) {
     res.render("quests/modify", {title, vm});
 });
 
-router.get(["/revert.html"], async function(req, res, next) {
+router.post(["/revert.html"], requireSameOrigin, async function(req, res, next) {
     if (!res.locals.user)
-        return res.redirect(`/login.html?returnUrl=${encodeURIComponent(res.locals.url.path)}`);
+        return res.redirect("/login.html");
 
     let query = `
     mutation($authToken: String!, $historyId: Int!) {
@@ -418,7 +425,7 @@ router.get(["/revert.html"], async function(req, res, next) {
     try {
         var data = await apiUtils.postAsync(query, req.ip, {
             authToken: req.cookies.loginToken,
-            historyId: Number(req.query.id)
+            historyId: integerParam(req.body.id)
         });
     }
     catch (e) {
@@ -441,13 +448,13 @@ router.get(["/revert.html"], async function(req, res, next) {
     res.redirect(`/quests/details.html?id=${data.id}`);
 });
 
-router.get(["/delete.html"], async function(req, res, next) {
+router.post(["/delete.html"], requireSameOrigin, async function(req, res, next) {
     if (!res.locals.user)
-        return res.redirect(`/login.html?returnUrl=${encodeURIComponent(res.locals.url.path)}`);
+        return res.redirect("/login.html");
 
     let deleteQuery = `
-    mutation {
-        deleteQuest (authToken:"${req.cookies.loginToken}", id:${req.query.id}) {
+    mutation($authToken: String!, $id: Int!) {
+        deleteQuest(authToken: $authToken, id: $id) {
             token,
             expires
         }
@@ -455,7 +462,10 @@ router.get(["/delete.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(deleteQuery, req.ip);
+        var data = await apiUtils.postAsync(deleteQuery, req.ip, {
+            authToken: req.cookies.loginToken,
+            id: integerParam(req.body.id)
+        });
     }
     catch (e) {
         return next(e);

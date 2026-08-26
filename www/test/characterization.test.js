@@ -5,8 +5,10 @@ const test = require("node:test");
 
 async function renderHome(cookies = {}) {
     const ejs = require("ejs");
+    const {normalizeTheme} = require("../src/view-helpers");
     return ejs.renderFile(path.join(__dirname, "../src/views/index.ejs"), {
         cookies,
+        normalizeTheme,
         showDiscordWidget: false,
         title: "Home",
         url: {path: "/"},

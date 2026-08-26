@@ -2,11 +2,16 @@ let router = require("express").Router();
 let itemApi = require("./api/items");
 let apiUtils = require("./api/utils");
 let {renderMarkdown} = require("../markdown");
+let {booleanParam, buildListUrl, integerParam, pageParam, stringParam} = require("./list-params");
+let {requireSameOrigin} = require("./request-security");
 
 router.get(["/", "/index.html"], async function(req, res, next) {
-    let page = req.query.page === undefined ? 1 : Number(req.query.page);
-    if (page < 1) page = 1;
+    let page = pageParam(req.query.page);
     let rows = 20;
+    const searchString = stringParam(req.query.search);
+    const filterString = stringParam(req.query.filters);
+    const sortBy = stringParam(req.query.sortBy);
+    const sortAsc = booleanParam(req.query.sortAsc);
     let getItemsQuery = `
     ${itemApi.fragment}
 
@@ -47,10 +52,10 @@ router.get(["/", "/index.html"], async function(req, res, next) {
 
     try {
         var data = await apiUtils.postAsync(getItemsQuery, undefined, {
-            searchString: req.query.search ?? null,
-            filterString: req.query.filters ?? null,
-            sortBy: req.query.sortBy ?? null,
-            sortAsc: req.query.sortAsc === undefined ? null : req.query.sortAsc === "true",
+            searchString,
+            filterString,
+            sortBy,
+            sortAsc,
             page,
             rows
         });
@@ -77,18 +82,21 @@ router.get(["/", "/index.html"], async function(req, res, next) {
     }
 
     let selectedFilters = {};
-    if (req.query.filters) {
-        let filterStrings = req.query.filters.split(",");
+    if (filterString) {
+        let filterStrings = filterString.split(",");
         for (let i = 0; i < filterStrings.length; ++i) {
             let splitFilter = filterStrings[i].split("_");
             selectedFilters[splitFilter[0]] = splitFilter.slice(1);
         }
     }
 
+    const path = "/items/index.html";
+    const searchParams = {search: searchString, filters: filterString};
+    const sortParams = {...searchParams, sortBy, sortAsc};
     let vm = {
-        query: req.query,
-        noSearch: req.query.search === undefined && !req.query.filters,
-        searchString: req.query.search,
+        query: {search: searchString, filters: filterString, sortBy, sortAsc},
+        noSearch: searchString == null && !filterString,
+        searchString,
         results: items,
         moreResults: moreResults,
         page: page,
@@ -98,9 +106,12 @@ router.get(["/", "/index.html"], async function(req, res, next) {
         itemStatCategories: statCategories,
         itemStatInfo: statInfo,
         constants: itemApi.constants,
-        cookies: req.cookies
+        cookies: req.cookies,
+        urls: {
+            canonical: buildListUrl(path, {...sortParams, page})
+        }
     };
-    let title = vm.noSearch ? "Recent Items" : `${items.length}${moreResults?"+":""} item results for "${req.query.search || ""}"`;
+    let title = vm.noSearch ? "Recent Items" : `${items.length}${moreResults?"+":""} item results for "${searchString || ""}"`;
     res.render("items/index", { title, vm });
 });
 
@@ -110,8 +121,8 @@ router.get(["/details.html"], async function(req, res, next) {
 
     let getItemQuery = `${itemApi.fragment}
 
-    {
-        getItemById(id:${req.query.id}) {
+    query ItemDetails($id: Int!) {
+        getItemById(id: $id) {
             ... ItemAll
             getMob {
                 id
@@ -145,7 +156,9 @@ router.get(["/details.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(getItemQuery);
+        var data = await apiUtils.postAsync(getItemQuery, undefined, {
+            id: integerParam(req.query.id)
+        });
     }
     catch (e) {
         return next(e);
@@ -176,8 +189,8 @@ router.get(["/details.html"], async function(req, res, next) {
 router.get(["/history.html"], async function(req, res, next) {
     let getItemQuery = `${itemApi.fragment}
 
-    {
-        getItemHistoryById(id:${req.query.id}) {
+    query ItemHistory($id: Int!) {
+        getItemHistoryById(id: $id) {
             item {
                 ... ItemAll
                 getMob {
@@ -213,7 +226,9 @@ router.get(["/history.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(getItemQuery);
+        var data = await apiUtils.postAsync(getItemQuery, undefined, {
+            id: integerParam(req.query.id)
+        });
     }
     catch (e) {
         return next(e);
@@ -247,9 +262,9 @@ router.get(["/history.html"], async function(req, res, next) {
     res.render("items/display", { title, vm });
 });
 
-router.get(["/revert.html"], async function(req, res, next) {
+router.post(["/revert.html"], requireSameOrigin, async function(req, res, next) {
     if (!res.locals.user)
-        return res.redirect(`/login.html?returnUrl=${encodeURIComponent(res.locals.url.path)}`);
+        return res.redirect("/login.html");
 
     let revertQuery = `
     mutation($authToken: String!, $historyId: Int!) {
@@ -266,7 +281,7 @@ router.get(["/revert.html"], async function(req, res, next) {
     try {
         var data = await apiUtils.postAsync(revertQuery, req.ip, {
             authToken: req.cookies.loginToken,
-            historyId: Number(req.query.id)
+            historyId: integerParam(req.body.id)
         });
     }
     catch (e) {
@@ -367,8 +382,8 @@ router.get(["/edit.html"], async function(req, res, next) {
 
     let query = `${itemApi.fragment}
 
-    {
-        getItemById(id:${req.query.id}) {
+    query ItemEdit($id: Int!) {
+        getItemById(id: $id) {
             ... ItemAll
 
             getMob {name}
@@ -388,7 +403,9 @@ router.get(["/edit.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(query);
+        var data = await apiUtils.postAsync(query, undefined, {
+            id: integerParam(req.query.id)
+        });
     }
     catch (e) {
         return next(e);
@@ -421,13 +438,13 @@ router.get(["/edit.html"], async function(req, res, next) {
     res.render("items/modify", {title, vm});
 });
 
-router.get(["/delete.html"], async function(req, res, next) {
+router.post(["/delete.html"], requireSameOrigin, async function(req, res, next) {
     if (!res.locals.user)
-        return res.redirect(`/login.html?returnUrl=${encodeURIComponent(res.locals.url.path)}`);
+        return res.redirect("/login.html");
 
     let deleteQuery = `
-    mutation {
-        deleteItem (authToken:"${req.cookies.loginToken}", id:${req.query.id}) {
+    mutation($authToken: String!, $id: Int!) {
+        deleteItem(authToken: $authToken, id: $id) {
             token,
             expires
         }
@@ -435,7 +452,10 @@ router.get(["/delete.html"], async function(req, res, next) {
     `;
 
     try {
-        var data = await apiUtils.postAsync(deleteQuery, req.ip);
+        var data = await apiUtils.postAsync(deleteQuery, req.ip, {
+            authToken: req.cookies.loginToken,
+            id: integerParam(req.body.id)
+        });
     }
     catch (e) {
         return next(e);

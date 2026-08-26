@@ -2,6 +2,7 @@ let router = require("express").Router();
 let auth = require("./api/auth");
 let apiUtils = require("./api/utils");
 let mysql = require("./api/mysql-connection");
+let {normalizeReturnUrl, requireSameOrigin} = require("./request-security");
 
 router.get(["/", "/index.html"], function(req, res) {
     return res.render("index", {
@@ -64,7 +65,7 @@ router.post(["/login.html"], async function(req, res) {
             data.authLogin.token,
             cookieOptions
         );
-        return res.redirect(body.returnUrl || "/");
+        return res.redirect(normalizeReturnUrl(body.returnUrl));
     }
     else if (vm.body.register_username) {
         let recaptcha = stringBody("g-recaptcha-response");
@@ -107,10 +108,10 @@ router.post(["/login.html"], async function(req, res) {
     }
 });
 
-router.get(["/logout.html"], function(req, res, next) {
+router.post(["/logout.html"], requireSameOrigin, function(req, res) {
     if (req.cookies.loginToken) {
         auth.utils.logout(req.cookies.loginToken);
-        delete res.clearCookie("loginToken", { path: "/" });
+        res.clearCookie("loginToken", {path: "/"});
     }
 
     res.redirect("/");

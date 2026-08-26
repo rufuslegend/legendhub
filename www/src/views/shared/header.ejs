@@ -56,7 +56,9 @@
 				<div class="dropdown-menu dropdown-menu-right" aria-labelledby="navbarDropdown">
                     <a class="dropdown-item" href="/account/">Account Settings</a>
 					<div class="dropdown-divider"></div>
-					<a class="dropdown-item" href="/logout.html">Logout</a>
+					<form action="/logout.html" method="post">
+						<button type="submit" class="dropdown-item">Logout</button>
+					</form>
 				</div>
 			</li>
             <% } else { %>

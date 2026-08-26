@@ -38,3 +38,29 @@ test("postAsync forwards GraphQL variables with the existing query and IP bounda
         body: JSON.stringify({query, variables})
     });
 });
+
+test("handleNotifications marks matching objects with GraphQL variables", async function(t) {
+    const apiUtils = require("../src/routes/api/utils");
+    const originalPostAsync = apiUtils.postAsync;
+    t.after(function() { apiUtils.postAsync = originalPostAsync; });
+    let captured;
+    apiUtils.postAsync = async function(query, ip, variables) {
+        captured = {query, ip, variables};
+    };
+
+    const notifications = [
+        {objectType: "item", objectId: 7},
+        {objectType: "quest", objectId: 8}
+    ];
+    const remaining = await apiUtils.handleNotifications(
+        "notification-secret", notifications, "item", 7);
+
+    assert.deepEqual(remaining, [{objectType: "quest", objectId: 8}]);
+    assert.doesNotMatch(captured.query, /notification-secret|objectType:\s*"item"|objectId:\s*7/);
+    assert.equal(captured.ip, undefined);
+    assert.deepEqual(captured.variables, {
+        authToken: "notification-secret",
+        objectType: "item",
+        objectId: 7
+    });
+});

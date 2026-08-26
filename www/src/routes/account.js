@@ -8,8 +8,8 @@ router.get(["/", "/index.html"], async function(req, res, next) {
         return res.redirect(`/login.html?returnUrl=${encodeURIComponent(res.locals.url.path)}`);
 
     let query = `
-    {
-        getNotificationSettings(authToken:"${req.cookies.loginToken}") {
+    query AccountNotificationSettings($authToken: String!) {
+        getNotificationSettings(authToken: $authToken) {
             itemAdded
             itemUpdated
             mobAdded
@@ -23,7 +23,9 @@ router.get(["/", "/index.html"], async function(req, res, next) {
     }
     `;
     try {
-        var data = await apiUtils.postAsync(query);
+        var data = await apiUtils.postAsync(query, undefined, {
+            authToken: req.cookies.loginToken
+        });
     }
     catch(e) {
         return next(e);

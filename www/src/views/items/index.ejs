@@ -1,15 +1,8 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <%
-    let searchPart = (vm.query.search !== undefined ? '&search=' + vm.query.search : '');
-    let filterPart = (vm.query.filters ? '&filters=' + vm.query.filters : '');
-    let sortByPart = (vm.query.sortBy ? '&sortBy=' + vm.query.sortBy : '');
-    let sortAscPart = (vm.query.sortAsc ? '&sortAsc=' + vm.query.sortAsc : '');
-    let pageBaseUrl = '/items/index.html?' + searchPart + filterPart + sortByPart + sortAscPart;
-    %>
     <%- include('../shared/meta') %>
-    <link href="https://www.legendhub.org<%-pageBaseUrl%>&page=<%-vm.page%>" rel="canonical">
+    <link href="https://www.legendhub.org<%=vm.urls.canonical%>" rel="canonical">
     <meta name="robots" content="noindex">
 </head>
 <body>

@@ -1,5 +1,21 @@
 "use strict";
 
+const THEMES = new Set([
+    "glass-blue",
+    "glass-emerald",
+    "glass-ruby",
+    "glass-amethyst",
+    "glass-amber",
+    "light",
+    "dark",
+    "solarized-dark",
+    "high-contrast"
+]);
+
+function normalizeTheme(value) {
+    return typeof value === "string" && THEMES.has(value) ? value : "glass-blue";
+}
+
 function serializeJsonForHtml(value) {
     const serialized = JSON.stringify(value);
 
@@ -17,4 +33,4 @@ function serializeJsonForHtml(value) {
     });
 }
 
-module.exports = {serializeJsonForHtml};
+module.exports = {normalizeTheme, serializeJsonForHtml};
