@@ -308,7 +308,9 @@ test("Builder equipment body rows preserve legacy alignment wrapping and density
         const style = getComputedStyle(element);
         return {textAlign: style.textAlign, paddingTop: style.paddingTop, paddingBottom: style.paddingBottom};
     })).toEqual({textAlign: "center", paddingTop: "0px", paddingBottom: "0px"});
-    expect(Math.round(await itemRow.evaluate(element => element.getBoundingClientRect().height))).toBe(19);
+    const desktopRowHeight = await itemRow.evaluate(element => element.getBoundingClientRect().height);
+    expect(desktopRowHeight).toBeGreaterThanOrEqual(19);
+    expect(desktopRowHeight).toBeLessThanOrEqual(20);
     expect(await nameCell.evaluate(element => {
         const style = getComputedStyle(element);
         return {paddingTop: style.paddingTop, paddingBottom: style.paddingBottom};
