@@ -121,8 +121,9 @@ router.get(["/", "/index.html"], async function(req, res, next) {
 });
 
 router.get(["/details.html"], async function(req, res, next) {
+    const id = integerParam(req.query.id);
     if (res.locals.user)
-        res.locals.user.notifications = await apiUtils.handleNotifications(req.cookies.loginToken, res.locals.user.notifications, 'mob', req.query.id);
+        res.locals.user.notifications = await apiUtils.handleNotifications(req.cookies.loginToken, res.locals.user.notifications, 'mob', id);
 
     let getMobQuery = `
     query MobDetails($id: Int!) {
@@ -160,7 +161,7 @@ router.get(["/details.html"], async function(req, res, next) {
 
     try {
         var data = await apiUtils.postAsync(getMobQuery, undefined, {
-            id: integerParam(req.query.id)
+            id
         });
     }
     catch (e) {

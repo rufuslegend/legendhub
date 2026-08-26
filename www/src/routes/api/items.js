@@ -4,15 +4,8 @@ let graphql = require("graphql");
 let { GraphQLDateTime } = require("graphql-scalars");
 let auth = require("./auth");
 let apiUtils = require("./utils");
+let {resolveItemFilters} = require("./item-filters");
 let {resolveItemSort} = require("./item-sort");
-
-String.prototype.format = function() {
-    a = this;
-    for (k in arguments) {
-        a = a.replace("{" + k + "}", arguments[k]);
-    }
-    return a;
-}
 
 const syncQuery = syncRpc(__dirname + "/sync-rpcs/mysql-query.js");
 const itemColumnsResults = syncQuery("SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'legendhub' AND TABLE_NAME = 'Items'");
@@ -477,7 +470,7 @@ let getItems = function(searchString, filterString, sortBy, sortAsc, page, rows)
         rows = 20;
 
     return new Promise(function(resolve, reject) {
-        mysql.query(`SELECT Var, FilterString FROM ItemStatInfo`,
+        mysql.query(`SELECT Var, Type, FilterString FROM ItemStatInfo`,
             function(error, results, fields) {
                 if (error) {
                     reject(new graphql.GraphQLError(error.sqlMessage));
@@ -485,30 +478,12 @@ let getItems = function(searchString, filterString, sortBy, sortAsc, page, rows)
                 }
 
                 if (results.length > 0) {
-                    let filterStrings = {};
-                    for (let i = 0; i < results.length; ++i) {
-                        filterStrings[results[i].Var] = results[i].FilterString;
-                    }
-
-                    let filterQuery = "";
-                    if (filterString) {
-                        let filters = filterString.split(",");
-                        for (let i = 0; i < filters.length; ++i) {
-                            let filterData = filters[i].split("_");
-                            let filterVar = filterData[0][0].toLowerCase() + filterData[0].slice(1);
-                            let filterClause = filterStrings[filterVar];
-
-                            if (filterClause) {
-                                let mysqlVar = filterVar[0].toUpperCase() + filterVar.slice(1);
-                                filterQuery += " AND (" + mysqlVar + " " + filterClause.format(filterData.slice(1)) + ")"
-                            }
-                        }
-                    }
+                    const filters = resolveItemFilters(filterString, results);
 
                     const actualSortBy = resolveItemSort(sortBy, noSearch, results);
 
-                    mysql.query(`${ itemSelectSQL } FROM Items WHERE Deleted = 0 AND (? = '' OR Name LIKE ?)${filterQuery} ORDER BY ${actualSortBy} ${sortAsc ? "ASC" : "DESC"} LIMIT ${(page - 1) * rows}, ${rows + 1}`,
-                        [searchString, "%" + searchString + "%"],
+                    mysql.query(`${ itemSelectSQL } FROM Items WHERE Deleted = 0 AND (? = '' OR Name LIKE ?)${filters.clause} ORDER BY ${actualSortBy} ${sortAsc ? "ASC" : "DESC"} LIMIT ${(page - 1) * rows}, ${rows + 1}`,
+                        [searchString, "%" + searchString + "%", ...filters.values],
                         function(error, results, fields) {
                             if (error) {
                                 reject(new graphql.GraphQLError(error.sqlMessage));

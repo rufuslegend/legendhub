@@ -15,7 +15,7 @@ router.get(["/login.html"], function(req, res) {
     return res.render("login", {title: "Login", vm: {body: {}}});
 });
 
-router.post(["/login.html"], async function(req, res) {
+router.post(["/login.html"], requireSameOrigin, async function(req, res) {
     const body = req.body || {};
     const stringBody = name => typeof body[name] === "string" ? body[name] : "";
     let vm = {body: {

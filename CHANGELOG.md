@@ -23,7 +23,7 @@ with version 2.6.0.
 
 - Hardened sign-in renewal so private session data is not written to server diagnostics.
 - Prevented crafted page titles, search links, and saved theme values from changing page markup.
-- Protected sign-out, deletion, and revision restoration from cross-site requests while preserving their existing confirmations and destinations.
+- Protected sign-in, sign-out, deletion, and revision restoration from cross-site requests while preserving their existing confirmations and destinations.
 - Hardened item search so editable result data is loaded safely into the interactive page.
 - Protected saved Builder characters when startup data is unavailable or an older save cannot be read, and restored confirmation before locking or unlocking every equipped item.
 - Hardened list searches, failed sign-ins, and notifications so entered or stored names remain plain text and passwords are never echoed back into the page.

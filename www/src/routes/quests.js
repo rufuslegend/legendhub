@@ -119,8 +119,9 @@ router.get(["/", "/index.html"], async function(req, res, next) {
 });
 
 router.get(["/details.html"], async function(req, res, next) {
+    const id = integerParam(req.query.id);
     if (res.locals.user)
-        res.locals.user.notifications = await apiUtils.handleNotifications(req.cookies.loginToken, res.locals.user.notifications, 'quest', req.query.id);
+        res.locals.user.notifications = await apiUtils.handleNotifications(req.cookies.loginToken, res.locals.user.notifications, 'quest', id);
 
     let query = `
     query QuestDetails($id: Int!) {
@@ -156,7 +157,7 @@ router.get(["/details.html"], async function(req, res, next) {
 
     try {
         var data = await apiUtils.postAsync(query, undefined, {
-            id: integerParam(req.query.id)
+            id
         });
     }
     catch (e) {

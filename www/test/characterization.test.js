@@ -75,6 +75,69 @@ test("fatal error page renders without request locals", async function() {
     assert.match(html, /A fatal error has occurred/);
 });
 
+test("authorized content pages render named delete buttons with valid closing tags", async function() {
+    const ejs = require("ejs");
+    const {normalizeTheme} = require("../src/view-helpers");
+    const shared = {
+        cookies: {},
+        displayDateTime: function() { return ""; },
+        normalizeTheme,
+        permissions: {hasPermission: function() { return true; }},
+        title: "Details",
+        url: {path: "/details.html"},
+        user: null,
+        version: "test"
+    };
+    const fixtures = [
+        ["items", "item", {
+            item: {
+                id: 7, name: "Test item", slot: 0, rent: 0, ac: 0,
+                strength: 0, mind: 0, dexterity: 0, constitution: 0,
+                perception: 0, spirit: 0, getHistories: [], getMob: null,
+                getQuest: null, modifiedBy: "Tester", notes: ""
+            },
+            itemNotesHtml: "", statCategories: [],
+            constants: {selectOptions: {
+                alignRestriction: ["No Align Restriction"],
+                slot: ["Light"]
+            }}
+        }],
+        ["mobs", "mob", {
+            mob: {
+                id: 7, name: "Test mob", getItems: [], getHistories: [],
+                modifiedBy: "Tester", notes: ""
+            },
+            mobNotesHtml: "", constants: {selectOptions: {slot: ["Light"]}}
+        }],
+        ["quests", "quest", {
+            quest: {
+                id: 7, title: "Test quest", getItems: [], getHistories: [],
+                modifiedBy: "Tester", content: ""
+            },
+            questContentHtml: "", constants: {selectOptions: {slot: ["Light"]}}
+        }],
+        ["wiki", "wiki page", {
+            wikiPage: {
+                id: 7, title: "Test page", getHistories: [],
+                modifiedBy: "Tester", content: ""
+            },
+            wikiContentHtml: ""
+        }]
+    ];
+
+    for (const [directory, resourceName, vm] of fixtures) {
+        const html = await ejs.renderFile(path.join(
+            __dirname, `../src/views/${directory}/display.ejs`), {
+            ...shared,
+            locals: shared,
+            vm
+        });
+        assert.match(html, new RegExp(
+            `<button[^>]+data-target="#deleteModal"[^>]+aria-label="Delete ${resourceName}"[^>]*>` +
+            `<i[^>]+aria-hidden="true"[^>]*><\\/i><\\/button>`));
+    }
+});
+
 test("API error types retain their public status codes", function() {
     const {
         NotFoundError,

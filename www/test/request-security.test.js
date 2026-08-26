@@ -66,8 +66,8 @@ test("normalizeReturnUrl keeps local paths and rejects external redirect forms",
     }
 });
 
-test("requireSameOrigin accepts the request origin and rejects missing or foreign origins", function() {
-    function invoke(origin) {
+test("requireSameOrigin accepts same-site origin evidence and rejects missing or foreign sources", function() {
+    function invoke(origin, referer) {
         let nextCalled = false;
         let status;
         const req = {
@@ -75,6 +75,7 @@ test("requireSameOrigin accepts the request origin and rejects missing or foreig
             get: function(name) {
                 if (name === "host") return "legendhub.example:7443";
                 if (name === "origin") return origin;
+                if (name === "referer") return referer;
                 return undefined;
             }
         };
@@ -92,11 +93,23 @@ test("requireSameOrigin accepts the request origin and rejects missing or foreig
         nextCalled: true,
         status: undefined
     });
+    assert.deepEqual(invoke(undefined, "https://legendhub.example:7443/login.html"), {
+        nextCalled: true,
+        status: undefined
+    });
     assert.deepEqual(invoke("https://attacker.invalid"), {
         nextCalled: false,
         status: 403
     });
     assert.deepEqual(invoke(undefined), {
+        nextCalled: false,
+        status: 403
+    });
+    assert.deepEqual(invoke(undefined, "https://attacker.invalid/login.html"), {
+        nextCalled: false,
+        status: 403
+    });
+    assert.deepEqual(invoke(undefined, "not a URL"), {
         nextCalled: false,
         status: 403
     });
@@ -113,7 +126,7 @@ test("login redirects only to normalized local return URLs", async function() {
             return {authLogin: {token: "renewed", expires: null}};
         }
     });
-    const handler = routeHandlers(router, "/login.html", "post")[0];
+    const handlers = routeHandlers(router, "/login.html", "post");
 
     for (const [returnUrl, expected] of [
         ["/items/details.html?id=7", "/items/details.html?id=7"],
@@ -122,17 +135,52 @@ test("login redirects only to normalized local return URLs", async function() {
         ["\\\\attacker.invalid/after-login", "/"]
     ]) {
         let redirected;
-        await handler({
+        await runHandlers(handlers, {
             body: {login_username: "Archivist", login_password: "secret", returnUrl},
-            ip: "192.0.2.7"
+            ip: "192.0.2.7",
+            protocol: "https",
+            get: function(name) {
+                if (name === "host") return "legendhub.example";
+                if (name === "origin") return "https://legendhub.example";
+            }
         }, {
             cookie: function() {},
             redirect: function(value) { redirected = value; }
-        }, function(error) {
-            if (error) throw error;
         });
         assert.equal(redirected, expected);
     }
+});
+
+test("login and registration reject cross-site submission before authentication", async function() {
+    let apiCalls = 0;
+    const router = loadIndexRoute({
+        logout: function() {},
+        postAsync: async function() {
+            apiCalls += 1;
+            return {authLogin: {token: "attacker-session", expires: null}};
+        }
+    });
+    const handlers = routeHandlers(router, "/login.html", "post");
+
+    for (const origin of ["https://attacker.invalid", undefined]) {
+        let status;
+        await runHandlers(handlers, {
+            body: {login_username: "Attacker", login_password: "secret"},
+            ip: "192.0.2.9",
+            protocol: "https",
+            get: function(name) {
+                if (name === "host") return "legendhub.example";
+                if (name === "origin") return origin;
+            }
+        }, {
+            cookie: function() {},
+            redirect: function() {},
+            sendStatus: function(value) { status = value; }
+        });
+
+        assert.equal(status, 403);
+    }
+    assert.equal(apiCalls, 0);
 });
 
 test("logout is POST-only and rejects a foreign origin before ending the session", async function() {

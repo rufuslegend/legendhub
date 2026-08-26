@@ -50,6 +50,7 @@ module.exports = function createApp(options = {}) {
             }
         },
         frameguard: false,
+        referrerPolicy: {policy: "same-origin"},
         strictTransportSecurity: environment === "production"
     }));
     app.use(compression());

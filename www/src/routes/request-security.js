@@ -16,10 +16,22 @@ function requireSameOrigin(req, res, next) {
     const origin = req.get("origin");
     const expectedOrigin = `${req.protocol}://${req.get("host")}`;
 
-    if (origin !== expectedOrigin)
+    if (origin) {
+        if (origin === expectedOrigin)
+            return next();
         return res.sendStatus(403);
+    }
 
-    return next();
+    const referer = req.get("referer");
+    try {
+        if (new URL(referer).origin === expectedOrigin)
+            return next();
+    }
+    catch (_error) {
+        // Missing and malformed referrers do not establish a same-origin request.
+    }
+
+    return res.sendStatus(403);
 }
 
 module.exports = {normalizeReturnUrl, requireSameOrigin};

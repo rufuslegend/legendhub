@@ -48,7 +48,7 @@ Agg: <%=vm.mob.aggro ? "Yes" : "No"%>
                             <button type="button" class="btn btn-outline-primary"><%=locals.displayDateTime(vm.mob.modifiedOn)%> <strong>by</strong> <%=vm.mob.modifiedBy%></button>
                             <a class="btn btn-outline-primary" role="button" href="<%-(!locals.user ? "/login.html?returnUrl=" : "")%>/mobs/edit.html?id=<%-vm.mob.id%>"><i class="far fa-edit"></i><span class="d-none d-md-inline"> Edit</span></a>
                             <% if (locals.permissions && locals.permissions.hasPermission("Mob", 0, 0, 0, 1)) {%>
-                            <button type="button" class="btn btn-outline-danger" data-toggle="modal" data-target="#deleteModal"><i class="fas fa-trash"></i><span class="d-none d-md-inline"></span></a>
+                            <button type="button" class="btn btn-outline-danger" data-toggle="modal" data-target="#deleteModal" aria-label="Delete mob"><i class="fas fa-trash" aria-hidden="true"></i></button>
                             <%}%>
                         </div>
                     </div>

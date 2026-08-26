@@ -11,13 +11,13 @@ const resources = [
     {name: "wiki", field: "WikiPage"}
 ];
 
-function loadResourceRoute(resource, postAsync) {
+function loadResourceRoute(resource, postAsync, handleNotifications) {
     const routePath = require.resolve(`../src/routes/${resource.name}`);
     const originalLoad = Module._load;
     Module._load = function(request, parent, isMain) {
         if (parent?.filename === routePath && request === "./api/utils") {
             return {
-                handleNotifications: async function(_token, notifications) {
+                handleNotifications: handleNotifications || async function(_token, notifications) {
                     return notifications;
                 },
                 postAsync
@@ -172,6 +172,39 @@ test("content detail, history, and edit routes pass numeric ids as GraphQL varia
             assert.doesNotMatch(captured.query, /\bid\s*:\s*7\b/);
             assert.deepEqual(captured.variables, {id: 7});
         }
+    }
+});
+
+test("authenticated detail routes use one numeric id for notifications and content lookup", async function() {
+    for (const resource of resources) {
+        const sentinel = new Error("stop after query capture");
+        let notificationId;
+        let variables;
+        const router = loadResourceRoute(resource, async function(_query, _ip, nextVariables) {
+            variables = nextVariables;
+            throw sentinel;
+        }, async function(_token, notifications, _objectType, objectId) {
+            notificationId = objectId;
+            return notifications;
+        });
+        const handler = routeHandlers(router, "/details.html", "get")[0];
+        let forwardedError;
+
+        await handler({
+            cookies: {loginToken: "session-token"},
+            ip: "192.0.2.22",
+            query: {id: "7"}
+        }, {
+            locals: {
+                user: {notifications: [{id: 1}]}
+            }
+        }, function(error) {
+            forwardedError = error;
+        });
+
+        assert.equal(forwardedError, sentinel);
+        assert.equal(notificationId, 7, `${resource.name} notification id`);
+        assert.deepEqual(variables, {id: 7}, `${resource.name} detail id`);
     }
 });
 
