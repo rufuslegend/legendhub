@@ -7,6 +7,7 @@ const test = require("node:test");
 
 const routePath = require.resolve("../src/routes/account");
 const accountApiPath = require.resolve("../src/routes/api/account");
+const authApiPath = require.resolve("../src/routes/api/auth");
 
 function loadAccountRoute(postAsync) {
     const originalLoad = Module._load;
@@ -46,6 +47,51 @@ function loadAccountApi(mysql, auth) {
     finally {
         Module._load = originalLoad;
     }
+}
+
+function loadAuthApi(mysql, accountEmailService) {
+    const originalLoad = Module._load;
+    Module._load = function(request, parent, isMain) {
+        if (request === "./mysql-connection" && parent?.filename === authApiPath)
+            return mysql;
+        if (request === "./account-email-service" && parent?.filename === authApiPath) {
+            return {
+                createAccountEmailService: function() {
+                    return accountEmailService;
+                }
+            };
+        }
+
+        return originalLoad.call(this, request, parent, isMain);
+    };
+
+    try {
+        delete require.cache[authApiPath];
+        return require(authApiPath);
+    }
+    finally {
+        Module._load = originalLoad;
+    }
+}
+
+function mysqlWithMembers(members) {
+    const queries = [];
+    return {
+        queries,
+        query: function(sql, values, callback) {
+            queries.push({sql, values});
+            if (sql.includes("FROM Members") && sql.includes("NormalizedEmail")) {
+                callback(null, members.filter(member =>
+                    member.NormalizedEmail === values[0] && member.EmailVerifiedOn));
+                return;
+            }
+            if (sql.includes("FROM Members") && sql.includes("Username")) {
+                callback(null, members.filter(member => member.Username === values[0]));
+                return;
+            }
+            callback(null, {affectedRows: 1, insertId: 101});
+        }
+    };
 }
 
 function getAccountRouteHandler(router) {
@@ -201,4 +247,142 @@ test("password mutation distinguishes invalid and successful passwords", async f
         success: true,
         tokenRenewal: {token: authResult.token, expires: authResult.expires}
     });
+});
+
+// Catches a single username query path, accepting unverified/pending email,
+// or failing to apply trim-plus-lowercase normalization to email identity.
+test("login accepts a verified normalized email but rejects pending email", async function() {
+    const passwords = require("../src/routes/api/php-password");
+    const password = "correct-password";
+    const hash = passwords.hash(password);
+    const mysql = mysqlWithMembers([{
+        Id: 7,
+        Username: "Player",
+        NormalizedEmail: "player@example.com",
+        PendingNormalizedEmail: "pending@example.com",
+        EmailVerifiedOn: new Date("2026-08-26T00:00:00Z"),
+        Password: hash,
+        Banned: 0
+    }]);
+    const auth = loadAuthApi(mysql, {register: async () => ({registered: true})});
+
+    assert.ok(await auth.utils.authLogin(
+        " PLAYER@EXAMPLE.COM ", password, false, "ip-hash"));
+    await assert.rejects(
+        auth.utils.authLogin("pending@example.com", password, false, "ip-hash"),
+        error => error.message === "Invalid username or password."
+    );
+
+    const identityQueries = mysql.queries.filter(({sql}) => sql.includes("FROM Members"));
+    assert.equal(identityQueries.every(({sql}) =>
+        sql.includes("EmailVerifiedOn IS NOT NULL") && !sql.includes("PendingNormalizedEmail")), true);
+    assert.deepEqual(identityQueries.map(({values}) => values), [
+        ["player@example.com"], ["pending@example.com"]
+    ]);
+});
+
+// Catches locked-account enumeration through a credential-dependent public
+// message instead of the binding generic authentication failure.
+test("login uses the exact generic failure for a locked matching account", async function() {
+    const passwords = require("../src/routes/api/php-password");
+    const password = "correct-password";
+    const mysql = mysqlWithMembers([{
+        Id: 70,
+        Username: "LockedPlayer",
+        NormalizedEmail: "locked@example.com",
+        EmailVerifiedOn: new Date("2026-08-26T00:00:00Z"),
+        Password: passwords.hash(password),
+        Banned: 1
+    }]);
+    const auth = loadAuthApi(mysql, {register: async () => ({registered: true})});
+
+    await assert.rejects(
+        auth.utils.authLogin("locked@example.com", password, false, "ip-hash"),
+        error => error.message === "Invalid username or password."
+    );
+});
+
+// Catches email support accidentally making username login conditional on a
+// verified address, which would lock out grandfathered accounts.
+test("username login remains valid for a grandfathered member without email", async function() {
+    const passwords = require("../src/routes/api/php-password");
+    const password = "correct-password";
+    const mysql = mysqlWithMembers([{
+        Id: 8,
+        Username: "LegacyPlayer",
+        NormalizedEmail: null,
+        EmailVerifiedOn: null,
+        Password: passwords.hash(password),
+        Banned: 0
+    }]);
+    const auth = loadAuthApi(mysql, {register: async () => ({registered: true})});
+
+    assert.ok(await auth.utils.authLogin(
+        " LegacyPlayer ", password, false, "ip-hash"));
+    const lookup = mysql.queries.find(({sql}) => sql.includes("FROM Members"));
+    assert.match(lookup.sql, /WHERE Username = \?/);
+    assert.deepEqual(lookup.values, ["LegacyPlayer"]);
+});
+
+// Catches removing the legacy GraphQL username argument or letting it override
+// the new identity argument when both are supplied by an older/newer client mix.
+test("GraphQL login resolves identity first and retains optional username compatibility", async function() {
+    const passwords = require("../src/routes/api/php-password");
+    const password = "correct-password";
+    const mysql = mysqlWithMembers([{
+        Id: 9,
+        Username: "LegacyPlayer",
+        NormalizedEmail: "player@example.com",
+        EmailVerifiedOn: new Date("2026-08-26T00:00:00Z"),
+        Password: passwords.hash(password),
+        Banned: 0
+    }]);
+    const auth = loadAuthApi(mysql, {register: async () => ({registered: true})});
+    const loginField = auth.mutationFields.authLogin;
+
+    assert.equal(loginField.args.username.type.toString(), "String");
+    assert.ok(await loginField.resolve(null, {
+        identity: "PLAYER@example.com",
+        username: "wrong-legacy-value",
+        password,
+        stayLoggedIn: false
+    }, {headers: {"x-forwarded-for": "192.0.2.7"}}));
+    assert.deepEqual(mysql.queries.find(({sql}) =>
+        sql.includes("FROM Members")).values, ["player@example.com"]);
+});
+
+// Catches the GraphQL adapter omitting required registration email or storing
+// a plaintext password instead of passing the existing compatible hash.
+test("registration GraphQL adapter requires email and delegates an unverified account claim", async function(t) {
+    const passwords = require("../src/routes/api/php-password");
+    let registrationInput;
+    const service = {
+        register: async function(input) {
+            registrationInput = input;
+            return {registered: true};
+        }
+    };
+    const mysql = mysqlWithMembers([]);
+    const auth = loadAuthApi(mysql, service);
+    t.mock.method(global, "fetch", async function() {
+        return {json: async () => ({success: true})};
+    });
+
+    const registerField = auth.mutationFields.register;
+    assert.equal(registerField.args.email.type.toString(), "String!");
+    const result = await registerField.resolve(null, {
+        username: "Player",
+        email: "Player@example.com",
+        password: "long-password",
+        recaptcha: "ok"
+    }, {headers: {"x-forwarded-for": "192.0.2.7"}});
+
+    assert.equal(result, true);
+    assert.equal(registrationInput.username, "Player");
+    assert.equal(registrationInput.email, "Player@example.com");
+    assert.equal(registrationInput.recaptchaVerified, true);
+    assert.equal(registrationInput.ipHash.length, 40);
+    assert.equal(passwords.verify("long-password", registrationInput.passwordHash), true);
+    assert.equal(mysql.queries.length, 0,
+        "the service owns transactional registration database work");
 });

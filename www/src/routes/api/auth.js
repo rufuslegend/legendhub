@@ -4,22 +4,44 @@ let { GraphQLDateTime } = require("graphql-scalars");
 let phpPass = require("./php-password");
 let crypto = require("crypto");
 let apiUtils = require("./utils");
+let {createAccountEmailService} = require("./account-email-service");
+let {createAccountRateLimiter} = require("./account-rate-limit");
+let {createMailer, readMailConfig} = require("../../mail");
+
+let accountEmailService = createAccountEmailService({
+    pool: mysql,
+    mailer: {
+        sendVerification: function(message) {
+            return createMailer({config: readMailConfig(process.env)})
+                .sendVerification(message);
+        }
+    },
+    rateLimiter: createAccountRateLimiter({pool: mysql})
+});
 
 let getIPFromRequest = function(request) {
     let ip = (request.headers['x-forwarded-for'] || "").split(",")[0];
     return crypto.createHash("sha1").update(ip).digest("hex");
 }
 
-let authLogin = function(username, password, stayLoggedIn, ip) {
+let authLogin = function(identity, password, stayLoggedIn, ip) {
     if (apiUtils.isIPBlocked(ip))
         return new gql.GraphQLError("Too many failed attempts. Try again later.");
 
+    const trimmedIdentity = typeof identity === "string" ? identity.trim() : "";
+    const emailIdentity = trimmedIdentity.includes("@");
+    const lookupValue = emailIdentity ? trimmedIdentity.toLowerCase() : trimmedIdentity;
+    const lookup = emailIdentity
+        ? `SELECT Id, Password, Banned FROM Members
+            WHERE NormalizedEmail = ? AND EmailVerifiedOn IS NOT NULL`
+        : "SELECT Id, Password, Banned FROM Members WHERE Username = ?";
+
     return new Promise(function(resolve, reject) {
-        mysql.query(`SELECT Id, Password, Banned FROM Members WHERE Username = ?`,
-            [username],
+        mysql.query(lookup,
+            [lookupValue],
             function(error, results, fields) {
                 if (error) {
-                    reject(new gql.GraphQLError(error.sqlMessage));
+                    reject(new gql.GraphQLError("Invalid username or password."));
                     return;
                 }
 
@@ -27,7 +49,7 @@ let authLogin = function(username, password, stayLoggedIn, ip) {
                     for (let i = 0; i < results.length; ++i) { // TODO: log system error if more than 1 result.
                         if (phpPass.verify(password, results[i].Password)) {
                             if (results[i].Banned) {
-                                reject(new gql.GraphQLError("This account has been locked."));
+                                reject(new gql.GraphQLError("Invalid username or password."));
                                 return;
                             }
 
@@ -79,7 +101,9 @@ let authToken = function(token, ip, renew, shouldGetPermissions) {
         let tokenInfo = token.split("-");
         if (tokenInfo.length != 2)
             return reject(new gql.GraphQLError("Invalid token"));
-        mysql.query(`SELECT AT.Id, M.Id AS MemberId, M.Username, AT.HashedValidator, AT.Expires, AT.StayLoggedIn, M.Banned
+        mysql.query(`SELECT AT.Id, M.Id AS MemberId, M.Username,
+                M.Email, M.EmailVerifiedOn, M.PendingEmail, M.StorageNamespace,
+                AT.HashedValidator, AT.Expires, AT.StayLoggedIn, M.Banned
             FROM AuthTokens AT
             JOIN Members M ON M.Id = AT.MemberId
             WHERE M.Banned = 0 AND AT.Expires > NOW() AND
@@ -87,7 +111,7 @@ let authToken = function(token, ip, renew, shouldGetPermissions) {
             [tokenInfo[0]],
             function(error, results, fields) {
                 if (error) {
-                    reject(new gql.GraphQLError(error.sqlMessage));
+                    reject(new gql.GraphQLError("Invalid token"));
                     return;
                 }
 
@@ -105,6 +129,10 @@ let authToken = function(token, ip, renew, shouldGetPermissions) {
                         let response = {
                             memberId: results[i].MemberId,
                             username: results[i].Username,
+                            email: results[i].Email,
+                            emailVerified: Boolean(results[i].EmailVerifiedOn),
+                            pendingEmail: results[i].PendingEmail,
+                            storageNamespace: results[i].StorageNamespace,
                             ip: ip
                         };
 
@@ -243,7 +271,7 @@ let getPermissions = function(memberId) {
     });
 };
 
-let register = async function(username, password, recaptcha, ip) {
+let register = async function(username, email, password, recaptcha, ip) {
     if (apiUtils.isIPBlocked(ip))
         return new gql.GraphQLError("Too many attempts. Try again later.");
 
@@ -252,62 +280,32 @@ let register = async function(username, password, recaptcha, ip) {
         recaptchaResponse = await verifyReCAPTCHA(recaptcha);
     }
     catch (e) {
-        return new gql.GraphQLError(e.message);
+        return new gql.GraphQLError("reCAPTCHA verification unavailable.");
     }
 
     if (!recaptchaResponse) {
         return new gql.GraphQLError("reCAPTCHA failed.");
     }
 
-    let cleanUsername = username.replace(/[^A-Za-z0-9]*/g, "");
+    let cleanUsername = typeof username === "string"
+        ? username.replace(/[^A-Za-z0-9]*/g, "")
+        : "";
     if (cleanUsername.toLowerCase() === "dataimport")
         return new gql.GraphQLError("Username taken.");
     if (cleanUsername.length < 5 || cleanUsername.length > 25)
         return new gql.GraphQLError("Username must be between 5 and 25 characters.");
-    if (password.length < 8)
+    if (typeof password !== "string" || password.length < 8)
         return new gql.GraphQLError("Password must be larger than 8 characters.");
 
-    return new Promise(function(resolve, reject) {
-        mysql.query(`SELECT Id FROM BannedIPs WHERE Pattern = ?`,
-            [ip],
-            function(error, results, fields) {
-                if (results.length > 0) {
-                    reject(new gql.GraphQLError("Invalid username."));
-                }
-                else {
-                    mysql.query(`SELECT Id FROM Members WHERE Username = ?`,
-                        [username],
-                        function(error, results, fields) {
-                            if (results.length > 0) {
-                                reject(new gql.GraphQLError("Username taken."));
-                            }
-                            else {
-                                let passwordHash = phpPass.hash(password);
-                                mysql.query(`INSERT INTO Members (Username, Password) VALUES (?, ?)`,
-                                    [username, passwordHash],
-                                    function(error, results, fields) {
-                                        if (error) {
-                                            reject(new gql.GraphQLError(error.sqlMessage));
-                                            return;
-                                        }
-
-                                        let memberId = results.insertId;
-                                        mysql.query(`INSERT INTO MemberRoleMap (MemberId, RoleId) VALUES (?, ?)`,
-                                            [memberId, 2],
-                                            function(error, results, fields) {});
-
-                                        mysql.query(`INSERT INTO NotificationSettings (MemberId) VALUES (?)`,
-                                            [memberId],
-                                            function(error, results, fields) {});
-
-                                        apiUtils.trackRegister(ip);
-                                        resolve(true);
-                                    });
-                            }
-                        });
-                }
-            });
+    const result = await accountEmailService.register({
+        username,
+        email,
+        passwordHash: phpPass.hash(password),
+        recaptchaVerified: true,
+        ipHash: ip
     });
+    apiUtils.trackRegister(ip);
+    return result.registered;
 };
 
 let verifyReCAPTCHA = async function(recaptcha) {
@@ -342,23 +340,25 @@ let mFields = {
     authLogin: {
         type: new gql.GraphQLNonNull(tokenRenewalType),
         args: {
+            identity: {type: gql.GraphQLString},
             username: {type: gql.GraphQLString},
             password: {type: gql.GraphQLString},
             stayLoggedIn: {type: gql.GraphQLBoolean}
         },
-        resolve: function(_, {username, password, stayLoggedIn}, req) {
-            return authLogin(username, password, stayLoggedIn, getIPFromRequest(req));
+        resolve: function(_, {identity, username, password, stayLoggedIn}, req) {
+            return authLogin(identity || username, password, stayLoggedIn, getIPFromRequest(req));
         }
     },
     register: {
         type: new gql.GraphQLNonNull(gql.GraphQLBoolean),
         args: {
             username: {type: gql.GraphQLString},
+            email: {type: new gql.GraphQLNonNull(gql.GraphQLString)},
             password: {type: gql.GraphQLString},
             recaptcha: {type: gql.GraphQLString}
         },
-        resolve: function(_, {username, password, recaptcha}, req) {
-            return register(username, password, recaptcha, getIPFromRequest(req));
+        resolve: function(_, {username, email, password, recaptcha}, req) {
+            return register(username, email, password, recaptcha, getIPFromRequest(req));
         }
     }
 };

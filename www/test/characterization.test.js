@@ -17,6 +17,20 @@ async function renderHome(cookies = {}) {
     });
 }
 
+async function renderLogin(vm) {
+    const ejs = require("ejs");
+    const {normalizeTheme} = require("../src/view-helpers");
+    return ejs.renderFile(path.join(__dirname, "../src/views/login.ejs"), {
+        cookies: {},
+        normalizeTheme,
+        title: "Login",
+        url: {path: "/login.html", query: {returnUrl: "/"}},
+        user: null,
+        version: "test",
+        vm
+    });
+}
+
 test("PHP-compatible password hashes can be created and verified", function() {
     const passwords = require("../src/routes/api/php-password");
     const hash = passwords.hash("correct horse battery staple");
@@ -32,6 +46,29 @@ test("EJS renders the home page and its shared includes", async function() {
     assert.match(html, /Welcome to LegendHUB!/);
     assert.match(html, /Builder/);
     assert.match(html, /Cookie Policy/);
+});
+
+// Catches regressions to username-only copy, optional email registration, or
+// unescaped reflected form values after a validation failure.
+test("login page requires email registration and safely preserves entered identities", async function() {
+    const username = "Player<img src=x onerror=alert(1)>";
+    const email = "player@example.com\" autofocus onfocus=alert(1)";
+    const html = await renderLogin({
+        body: {
+            login_username: "",
+            register_username: username,
+            register_email: email
+        },
+        register_error: "Please correct the form."
+    });
+
+    assert.match(html, />Username or email<\/label>/);
+    assert.match(html,
+        /id="register_email"[^>]+name="register_email"[^>]+type="email"[^>]+autocomplete="email"[^>]+required/);
+    assert.match(html, /Player&lt;img src=x onerror=alert\(1\)&gt;/);
+    assert.match(html, /player@example\.com&#34; autofocus onfocus=alert\(1\)/);
+    assert.equal(html.includes(username), false);
+    assert.equal(html.includes(`value="${email}"`), false);
 });
 
 test("Glass Blue is the default while saved themes remain unchanged", async function() {

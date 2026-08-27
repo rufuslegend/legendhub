@@ -20,13 +20,14 @@ router.post(["/login.html"], requireSameOrigin, async function(req, res) {
     const stringBody = name => typeof body[name] === "string" ? body[name] : "";
     let vm = {body: {
         login_username: stringBody("login_username"),
-        register_username: stringBody("register_username")
+        register_username: stringBody("register_username"),
+        register_email: stringBody("register_email")
     }};
 
     if (vm.body.login_username) {
         let query = `
-        mutation AuthLogin($username: String, $password: String, $stayLoggedIn: Boolean) {
-            authLogin(username: $username, password: $password, stayLoggedIn: $stayLoggedIn) {
+        mutation AuthLogin($identity: String, $password: String, $stayLoggedIn: Boolean) {
+            authLogin(identity: $identity, password: $password, stayLoggedIn: $stayLoggedIn) {
                 token
                 expires
             }
@@ -36,7 +37,7 @@ router.post(["/login.html"], requireSameOrigin, async function(req, res) {
         let data;
         try {
             data = await apiUtils.postAsync(query, req.ip, {
-                username: vm.body.login_username,
+                identity: vm.body.login_username,
                 password: stringBody("login_password"),
                 stayLoggedIn: body.login_stayLoggedIn === "on" || body.login_stayLoggedIn === "true"
             });
@@ -68,6 +69,11 @@ router.post(["/login.html"], requireSameOrigin, async function(req, res) {
         return res.redirect(normalizeReturnUrl(body.returnUrl));
     }
     else if (vm.body.register_username) {
+        if (!vm.body.register_email) {
+            vm.register_error = "Error: Please enter an email address.";
+            return res.render("login", {title: "Login", vm});
+        }
+
         let recaptcha = stringBody("g-recaptcha-response");
         if (!recaptcha) {
             vm.register_error = "Error: Please fill out reCAPTCHA.";
@@ -82,12 +88,13 @@ router.post(["/login.html"], requireSameOrigin, async function(req, res) {
         let data;
         try {
             let query = `
-            mutation Register($username: String, $password: String, $recaptcha: String) {
-                register(username: $username, password: $password, recaptcha: $recaptcha)
+            mutation Register($username: String, $email: String!, $password: String, $recaptcha: String) {
+                register(username: $username, email: $email, password: $password, recaptcha: $recaptcha)
             }
             `;
             data = await apiUtils.postAsync(query, undefined, {
                 username: vm.body.register_username,
+                email: vm.body.register_email,
                 password: stringBody("register_password"),
                 recaptcha
             });
@@ -98,7 +105,7 @@ router.post(["/login.html"], requireSameOrigin, async function(req, res) {
         }
 
         if (data.register)
-            vm.login_message = "Successfuly registered.";
+            vm.login_message = "Successfully registered. Check your email to verify your account. If it does not arrive, use resend verification.";
         else
             vm.register_error = "Error: Register failed.";
         return res.render("login", {title: "Login", vm});

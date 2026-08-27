@@ -20,7 +20,7 @@
 						<div class="card-body">
 							<div class="input-group">
 								<div class="input-group-prepend">
-									<label class="input-group-text" id="login_usernameLabel" for="login_username">Username</label>
+									<label class="input-group-text" id="login_usernameLabel" for="login_username">Username or email</label>
 								</div>
                                 <input id="login_username" name="login_username" type="text" class="form-control" value="<%=vm.body.login_username%>" required autofocus>
 							</div>
@@ -60,6 +60,13 @@
 									<label class="input-group-text" id="register_usernameLabel" for="register_username">Username</label>
 								</div>
                                 <input id="register_username" name="register_username" pattern="^[A-Za-z0-9]*$" type="text" class="form-control" value="<%=vm.body.register_username%>" required>
+							</div>
+							<br />
+							<div class="input-group">
+								<div class="input-group-prepend">
+									<label class="input-group-text" id="register_emailLabel" for="register_email">Email</label>
+								</div>
+                                <input id="register_email" name="register_email" type="email" autocomplete="email" class="form-control" value="<%=vm.body.register_email%>" required>
 							</div>
 							<br />
 							<div class="input-group">

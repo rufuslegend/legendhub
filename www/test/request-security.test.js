@@ -120,9 +120,11 @@ test("requireSameOrigin accepts same-site origin evidence and rejects missing or
 });
 
 test("login redirects only to normalized local return URLs", async function() {
+    const requests = [];
     const router = loadIndexRoute({
         logout: function() {},
-        postAsync: async function() {
+        postAsync: async function(query, ip, variables) {
+            requests.push({query, ip, variables});
             return {authLogin: {token: "renewed", expires: null}};
         }
     });
@@ -149,6 +151,81 @@ test("login redirects only to normalized local return URLs", async function() {
         });
         assert.equal(redirected, expected);
     }
+
+    assert.equal(requests.every(({query}) =>
+        query.includes("$identity") && query.includes("authLogin(identity: $identity")), true);
+    assert.equal(requests.every(({variables}) =>
+        variables.identity === "Archivist" && !("username" in variables)), true);
+});
+
+// Catches registration reaching GraphQL without an address, dropping entered
+// values after validation, or omitting resend guidance after committed signup.
+test("registration requires email, preserves entered identity fields, and passes email to GraphQL", async function() {
+    const apiRequests = [];
+    const router = loadIndexRoute({
+        logout: function() {},
+        postAsync: async function(query, ip, variables) {
+            apiRequests.push({query, ip, variables});
+            return {register: true};
+        }
+    });
+    const handlers = routeHandlers(router, "/login.html", "post");
+    const baseRequest = {
+        ip: "192.0.2.7",
+        protocol: "https",
+        get: function(name) {
+            if (name === "host") return "legendhub.example";
+            if (name === "origin") return "https://legendhub.example";
+        }
+    };
+
+    let missingEmailRender;
+    await runHandlers(handlers, {
+        ...baseRequest,
+        body: {
+            register_username: "Player",
+            register_email: "",
+            register_password: "long-password",
+            register_confirmPassword: "long-password",
+            "g-recaptcha-response": "ok"
+        }
+    }, {
+        render: function(view, locals) { missingEmailRender = {view, locals}; }
+    });
+    assert.equal(apiRequests.length, 0);
+    assert.equal(missingEmailRender.view, "login");
+    assert.match(missingEmailRender.locals.vm.register_error, /email/i);
+    assert.deepEqual(missingEmailRender.locals.vm.body, {
+        login_username: "",
+        register_username: "Player",
+        register_email: ""
+    });
+
+    let successfulRender;
+    await runHandlers(handlers, {
+        ...baseRequest,
+        body: {
+            register_username: "Player",
+            register_email: "Player@example.com",
+            register_password: "long-password",
+            register_confirmPassword: "long-password",
+            "g-recaptcha-response": "ok"
+        }
+    }, {
+        render: function(view, locals) { successfulRender = {view, locals}; }
+    });
+
+    assert.equal(apiRequests.length, 1);
+    assert.match(apiRequests[0].query, /\$email: String!/);
+    assert.match(apiRequests[0].query, /register\(username: \$username, email: \$email/);
+    assert.deepEqual(apiRequests[0].variables, {
+        username: "Player",
+        email: "Player@example.com",
+        password: "long-password",
+        recaptcha: "ok"
+    });
+    assert.match(successfulRender.locals.vm.login_message, /verify/i);
+    assert.match(successfulRender.locals.vm.login_message, /resend/i);
 });
 
 test("login and registration reject cross-site submission before authentication", async function() {
