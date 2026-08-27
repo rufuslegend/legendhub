@@ -33,20 +33,37 @@ const DELETE_OLD_ATTEMPTS = "DELETE FROM AccountActionAttempts WHERE CreatedOn <
 function createAccountRateLimiter({pool, clock = () => new Date()}) {
     return {recordAndCheck};
 
-    async function recordAndCheck({purpose, identity, ipHash}) {
+    async function recordAndCheck({purpose, identity, ipHash, connection}) {
         const identityHash = crypto.createHash("sha256").update(identity).digest("hex");
         const now = clock();
-        return withTransaction(pool, async function(connection) {
-            const counts = await readCountsForUpdate(connection, purpose, identityHash, ipHash, now);
+        const record = async function(databaseConnection) {
+            const counts = await readCountsForUpdate(
+                databaseConnection,
+                purpose,
+                identityHash,
+                ipHash,
+                now
+            );
             if (counts.withinMinute ||
                 counts.identityHour >= LIMITS.identityPerHour ||
                 counts.ipHour >= LIMITS.ipPerHour) {
                 throw new TooManyRequestsError("Try again later.");
             }
 
-            await query(connection, INSERT_ATTEMPT, [purpose, identityHash, ipHash, now]);
-            await query(connection, DELETE_OLD_ATTEMPTS, [new Date(now.getTime() - DAY_MS)]);
-        });
+            await query(databaseConnection, INSERT_ATTEMPT, [
+                purpose,
+                identityHash,
+                ipHash,
+                now
+            ]);
+            await query(databaseConnection, DELETE_OLD_ATTEMPTS, [
+                new Date(now.getTime() - DAY_MS)
+            ]);
+        };
+
+        if (connection)
+            return record(connection);
+        return withTransaction(pool, record);
     }
 }
 

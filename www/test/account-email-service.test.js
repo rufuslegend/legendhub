@@ -494,6 +494,7 @@ function createEmailFlowDatabase() {
             }
             if (sql.includes("FROM Members") && sql.includes("WHERE Id = ?") &&
                 sql.includes("FOR UPDATE")) {
+                events.push("lock-member");
                 callback(null, values[0] === member.Id ? [{...member}] : []);
                 return;
             }
@@ -529,6 +530,7 @@ function createEmailFlowDatabase() {
 
     return {
         pool: {getConnection(callback) { callback(null, connection); }},
+        connection,
         member,
         tokens,
         events,
@@ -631,6 +633,7 @@ test("email change keeps the verified address active until token verification", 
     assert.deepEqual(database.events.slice(verificationEventStart), [
         "begin",
         "cleanup-action-tokens",
+        "lock-member",
         "promote-pending-email",
         "consume-sibling-tokens",
         "commit",
@@ -758,18 +761,37 @@ test("resend is durable-rate-limited and replaces the same-action token", async 
         auth: {
             memberId: database.member.Id,
             username: database.member.Username,
-            email: database.member.Email,
-            emailVerified: true,
-            pendingEmail: database.member.PendingEmail
+            email: "stale-snapshot@example.com",
+            emailVerified: false,
+            pendingEmail: null
         },
         ipHash: IP_HASH
     }), {accepted: true});
 
-    assert.deepEqual(rateLimitInputs, [{
+    assert.equal(rateLimitInputs.length, 1);
+    assert.deepEqual({
+        purpose: rateLimitInputs[0].purpose,
+        identity: rateLimitInputs[0].identity,
+        ipHash: rateLimitInputs[0].ipHash
+    }, {
         purpose: "change-email",
         identity: "pending@example.com",
         ipHash: IP_HASH
-    }]);
+    });
+    assert.equal(rateLimitInputs[0].connection, database.connection);
+    assert.deepEqual(database.events.filter(event => [
+        "begin",
+        "lock-member",
+        "rate-limit",
+        "insert-action-token",
+        "commit"
+    ].includes(event)), [
+        "begin",
+        "lock-member",
+        "rate-limit",
+        "insert-action-token",
+        "commit"
+    ]);
     assert.equal(database.tokens.find(token => token.Id === 4).ConsumedOn !== null, true);
     assert.equal(database.tokens.filter(token =>
         token.Purpose === "change-email" && token.ConsumedOn === null).length, 1);
@@ -810,6 +832,7 @@ test("email mutations hide rate-limit database diagnostics", async function() {
         ipHash: IP_HASH
     }), error => error.message === "Account email update failed." &&
         !error.message.includes(privateDiagnostic));
+    database.member.EmailVerifiedOn = null;
     await assert.rejects(service.resendVerification({auth, ipHash: IP_HASH}),
         error => error.message === "Verification could not be resent." &&
             !error.message.includes(privateDiagnostic));

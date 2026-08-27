@@ -8,16 +8,28 @@ const {createAccountRateLimiter} = require("../src/routes/api/account-rate-limit
 
 function createPool(counts = {}) {
     const queries = [];
+    const transactionEvents = [];
     const state = {
         withinMinute: counts.withinMinute || 0,
         identityHour: counts.identityHour || 0,
         ipHour: counts.ipHour || 0
     };
     const connection = {
-        beginTransaction(callback) { callback(null); },
-        commit(callback) { callback(null); },
-        rollback(callback) { callback(null); },
-        release() {},
+        beginTransaction(callback) {
+            transactionEvents.push("begin");
+            callback(null);
+        },
+        commit(callback) {
+            transactionEvents.push("commit");
+            callback(null);
+        },
+        rollback(callback) {
+            transactionEvents.push("rollback");
+            callback(null);
+        },
+        release() {
+            transactionEvents.push("release");
+        },
         query(sql, values, callback) {
             queries.push({sql, values});
             if (sql.includes("COUNT(*) AS Count")) {
@@ -38,8 +50,13 @@ function createPool(counts = {}) {
         }
     };
     return {
-        pool: {getConnection(callback) { callback(null, connection); }},
-        queries
+        pool: {getConnection(callback) {
+            transactionEvents.push("get-connection");
+            callback(null, connection);
+        }},
+        connection,
+        queries,
+        transactionEvents
     };
 }
 
@@ -118,4 +135,20 @@ test("accepted rate-limit writes remove attempts older than twenty-four hours", 
     const cleanup = database.queries.find(({sql}) => sql.includes("DELETE FROM AccountActionAttempts"));
     assert.ok(cleanup);
     assert.deepEqual(cleanup.values, [new Date("2026-08-25T12:00:00Z")]);
+});
+
+// Catches opening a nested pool transaction while resend holds the member
+// lock, instead of recording the durable attempt on that caller transaction.
+test("rate limiter can record on a caller-owned transaction connection", async function() {
+    const database = createPool();
+    const limiter = createAccountRateLimiter({
+        pool: database.pool,
+        clock: () => new Date("2026-08-26T12:00:00Z")
+    });
+
+    await limiter.recordAndCheck({...input, connection: database.connection});
+
+    assert.deepEqual(database.transactionEvents, []);
+    assert.equal(database.queries.some(({sql}) =>
+        sql.includes("INSERT INTO AccountActionAttempts")), true);
 });

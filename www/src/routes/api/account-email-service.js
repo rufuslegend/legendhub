@@ -293,29 +293,14 @@ function createAccountEmailService({
     }
 
     async function resendVerification({auth, ipHash}) {
-        const candidate = typeof auth?.pendingEmail === "string"
-            ? {purpose: "change-email", email: auth.pendingEmail}
-            : (!auth?.emailVerified && typeof auth?.email === "string"
-                ? {purpose: "verify-email", email: auth.email}
-                : null);
-        if (!candidate || !auth?.memberId)
+        if (!auth?.memberId)
             return {accepted: true};
 
-        const address = normalizeEmail(candidate.email);
         const now = clock();
-        const verification = createActionToken({
-            randomBytes,
-            now,
-            lifetimeMs: VERIFICATION_LIFETIME_MS
-        });
         let delivery;
+        let verification;
 
         try {
-            await rateLimiter.recordAndCheck({
-                purpose: candidate.purpose,
-                identity: address.normalized,
-                ipHash
-            });
             await withTransaction(pool, async function(connection) {
                 const members = await query(connection, SELECT_MEMBER_FOR_VERIFICATION, [
                     auth.memberId
@@ -346,6 +331,17 @@ function createAccountEmailService({
                     return;
                 }
 
+                await rateLimiter.recordAndCheck({
+                    purpose: delivery.purpose,
+                    identity: delivery.address.normalized,
+                    ipHash,
+                    connection
+                });
+                verification = createActionToken({
+                    randomBytes,
+                    now,
+                    lifetimeMs: VERIFICATION_LIFETIME_MS
+                });
                 await cleanupActionTokens(connection, now);
                 await query(connection, INVALIDATE_PURPOSE_TOKENS, [
                     now,

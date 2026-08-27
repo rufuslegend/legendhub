@@ -159,6 +159,18 @@ test("request logging omits the token-bearing verification endpoint", function()
         delete require.cache[createAppPath];
     }
 
-    assert.equal(loggerOptions.skip({path: "/verify-email.html"}), true);
-    assert.equal(loggerOptions.skip({path: "/account/"}), false);
+    for (const path of [
+        "/verify-email.html",
+        "/VERIFY-EMAIL.HTML",
+        "/verify-email.html/"
+    ]) {
+        assert.equal(loggerOptions.skip({
+            path,
+            originalUrl: `${path}?token=selector-raw-validator`
+        }), true, `${path} must not be logged`);
+    }
+    assert.equal(loggerOptions.skip({
+        path: "/account/",
+        originalUrl: "/account/?section=email"
+    }), false);
 });

@@ -145,7 +145,7 @@ let getAccountEmailStatus = async function(req, authToken) {
 };
 
 let requestEmailChange = async function(req, authToken, currentPassword, email) {
-    const authResult = await auth.utils.authMutation(req, authToken, false);
+    const authResult = await auth.utils.authQuery(req, authToken, false);
     const result = await accountEmailService.requestEmailChange({
         auth: authResult,
         currentPassword,
@@ -159,7 +159,7 @@ let requestEmailChange = async function(req, authToken, currentPassword, email) 
 };
 
 let resendVerification = async function(req, authToken) {
-    const authResult = await auth.utils.authMutation(req, authToken, false);
+    const authResult = await auth.utils.authQuery(req, authToken, false);
     const result = await accountEmailService.resendVerification({
         auth: authResult,
         ipHash: authResult.ip

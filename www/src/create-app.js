@@ -57,7 +57,8 @@ module.exports = function createApp(options = {}) {
     app.use(compression());
     if (options.logging !== false)
         app.use(logger("dev", {
-            skip: req => req.path === "/verify-email.html"
+            skip: req => req.path.replace(/\/+$/, "").toLowerCase() ===
+                "/verify-email.html"
         }));
     app.use(express.json());
     app.use(express.urlencoded({ extended: false }));

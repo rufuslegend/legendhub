@@ -1,6 +1,7 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const Module = require("node:module");
 const path = require("node:path");
 const test = require("node:test");
@@ -113,6 +114,58 @@ function mysqlWithMembers(members) {
                 return;
             }
             callback(null, {affectedRows: 1, insertId: 101});
+        }
+    };
+}
+
+function mysqlWithAuthToken() {
+    const token = "existingselector-existingvalidator";
+    const expires = new Date("2030-01-01T00:00:00.000Z");
+    const hashedValidator = crypto.createHash("sha256")
+        .update("existingvalidator")
+        .digest("hex");
+    const authTokenWrites = [];
+    let active = true;
+
+    return {
+        token,
+        expires,
+        authTokenWrites,
+        query(sql, values, callback) {
+            if (sql.includes("FROM AuthTokens AT")) {
+                callback(null, active ? [{
+                    Id: 91,
+                    MemberId: 73,
+                    Username: "Player",
+                    Email: "old@example.com",
+                    EmailVerifiedOn: expires,
+                    PendingEmail: null,
+                    StorageNamespace: "member-73",
+                    HashedValidator: hashedValidator,
+                    Expires: expires,
+                    StayLoggedIn: true,
+                    Banned: 0
+                }] : []);
+                return;
+            }
+            if (sql.startsWith("UPDATE Members SET LastLoginDate")) {
+                callback(null, {affectedRows: 1});
+                return;
+            }
+            if (sql.startsWith("INSERT INTO AuthTokens")) {
+                authTokenWrites.push("insert");
+                callback(null, {insertId: 92});
+                return;
+            }
+            if (sql.startsWith("DELETE FROM AuthTokens WHERE Id")) {
+                authTokenWrites.push("delete");
+                if (values[0] === 91)
+                    active = false;
+                callback(null, {affectedRows: 1});
+                return;
+            }
+
+            assert.fail(`Unexpected database query: ${sql}`);
         }
     };
 }
@@ -270,6 +323,102 @@ test("account email GraphQL fields authenticate and delegate structured status a
         operation: "resend",
         input: {auth: authResult, ipHash: "request-ip-hash"}
     }]);
+});
+
+// Catches preemptive authentication-token rotation making the browser's
+// current cookie unusable when either fallible email service rejects.
+test("account email mutation failures preserve the current authentication token", async function() {
+    const {ConflictError, TooManyRequestsError} = require("../src/routes/api/utils");
+    const cases = [{
+        name: "email conflict",
+        field: "requestEmailChange",
+        args: {currentPassword: "current-secret", email: "claimed@example.com"},
+        error: new ConflictError("That email address is unavailable.")
+    }, {
+        name: "email change service failure",
+        field: "requestEmailChange",
+        args: {currentPassword: "current-secret", email: "new@example.com"},
+        error: new Error("email change service failed")
+    }, {
+        name: "resend rate limit",
+        field: "resendVerification",
+        args: {},
+        error: new TooManyRequestsError("Try again later.")
+    }, {
+        name: "resend service failure",
+        field: "resendVerification",
+        args: {},
+        error: new Error("resend service failed")
+    }];
+
+    for (const scenario of cases) {
+        const mysql = mysqlWithAuthToken();
+        const accountEmailService = {
+            async requestEmailChange() {
+                throw scenario.error;
+            },
+            async resendVerification() {
+                throw scenario.error;
+            }
+        };
+        const auth = loadAuthApi(mysql, accountEmailService);
+        const account = loadAccountApi(mysql, auth, accountEmailService);
+
+        await assert.rejects(
+            account.mutationFields[scenario.field].resolve(null, {
+                authToken: mysql.token,
+                ...scenario.args
+            }, {headers: {"x-forwarded-for": "192.0.2.73"}}),
+            error => error === scenario.error,
+            scenario.name
+        );
+        assert.deepEqual(mysql.authTokenWrites, [], scenario.name);
+
+        const authenticated = await auth.utils.authToken(
+            mysql.token,
+            "request-ip-hash",
+            false,
+            false
+        );
+        assert.equal(authenticated.token, mysql.token, scenario.name);
+    }
+});
+
+test("successful account email mutations return the unchanged usable token", async function() {
+    const mysql = mysqlWithAuthToken();
+    const accountEmailService = {
+        async requestEmailChange() {
+            return {success: true, pendingEmail: "new@example.com"};
+        },
+        async resendVerification() {
+            return {accepted: true};
+        }
+    };
+    const auth = loadAuthApi(mysql, accountEmailService);
+    const account = loadAccountApi(mysql, auth, accountEmailService);
+    const request = {headers: {"x-forwarded-for": "192.0.2.73"}};
+
+    const change = await account.mutationFields.requestEmailChange.resolve(null, {
+        authToken: mysql.token,
+        currentPassword: "current-secret",
+        email: "new@example.com"
+    }, request);
+    const resend = await account.mutationFields.resendVerification.resolve(null, {
+        authToken: mysql.token
+    }, request);
+
+    for (const result of [change, resend]) {
+        assert.equal(result.tokenRenewal.token, mysql.token);
+        assert.equal(result.tokenRenewal.expires, mysql.expires);
+    }
+    assert.deepEqual(mysql.authTokenWrites, []);
+    const authenticated = await auth.utils.authToken(
+        mysql.token,
+        "request-ip-hash",
+        false,
+        false
+    );
+    assert.equal(authenticated.token, mysql.token);
 });
 
 test("notification mutation preserves every boolean field", async function() {
