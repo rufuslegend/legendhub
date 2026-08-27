@@ -282,3 +282,176 @@ test("email migration reaches its verified schema state and can recover on a sec
         await end(pool);
     }
 });
+
+test("Builder storage migration verifies its additive schema and is retry-safe", {
+    skip: !enabled
+}, async function() {
+    const database = process.env.MYSQL_MIGRATION_TEST_DATABASE;
+    if (!database || !database.endsWith("_migration_test"))
+        throw new Error("MYSQL_MIGRATION_TEST_DATABASE must name a dedicated *_migration_test database");
+
+    const pool = mysql.createPool({
+        connectionLimit: 1,
+        host: process.env.MYSQL_HOST,
+        port: process.env.MYSQL_PORT,
+        user: process.env.MYSQL_USER,
+        password: process.env.MYSQL_PASSWORD,
+        database,
+        multipleStatements: true
+    });
+    const migrations = createMigrationRunner({
+        pool,
+        lockTimeoutSeconds: 0,
+        migrationsDirectory: path.join(__dirname, "..", "src", "routes", "api", "migrations"),
+        log: {info: function() {}}
+    });
+
+    try {
+        await query(
+            pool,
+            `
+                DROP TABLE IF EXISTS BuilderImportReceipts;
+                DROP TABLE IF EXISTS AccountPreferences;
+                DROP TABLE IF EXISTS BuilderProfiles;
+                DROP TABLE IF EXISTS AccountActionTokens;
+                DROP TABLE IF EXISTS AccountActionAttempts;
+                DROP TABLE IF EXISTS Members;
+                DROP TABLE IF EXISTS MigrationRuns;
+                DROP TABLE IF EXISTS Migrations;
+                CREATE TABLE Members (Id INT NOT NULL AUTO_INCREMENT, PRIMARY KEY (Id)) ENGINE=InnoDB;
+                CREATE TABLE Migrations (
+                    Id INT NOT NULL,
+                    Name VARCHAR(255) NOT NULL,
+                    RunOn DATE NOT NULL,
+                    PRIMARY KEY (Id)
+                ) ENGINE=InnoDB;
+                INSERT INTO Migrations (Id, Name, RunOn) VALUES
+                    (1, 'legacy', CURDATE()), (2, 'legacy', CURDATE()),
+                    (3, 'legacy', CURDATE()), (4, 'legacy', CURDATE()),
+                    (5, 'legacy', CURDATE()), (6, 'legacy', CURDATE()),
+                    (7, 'legacy', CURDATE()), (8, 'legacy', CURDATE());
+                CREATE TABLE BuilderProfiles (
+                    Id BIGINT NOT NULL AUTO_INCREMENT,
+                    PublicId CHAR(36) CHARACTER SET ascii NOT NULL,
+                    MemberId INT NOT NULL,
+                    Name TEXT NOT NULL,
+                    ActiveNameHash BINARY(32) NULL,
+                    Payload MEDIUMTEXT NULL,
+                    PayloadVersion SMALLINT NULL,
+                    PayloadBytes INT NOT NULL DEFAULT 0,
+                    Revision BIGINT NOT NULL DEFAULT 1,
+                    CreatedOn DATETIME NOT NULL,
+                    UpdatedOn DATETIME NOT NULL,
+                    DeletedOn DATETIME NULL,
+                    PRIMARY KEY (Id),
+                    UNIQUE KEY UX_BuilderProfiles_PublicId (PublicId),
+                    UNIQUE KEY UX_BuilderProfiles_ActiveName (MemberId, ActiveNameHash),
+                    KEY IX_BuilderProfiles_MemberUpdated (MemberId, UpdatedOn),
+                    CONSTRAINT FK_BuilderProfiles_Members FOREIGN KEY (MemberId) REFERENCES Members (Id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            `
+        );
+
+        await migrations.up();
+
+        assert.deepEqual(
+            await query(
+                pool,
+                `
+                    SELECT TABLE_NAME
+                    FROM information_schema.tables
+                    WHERE TABLE_SCHEMA = DATABASE()
+                        AND TABLE_NAME IN (
+                            'BuilderProfiles', 'AccountPreferences', 'BuilderImportReceipts'
+                        )
+                    ORDER BY TABLE_NAME
+                `
+            ),
+            [
+                {TABLE_NAME: "AccountPreferences"},
+                {TABLE_NAME: "BuilderImportReceipts"},
+                {TABLE_NAME: "BuilderProfiles"}
+            ]
+        );
+        assert.deepEqual(
+            await query(
+                pool,
+                `
+                    SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, CHARACTER_SET_NAME
+                    FROM information_schema.columns
+                    WHERE TABLE_SCHEMA = DATABASE()
+                        AND (
+                            (TABLE_NAME = 'BuilderProfiles' AND COLUMN_NAME IN (
+                                'ActiveNameHash', 'Payload', 'PayloadBytes', 'DeletedOn'
+                            ))
+                            OR (TABLE_NAME = 'AccountPreferences' AND COLUMN_NAME = 'Payload')
+                            OR (TABLE_NAME = 'BuilderImportReceipts' AND COLUMN_NAME IN (
+                                'IdempotencyKey', 'ResultPayload'
+                            ))
+                        )
+                    ORDER BY TABLE_NAME, COLUMN_NAME
+                `
+            ),
+            [
+                {TABLE_NAME: "AccountPreferences", COLUMN_NAME: "Payload", COLUMN_TYPE: "json", IS_NULLABLE: "NO", CHARACTER_SET_NAME: "utf8mb4"},
+                {TABLE_NAME: "BuilderImportReceipts", COLUMN_NAME: "IdempotencyKey", COLUMN_TYPE: "char(64)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: "ascii"},
+                {TABLE_NAME: "BuilderImportReceipts", COLUMN_NAME: "ResultPayload", COLUMN_TYPE: "json", IS_NULLABLE: "NO", CHARACTER_SET_NAME: "utf8mb4"},
+                {TABLE_NAME: "BuilderProfiles", COLUMN_NAME: "ActiveNameHash", COLUMN_TYPE: "binary(32)", IS_NULLABLE: "YES", CHARACTER_SET_NAME: null},
+                {TABLE_NAME: "BuilderProfiles", COLUMN_NAME: "DeletedOn", COLUMN_TYPE: "datetime", IS_NULLABLE: "YES", CHARACTER_SET_NAME: null},
+                {TABLE_NAME: "BuilderProfiles", COLUMN_NAME: "Payload", COLUMN_TYPE: "mediumtext", IS_NULLABLE: "YES", CHARACTER_SET_NAME: "utf8mb4"},
+                {TABLE_NAME: "BuilderProfiles", COLUMN_NAME: "PayloadBytes", COLUMN_TYPE: "int", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null}
+            ]
+        );
+        assert.deepEqual(
+            await query(
+                pool,
+                `
+                    SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, COLUMN_NAME, SEQ_IN_INDEX
+                    FROM information_schema.statistics
+                    WHERE TABLE_SCHEMA = DATABASE()
+                        AND (
+                            (TABLE_NAME = 'BuilderProfiles' AND INDEX_NAME = 'UX_BuilderProfiles_ActiveName')
+                            OR (TABLE_NAME = 'BuilderImportReceipts' AND INDEX_NAME = 'UX_BuilderImportReceipts_Key')
+                        )
+                    ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX
+                `
+            ),
+            [
+                {TABLE_NAME: "BuilderImportReceipts", INDEX_NAME: "UX_BuilderImportReceipts_Key", NON_UNIQUE: 0, COLUMN_NAME: "MemberId", SEQ_IN_INDEX: 1},
+                {TABLE_NAME: "BuilderImportReceipts", INDEX_NAME: "UX_BuilderImportReceipts_Key", NON_UNIQUE: 0, COLUMN_NAME: "IdempotencyKey", SEQ_IN_INDEX: 2},
+                {TABLE_NAME: "BuilderProfiles", INDEX_NAME: "UX_BuilderProfiles_ActiveName", NON_UNIQUE: 0, COLUMN_NAME: "MemberId", SEQ_IN_INDEX: 1},
+                {TABLE_NAME: "BuilderProfiles", INDEX_NAME: "UX_BuilderProfiles_ActiveName", NON_UNIQUE: 0, COLUMN_NAME: "ActiveNameHash", SEQ_IN_INDEX: 2}
+            ]
+        );
+        assert.deepEqual(
+            await query(
+                pool,
+                `
+                    SELECT TABLE_NAME, CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
+                    FROM information_schema.key_column_usage
+                    WHERE TABLE_SCHEMA = DATABASE()
+                        AND TABLE_NAME IN (
+                            'BuilderProfiles', 'AccountPreferences', 'BuilderImportReceipts'
+                        )
+                        AND REFERENCED_TABLE_NAME = 'Members'
+                    ORDER BY TABLE_NAME
+                `
+            ),
+            [
+                {TABLE_NAME: "AccountPreferences", CONSTRAINT_NAME: "FK_AccountPreferences_Members", COLUMN_NAME: "MemberId", REFERENCED_TABLE_NAME: "Members", REFERENCED_COLUMN_NAME: "Id"},
+                {TABLE_NAME: "BuilderImportReceipts", CONSTRAINT_NAME: "FK_BuilderImportReceipts_Members", COLUMN_NAME: "MemberId", REFERENCED_TABLE_NAME: "Members", REFERENCED_COLUMN_NAME: "Id"},
+                {TABLE_NAME: "BuilderProfiles", CONSTRAINT_NAME: "FK_BuilderProfiles_Members", COLUMN_NAME: "MemberId", REFERENCED_TABLE_NAME: "Members", REFERENCED_COLUMN_NAME: "Id"}
+            ]
+        );
+
+        await query(
+            pool,
+            "DELETE FROM MigrationRuns WHERE MigrationId = 9; DELETE FROM Migrations WHERE Id = 9"
+        );
+        await migrations.up();
+        assert.deepEqual(await query(pool, "SELECT Id FROM Migrations WHERE Id = 9"), [{Id: 9}]);
+    }
+    finally {
+        await end(pool);
+    }
+});
