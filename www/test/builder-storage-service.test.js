@@ -20,6 +20,14 @@ const blanks35 = "_".repeat(35);
 const multiVariantHero = `6*Hero~Tank~${baseStats}000000___00000000000000000${blanks35}*` +
     `Hero~Caster~${baseStats}000000___00000000000000000${blanks35}*`;
 
+function deferred() {
+    let resolve;
+    const promise = new Promise(done => {
+        resolve = done;
+    });
+    return {promise, resolve};
+}
+
 function profile(overrides = {}) {
     return {
         id: "profile-id",
@@ -196,6 +204,8 @@ function createHarness(overrides = {}) {
     async function validateProfile(input) {
         validateCalls.push(input);
         trace.push(`validate:${typeof input?.name === "string" ? input.name : "invalid"}`);
+        if (overrides.beforeValidate)
+            await overrides.beforeValidate(input);
         const validationError = overrides.validationErrors?.[input?.name] ||
             overrides.validationError;
         if (validationError)
@@ -541,12 +551,107 @@ test("delete clears the payload and retains a revisioned tombstone", async funct
     assert.equal(state.calls.find(call => call[0] === "markDeleted")[3].expectedRevision, 4);
 });
 
+// Catches an atomic profile deletion leaving per-profile columns or selection
+// pointing at the newly created tombstone while device fields remain durable.
+test("delete removes its preference references and preserves syncable account fields", async function() {
+    const deleting = profile({id: "deleting"});
+    const survivor = profile({id: "survivor", name: "Survivor"});
+    const {service, state} = createHarness({
+        profiles: [deleting, survivor],
+        preferences: {
+            payload: {
+                version: 1,
+                theme: "dark",
+                itemsPerPage: 50,
+                itemColumns: ["Name"],
+                builderColumns: {
+                    deleting: ["Rent"],
+                    survivor: ["Slot"]
+                },
+                selectedProfileId: "deleting",
+                selectedVariant: "Tank",
+                cookieConsent: true,
+                timezone: 300
+            }
+        }
+    });
+
+    await service.deleteProfile(auth, {
+        id: "deleting",
+        revision: 4,
+        storageGeneration: 1
+    });
+
+    assert.deepEqual(state.preferences, {
+        documentVersion: 1,
+        payload: {
+            version: 1,
+            theme: "dark",
+            itemsPerPage: 50,
+            itemColumns: ["Name"],
+            builderColumns: {survivor: ["Slot"]},
+            selectedProfileId: null,
+            selectedVariant: null
+        },
+        revision: 3,
+        storageGeneration: 1,
+        updatedOn: NOW
+    });
+});
+
+// Catches a preference write failure committing a tombstone independently of
+// the required preference cleanup.
+test("delete rolls back its tombstone when preference cleanup fails", async function() {
+    const current = profile({id: "deleting"});
+    const originalPreferences = {
+        documentVersion: 1,
+        payload: {
+            builderColumns: {deleting: ["Slot"]},
+            selectedProfileId: "deleting",
+            selectedVariant: "Tank"
+        },
+        revision: 2,
+        storageGeneration: 1,
+        updatedOn: NOW
+    };
+    const {service, state, events} = createHarness({
+        profiles: [current],
+        preferences: originalPreferences,
+        writePreferencesError: new Error("preference write failed")
+    });
+
+    await assert.rejects(service.deleteProfile(auth, {
+        id: "deleting",
+        revision: 4,
+        storageGeneration: 1
+    }), error => error.message === "The request could not be completed.");
+
+    assert.deepEqual(state.profiles, [current]);
+    assert.deepEqual(state.preferences, originalPreferences);
+    assert.deepEqual(events, ["begin", "rollback", "release"]);
+});
+
 // Catches delete-all committing row deletion separately from its generation
 // bump, or failing to revision each durable tombstone.
 test("delete-all tombstones every active row and bumps generation in one transaction", async function() {
     const first = profile({id: "one", revision: 2, payloadBytes: 20});
     const second = profile({id: "two", revision: 7, payloadBytes: 30});
-    const {service, state, events} = createHarness({profiles: [first, second]});
+    const {service, state, events} = createHarness({
+        profiles: [first, second],
+        preferences: {
+            payload: {
+                version: 1,
+                theme: "glass-amber",
+                itemsPerPage: 100,
+                itemColumns: ["Name", "Rent"],
+                builderColumns: {one: ["Slot"], two: ["Rent"]},
+                selectedProfileId: "two",
+                selectedVariant: "Caster",
+                loginToken: "private",
+                timezone: 300
+            }
+        }
+    });
 
     const result = await service.deleteAll(auth, {storageGeneration: 1});
 
@@ -559,6 +664,16 @@ test("delete-all tombstones every active row and bumps generation in one transac
         "preferences", "list", "markDeleted", "markDeleted", "writePreferences"
     ]);
     assert.equal(state.preferences.storageGeneration, 2);
+    assert.equal(state.preferences.revision, 3);
+    assert.deepEqual(state.preferences.payload, {
+        version: 1,
+        theme: "glass-amber",
+        itemsPerPage: 100,
+        itemColumns: ["Name", "Rent"],
+        builderColumns: {},
+        selectedProfileId: null,
+        selectedVariant: null
+    });
     assert.deepEqual(events, ["begin", "commit", "release"]);
 });
 
@@ -618,10 +733,11 @@ test("batch import validates independently then classifies and commits one resul
     assert.equal(result.preferencesImported, true);
     assert.equal(state.insertCount, 2);
     assert.deepEqual(trace, [
-        "validate:Same", "validate:Hero", "validate:Fresh", "validate:Broken", "begin"
+        "begin", "validate:Same", "validate:Hero", "validate:Fresh", "validate:Broken",
+        "begin"
     ]);
     assert.deepEqual(state.calls.slice(0, 4).map(call => call[0]), [
-        "readImportReceipt", "preferences", "list", "usedBytes"
+        "readImportReceipt", "readImportReceipt", "preferences", "list"
     ]);
     const firstInsert = state.calls.findIndex(call => call[0] === "insert");
     assert.ok(state.calls.findIndex(call => call[0] === "usedBytes") < firstInsert);
@@ -659,7 +775,94 @@ test("repeating an import key returns the stored result without new rows", async
     assert.deepEqual(second, first);
     assert.equal(state.insertCount, first.copied.length + first.renamed.length);
     assert.equal(state.calls.filter(call => call[0] === "preferences").length, 1);
-    assert.equal(state.calls.filter(call => call[0] === "readImportReceipt").length, 2);
+    assert.equal(state.calls.filter(call => call[0] === "readImportReceipt").length, 3);
+});
+
+// Catches a completed key being coupled to a changed retry body. Authentication
+// and key syntax still apply, but no other request field may precede replay.
+test("receipt replay ignores malformed changed import body fields", async function() {
+    const {service, state, validateCalls} = createHarness();
+    const first = await service.importProfiles(auth, {
+        idempotencyKey: "body-independent-key",
+        storageGeneration: 1,
+        replacePreferences: false,
+        profiles: [{name: "Fresh", payload: "fresh"}]
+    });
+
+    const replay = await service.importProfiles(auth, {
+        idempotencyKey: "body-independent-key",
+        storageGeneration: "stale-and-malformed",
+        replacePreferences: "invalid",
+        preferencePayload: "{private malformed preference",
+        profiles: null
+    });
+
+    assert.deepEqual(replay, first);
+    assert.equal(validateCalls.length, 1);
+    assert.equal(state.insertCount, 1);
+    assert.equal(state.calls.filter(call => call[0] === "preferences").length, 1);
+});
+
+test("receipt replay still requires verified auth and a valid key shape", async function() {
+    const stored = {copied: ["Stored"]};
+    const {service, state, validateCalls} = createHarness({
+        receipts: [[`${auth.memberId}:stored-key`, stored]]
+    });
+
+    await assert.rejects(service.importProfiles({...auth, emailVerified: false}, {
+        idempotencyKey: "stored-key"
+    }), error => error.extensions.code === 403);
+    await assert.rejects(service.importProfiles(auth, {
+        idempotencyKey: " "
+    }), error => error.extensions.code === 400);
+
+    assert.deepEqual(state.calls, []);
+    assert.deepEqual(validateCalls, []);
+});
+
+// Catches a receipt-miss transaction being held through expensive profile
+// validation, or the write transaction failing to recheck after a race winner.
+test("import releases receipt preflight before validation and replays a concurrent winner", async function() {
+    const validationEntered = deferred();
+    const releaseValidation = deferred();
+    const {service, state, events} = createHarness({
+        beforeValidate: async input => {
+            if (input.name === "Slow") {
+                validationEntered.resolve();
+                await releaseValidation.promise;
+            }
+        }
+    });
+
+    const slowPromise = service.importProfiles(auth, {
+        idempotencyKey: "race-key",
+        storageGeneration: 1,
+        replacePreferences: false,
+        profiles: [{name: "Slow", payload: "slow"}]
+    });
+    await validationEntered.promise;
+    const eventsDuringValidation = events.slice();
+
+    let winner;
+    try {
+        winner = await service.importProfiles(auth, {
+            idempotencyKey: "race-key",
+            storageGeneration: 1,
+            replacePreferences: false,
+            profiles: [{name: "Winner", payload: "winner"}]
+        });
+    }
+    finally {
+        releaseValidation.resolve();
+    }
+    const raced = await slowPromise;
+
+    assert.deepEqual(eventsDuringValidation, ["begin", "commit", "release"]);
+    assert.deepEqual(raced, winner);
+    assert.deepEqual(winner.copied, ["Winner"]);
+    assert.equal(state.insertCount, 1);
+    assert.equal(state.profiles[0].name, "Winner");
+    assert.equal(state.calls.filter(call => call[0] === "readImportReceipt").length, 4);
 });
 
 // Catches a canonical duplicate of an earlier local row losing its source-ID
@@ -689,6 +892,76 @@ test("within-batch deduplication maps every local preference ID to one account r
     assert.equal(state.preferences.payload.selectedProfileId, "created-id");
 });
 
+// Catches destination renaming changing canonical source identity, which used
+// to create a second Local row and charge its bytes to quota again.
+test("renamed source duplicates share one destination row and preference mapping", async function() {
+    const renamedBytes = Buffer.byteLength("canonical-local|Hero Local", "utf8");
+    const existing = profile({
+        id: "account-hero",
+        name: "Hero",
+        payload: "canonical-server",
+        payloadBytes: 16
+    });
+    const {service, state} = createHarness({
+        profiles: [existing],
+        usedBytesResult: QUOTA_BYTES - renamedBytes
+    });
+
+    const result = await service.importProfiles(auth, {
+        idempotencyKey: "renamed-source-dedup-key",
+        storageGeneration: 1,
+        replacePreferences: true,
+        preferencePayload: {
+            builderColumns: {second: ["Slot"]},
+            selectedProfileId: "second",
+            selectedVariant: "Tank"
+        },
+        profiles: [
+            {id: "first", name: "Hero", payload: "local"},
+            {id: "second", name: "Hero", payload: "local"}
+        ]
+    });
+
+    assert.deepEqual(result.renamed, [{from: "Hero", to: "Hero Local"}]);
+    assert.deepEqual(result.deduplicated, ["Hero"]);
+    assert.equal(state.insertCount, 1);
+    assert.equal(state.profiles.filter(value => value.name.startsWith("Hero Local")).length, 1);
+    assert.deepEqual(state.preferences.payload.builderColumns, {"created-id": ["Slot"]});
+    assert.equal(state.preferences.payload.selectedProfileId, "created-id");
+    assert.equal(state.profiles[1].payloadBytes, renamedBytes);
+    assert.equal(result.state.usedBytes, QUOTA_BYTES);
+});
+
+// Catches imported local IDs falling through unchanged when they happen to be
+// valid UUIDs belonging to unrelated account profiles.
+test("import drops preference profile IDs without an explicit source mapping", async function() {
+    const unrelated = profile({
+        id: "unrelated-active",
+        name: "Account Only",
+        payload: "canonical-account-only"
+    });
+    const {service, state} = createHarness({profiles: [unrelated]});
+
+    await service.importProfiles(auth, {
+        idempotencyKey: "unmapped-preference-key",
+        storageGeneration: 1,
+        replacePreferences: true,
+        preferencePayload: {
+            builderColumns: {
+                "unrelated-active": ["Rent"],
+                local: ["Slot"]
+            },
+            selectedProfileId: "unrelated-active",
+            selectedVariant: "Tank"
+        },
+        profiles: [{id: "local", name: "Fresh", payload: "fresh"}]
+    });
+
+    assert.deepEqual(state.preferences.payload.builderColumns, {"created-id": ["Slot"]});
+    assert.equal(state.preferences.payload.selectedProfileId, null);
+    assert.equal(state.preferences.payload.selectedVariant, null);
+});
+
 // Catches per-row quota checks that allow an early insert before discovering
 // the complete accepted batch exceeds 10 MiB.
 test("batch import enforces quota across all accepted rows before inserting", async function() {
@@ -707,7 +980,9 @@ test("batch import enforces quota across all accepted rows before inserting", as
     assert.equal(state.insertAttempts, 0);
     assert.equal(state.profiles.length, 0);
     assert.equal(state.receipts.size, 0);
-    assert.deepEqual(events, ["begin", "rollback", "release"]);
+    assert.deepEqual(events, [
+        "begin", "commit", "release", "begin", "rollback", "release"
+    ]);
 });
 
 // Catches a mid-batch persistence failure leaving the first row or an import
@@ -727,7 +1002,9 @@ test("batch import rolls back every row and receipt after a later insert fails",
 
     assert.equal(state.profiles.length, 0);
     assert.equal(state.receipts.size, 0);
-    assert.deepEqual(events, ["begin", "rollback", "release"]);
+    assert.deepEqual(events, [
+        "begin", "commit", "release", "begin", "rollback", "release"
+    ]);
 });
 
 // Catches receipt persistence occurring outside the transaction or preference
@@ -749,11 +1026,13 @@ test("batch import rolls back rows and preferences when receipt storage fails", 
     assert.deepEqual(state.preferences.payload, {});
     assert.equal(state.preferences.revision, 2);
     assert.equal(state.receipts.size, 0);
-    assert.deepEqual(events, ["begin", "rollback", "release"]);
+    assert.deepEqual(events, [
+        "begin", "commit", "release", "begin", "rollback", "release"
+    ]);
 });
 
-// Catches generation verification happening before the receipt lock, after
-// writes, or before every profile has independently completed validation.
+// Catches generation verification happening before the write-time receipt
+// recheck, after writes, or before every profile has independently validated.
 test("batch import locks receipt then generation and rejects stale state before writes", async function() {
     const {service, state, trace} = createHarness({preferences: {storageGeneration: 2}});
 
@@ -767,9 +1046,9 @@ test("batch import locks receipt then generation and rejects stale state before 
         ]
     }), error => error.extensions.code === 409);
 
-    assert.deepEqual(trace, ["validate:One", "validate:Two", "begin"]);
+    assert.deepEqual(trace, ["begin", "validate:One", "validate:Two", "begin"]);
     assert.deepEqual(state.calls.map(call => call[0]), [
-        "readImportReceipt", "preferences"
+        "readImportReceipt", "readImportReceipt", "preferences"
     ]);
     assert.equal(state.insertAttempts, 0);
 });

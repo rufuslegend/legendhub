@@ -158,13 +158,15 @@ function canonicalProfileKey(profile) {
 
 function remapImportedPreferences(preferences, idMap) {
     const builderColumns = {};
-    for (const [profileId, columns] of Object.entries(preferences.builderColumns))
-        builderColumns[idMap.get(profileId) || profileId] = columns;
+    for (const [profileId, columns] of Object.entries(preferences.builderColumns)) {
+        if (idMap.has(profileId))
+            builderColumns[idMap.get(profileId)] = columns;
+    }
     return {
         ...preferences,
         builderColumns,
         selectedProfileId: preferences.selectedProfileId
-            ? idMap.get(preferences.selectedProfileId) || preferences.selectedProfileId
+            ? idMap.get(preferences.selectedProfileId) || null
             : null
     };
 }
@@ -351,8 +353,10 @@ function createBuilderStorageService({
 
         return runStorageTransaction(pool, async function(connection) {
             const options = {executor: connection};
-            const preferences = await repository.readPreferencesForUpdate(memberId, options);
-            assertGeneration(preferences, expectedGeneration);
+            const currentPreferences = await repository.readPreferencesForUpdate(
+                memberId, options
+            );
+            assertGeneration(currentPreferences, expectedGeneration);
             const current = await repository.findByPublicIdForUpdate(
                 memberId, input.id, options
             );
@@ -376,6 +380,17 @@ function createBuilderStorageService({
                 updatedOn: deletedOn,
                 deletedOn
             };
+            const profiles = await repository.list(memberId, options);
+            const preferences = {
+                documentVersion: 1,
+                payload: validatePreferences(currentPreferences.payload, {
+                    activeProfileIds: profiles.map(profile => profile.id)
+                }),
+                revision: currentPreferences.revision + 1,
+                storageGeneration: currentPreferences.storageGeneration,
+                updatedOn: deletedOn
+            };
+            await repository.writePreferences(memberId, preferences, options);
             const usedBytes = await repository.usedBytes(memberId, options);
             return resultState({
                 status: "deleted",
@@ -425,6 +440,15 @@ function createBuilderStorageService({
         const memberId = requireVerifiedMember(auth);
         requireObject(input);
         const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
+        const replay = await runStorageTransaction(pool, async function(connection) {
+            const receipt = await repository.readImportReceipt(
+                memberId, idempotencyKey, {executor: connection}
+            );
+            return receipt ? receipt.result : null;
+        });
+        if (replay)
+            return replay;
+
         const expectedGeneration = requireGeneration(input);
         if (input.replacePreferences !== undefined &&
             typeof input.replacePreferences !== "boolean") {
@@ -472,9 +496,7 @@ function createBuilderStorageService({
                     rememberImportedId(
                         importedIds,
                         action.profile,
-                        action.accountProfile.id || destinationIds.get(
-                            canonicalProfileKey(action.profile)
-                        )
+                        destinationIds.get(canonicalProfileKey(action.profile))
                     );
                     continue;
                 }
@@ -494,7 +516,7 @@ function createBuilderStorageService({
                 );
                 rows.push(row);
                 rememberImportedId(importedIds, action.profile, row.id);
-                destinationIds.set(canonicalProfileKey(row), row.id);
+                destinationIds.set(canonicalProfileKey(action.profile), row.id);
             }
 
             const usedBytes = await repository.usedBytes(memberId, options);
@@ -567,7 +589,10 @@ function createBuilderStorageService({
                     throw new ConflictError("Account storage changed before deletion completed.");
             }
             const preferences = {
-                ...current,
+                documentVersion: 1,
+                payload: validatePreferences(current.payload, {
+                    activeProfileIds: []
+                }),
                 revision: current.revision + 1,
                 storageGeneration: current.storageGeneration + 1,
                 updatedOn: deletedOn

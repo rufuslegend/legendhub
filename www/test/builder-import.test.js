@@ -54,6 +54,23 @@ test("import classification reserves generated names with exact case", function(
     ]);
 });
 
+// Catches canonical source identity being lost when the first copy receives a
+// generated destination name after colliding with an account profile.
+test("import classification deduplicates a repeated source after renaming it Local", function() {
+    const actions = classifyImport({
+        localProfiles: [
+            profile("Hero", "canonical-local", "first"),
+            profile("Hero", "canonical-local", "second")
+        ],
+        accountProfiles: [profile("Hero", "canonical-server", "account-hero")]
+    });
+
+    assert.deepEqual(actions.map(action => [action.type, action.to]), [
+        ["rename", "Hero Local"],
+        ["deduplicate", undefined]
+    ]);
+});
+
 // Catches malformed classification input being silently treated as an empty
 // import and later producing a misleading completed receipt.
 test("import classification requires profile arrays", function() {
