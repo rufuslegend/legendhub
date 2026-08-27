@@ -3,6 +3,24 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
+test("account input errors expose the established GraphQL status codes", function() {
+    const {
+        BadRequestError,
+        ConflictError,
+        PayloadTooLargeError
+    } = require("../src/routes/api/utils");
+
+    for (const [ErrorType, code] of [
+        [BadRequestError, 400],
+        [ConflictError, 409],
+        [PayloadTooLargeError, 413]
+    ]) {
+        const error = new ErrorType("public message");
+        assert.equal(error.message, "public message");
+        assert.equal(error.extensions.code, code);
+    }
+});
+
 // Catches the server GraphQL proxy dropping route-provided variables from the POST body.
 test("postAsync forwards GraphQL variables with the existing query and IP boundary", async function(t) {
     const originalFetch = globalThis.fetch;
