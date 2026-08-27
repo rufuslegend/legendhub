@@ -141,8 +141,10 @@ test("password recovery GraphQL mutations delegate Boolean outcomes", async func
 
 function mysqlWithMembers(members) {
     const queries = [];
-    return {
+    const transactionEvents = [];
+    const database = {
         queries,
+        transactionEvents,
         query: function(sql, values, callback) {
             queries.push({sql, values});
             if (sql.includes("FROM Members") && sql.includes("NormalizedEmail") &&
@@ -166,6 +168,8 @@ function mysqlWithMembers(members) {
             callback(null, {affectedRows: 1, insertId: 101});
         }
     };
+    addTransactionSupport(database);
+    return database;
 }
 
 function mysqlWithAuthToken() {
@@ -177,10 +181,12 @@ function mysqlWithAuthToken() {
     const authTokenWrites = [];
     let active = true;
 
-    return {
+    const transactionEvents = [];
+    const database = {
         token,
         expires,
         authTokenWrites,
+        transactionEvents,
         query(sql, values, callback) {
             if (sql.includes("FROM AuthTokens AT")) {
                 callback(null, active ? [{
@@ -218,6 +224,161 @@ function mysqlWithAuthToken() {
             assert.fail(`Unexpected database query: ${sql}`);
         }
     };
+    addTransactionSupport(database);
+    return database;
+}
+
+function addTransactionSupport(database) {
+    database.getConnection = function(callback) {
+        callback(null, {
+            query: database.query.bind(database),
+            beginTransaction(done) {
+                database.transactionEvents.push("begin");
+                done(null);
+            },
+            commit(done) {
+                database.transactionEvents.push("commit");
+                done(null);
+            },
+            rollback(done) {
+                database.transactionEvents.push("rollback");
+                done(null);
+            },
+            release() {
+                database.transactionEvents.push("release");
+            }
+        });
+    };
+}
+
+function createAwaitedAuthDatabase({insertError, deferInsert = false, deferCommit = false} = {}) {
+    const passwords = require("../src/routes/api/php-password");
+    const validator = "existingvalidator";
+    const events = [];
+    let pendingInsert;
+    let pendingCommit;
+    let sourceActive = true;
+    let replacementActive = false;
+    let snapshot;
+
+    const member = {
+        Id: 73,
+        Username: "Player",
+        Email: "player@example.com",
+        NormalizedEmail: "player@example.com",
+        EmailVerifiedOn: new Date("2026-08-26T00:00:00.000Z"),
+        PendingEmail: null,
+        StorageNamespace: "member-73",
+        Password: passwords.hash("old-password"),
+        Banned: 0
+    };
+
+    function query(sql, values, callback) {
+        if (sql.includes("FROM Members") && sql.includes("WHERE Id = ?")) {
+            events.push(sql.includes("FOR UPDATE") ? "select-member-lock" : "select-member-id");
+            callback(null, values[0] === member.Id ? [{Id: member.Id}] : []);
+            return;
+        }
+        if (sql.includes("FROM Members") && sql.includes("Username = ?")) {
+            events.push(sql.includes("FOR UPDATE") ? "select-member-lock" : "select-member");
+            callback(null, [{...member}]);
+            return;
+        }
+        if (sql.includes("FROM AuthTokens AT")) {
+            events.push(sql.includes("FOR UPDATE") ? "select-token-lock" : "select-token");
+            callback(null, sourceActive ? [{
+                Id: 91,
+                MemberId: member.Id,
+                Username: member.Username,
+                Email: member.Email,
+                EmailVerifiedOn: member.EmailVerifiedOn,
+                PendingEmail: member.PendingEmail,
+                StorageNamespace: member.StorageNamespace,
+                HashedValidator: crypto.createHash("sha256").update(validator).digest("hex"),
+                Expires: new Date("2030-01-01T00:00:00.000Z"),
+                StayLoggedIn: true,
+                Banned: member.Banned
+            }] : []);
+            return;
+        }
+        if (sql.startsWith("UPDATE Members SET LastLoginDate")) {
+            events.push("update-last-login");
+            callback(null, {affectedRows: 1});
+            return;
+        }
+        if (sql.startsWith("INSERT INTO AuthTokens")) {
+            events.push("insert-session");
+            const finish = function() {
+                if (insertError) {
+                    callback(new Error(insertError));
+                    return;
+                }
+                replacementActive = true;
+                callback(null, {insertId: 92, affectedRows: 1});
+            };
+            if (deferInsert)
+                pendingInsert = finish;
+            else
+                finish();
+            return;
+        }
+        if (sql.startsWith("DELETE FROM AuthTokens WHERE Id")) {
+            events.push("delete-source-session");
+            if (values[0] === 91)
+                sourceActive = false;
+            callback(null, {affectedRows: 1});
+            return;
+        }
+        assert.fail(`Unexpected database query: ${sql}`);
+    }
+
+    const database = {
+        events,
+        query,
+        get sourceActive() { return sourceActive; },
+        get replacementActive() { return replacementActive; },
+        getConnection(callback) {
+            callback(null, {
+                query,
+                beginTransaction(done) {
+                    snapshot = {sourceActive, replacementActive};
+                    events.push("begin");
+                    done(null);
+                },
+                commit(done) {
+                    events.push("commit");
+                    if (deferCommit)
+                        pendingCommit = done;
+                    else
+                        done(null);
+                },
+                rollback(done) {
+                    events.push("rollback");
+                    sourceActive = snapshot.sourceActive;
+                    replacementActive = snapshot.replacementActive;
+                    done(null);
+                },
+                release() {
+                    events.push("release");
+                }
+            });
+        },
+        releaseInsert() {
+            if (pendingInsert) {
+                const finish = pendingInsert;
+                pendingInsert = undefined;
+                finish();
+            }
+        },
+        releaseCommit() {
+            if (pendingCommit) {
+                const finish = pendingCommit;
+                pendingCommit = undefined;
+                finish(null);
+            }
+        }
+    };
+    return {database, validator};
 }
 
 function getAccountRouteHandler(router) {
@@ -574,6 +735,137 @@ test("password mutation distinguishes invalid and successful passwords", async f
         success: true,
         tokenRenewal: {token: authResult.token, expires: authResult.expires}
     });
+});
+
+// Catches login resolving before the session insert and transaction commit,
+// which lets a reset delete current sessions before the late insert appears.
+test("login awaits locked transactional session issuance through commit", async function() {
+    const {database} = createAwaitedAuthDatabase({
+        deferInsert: true,
+        deferCommit: true
+    });
+    const auth = loadAuthApi(database, {register: async () => ({registered: true})});
+    let settled = false;
+    const login = auth.utils.authLogin(
+        "Player", "old-password", false, "ip-hash"
+    ).then(function(result) {
+        settled = true;
+        return result;
+    });
+
+    await new Promise(resolve => setImmediate(resolve));
+    const settledBeforeInsert = settled;
+    database.releaseInsert();
+    await new Promise(resolve => setImmediate(resolve));
+    const settledBeforeCommit = settled;
+    database.releaseCommit();
+    const result = await login;
+
+    assert.equal(settledBeforeInsert, false);
+    assert.equal(settledBeforeCommit, false);
+    assert.match(result.token, /^[0-9a-f]{12}-[0-9a-f]{48}$/);
+    assert.deepEqual(database.events, [
+        "begin",
+        "select-member-lock",
+        "update-last-login",
+        "insert-session",
+        "commit",
+        "release"
+    ]);
+});
+
+// Catches a failed login-token insert being ignored while a public success is
+// returned instead of rolling back behind the stable auth failure.
+test("login session insert failure rolls back and stays generic", async function() {
+    const privateDiagnostic = "private login session insert diagnostic";
+    const {database} = createAwaitedAuthDatabase({insertError: privateDiagnostic});
+    const auth = loadAuthApi(database, {register: async () => ({registered: true})});
+
+    await assert.rejects(
+        auth.utils.authLogin("Player", "old-password", false, "ip-hash"),
+        error => error.message === "Invalid username or password." &&
+            !error.message.includes(privateDiagnostic)
+    );
+    assert.equal(database.replacementActive, false);
+    assert.deepEqual(database.events, [
+        "begin",
+        "select-member-lock",
+        "update-last-login",
+        "insert-session",
+        "rollback",
+        "release"
+    ]);
+});
+
+// Catches renewal resolving before replacement insert/source deletion commit,
+// which permits a late replacement session to survive password reset.
+test("renewal awaits locked transactional replacement through commit", async function() {
+    const {database, validator} = createAwaitedAuthDatabase({
+        deferInsert: true,
+        deferCommit: true
+    });
+    const auth = loadAuthApi(database, {register: async () => ({registered: true})});
+    let settled = false;
+    const renewal = auth.utils.authToken(
+        `existingselector-${validator}`, "ip-hash", true, false
+    ).then(function(result) {
+        settled = true;
+        return result;
+    });
+
+    await new Promise(resolve => setImmediate(resolve));
+    const settledBeforeInsert = settled;
+    database.releaseInsert();
+    await new Promise(resolve => setImmediate(resolve));
+    const settledBeforeCommit = settled;
+    database.releaseCommit();
+    const result = await renewal;
+
+    assert.equal(settledBeforeInsert, false);
+    assert.equal(settledBeforeCommit, false);
+    assert.match(result.token, /^[0-9a-f]{12}-[0-9a-f]{48}$/);
+    assert.equal(database.sourceActive, false);
+    assert.equal(database.replacementActive, true);
+    assert.deepEqual(database.events, [
+        "begin",
+        "select-token",
+        "select-member-lock",
+        "select-token-lock",
+        "update-last-login",
+        "insert-session",
+        "delete-source-session",
+        "commit",
+        "release"
+    ]);
+});
+
+// Catches renewal deleting the source or returning replacement credentials
+// after a failed insert instead of rolling the transaction back generically.
+test("renewal insert failure rolls back and preserves its source session", async function() {
+    const privateDiagnostic = "private renewal insert diagnostic";
+    const {database, validator} = createAwaitedAuthDatabase({
+        insertError: privateDiagnostic
+    });
+    const auth = loadAuthApi(database, {register: async () => ({registered: true})});
+
+    await assert.rejects(
+        auth.utils.authToken(
+            `existingselector-${validator}`, "ip-hash", true, false),
+        error => error.message === "Invalid token" &&
+            !error.message.includes(privateDiagnostic)
+    );
+    assert.equal(database.sourceActive, true);
+    assert.equal(database.replacementActive, false);
+    assert.deepEqual(database.events, [
+        "begin",
+        "select-token",
+        "select-member-lock",
+        "select-token-lock",
+        "update-last-login",
+        "insert-session",
+        "rollback",
+        "release"
+    ]);
 });
 
 // Catches a single username query path, accepting unverified/pending email,

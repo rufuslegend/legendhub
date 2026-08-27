@@ -2,6 +2,7 @@
 
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
+const Module = require("node:module");
 const test = require("node:test");
 
 const {createPasswordRecoveryService} =
@@ -11,6 +12,23 @@ const passwords = require("../src/routes/api/php-password");
 const NOW = new Date("2026-08-26T12:00:00.000Z");
 const IP_HASH = "0123456789012345678901234567890123456789";
 const RAW_TOKEN = "070707070707-070707070707070707070707070707070707070707070707";
+const authApiPath = require.resolve("../src/routes/api/auth");
+
+function loadAuthApi(mysql) {
+    const originalLoad = Module._load;
+    Module._load = function(request, parent, isMain) {
+        if (request === "./mysql-connection" && parent?.filename === authApiPath)
+            return mysql;
+        return originalLoad.call(this, request, parent, isMain);
+    };
+    try {
+        delete require.cache[authApiPath];
+        return require(authApiPath);
+    }
+    finally {
+        Module._load = originalLoad;
+    }
+}
 
 function createRecoveryDatabase(options = {}) {
     const members = (options.members || [{
@@ -205,6 +223,8 @@ function createService(database, options = {}) {
                 async sendPasswordReset(message) {
                     database.events.push("send-password-reset");
                     sent.push({kind: "reset", ...message});
+                    if (options.passwordResetDelivery)
+                        return options.passwordResetDelivery(message);
                     if (options.mailFails)
                         throw new Error("SMTP failed for private@example.com");
                 },
@@ -228,6 +248,264 @@ function createService(database, options = {}) {
         }),
         sent,
         rateLimitInputs
+    };
+}
+
+function createConcurrentSecurityDatabase() {
+    const member = {
+        Id: 73,
+        Username: "Player",
+        Password: passwords.hash("old-password"),
+        Email: "Player@Example.com",
+        NormalizedEmail: "player@example.com",
+        EmailVerifiedOn: new Date("2026-08-20T12:00:00.000Z"),
+        PendingEmail: null,
+        StorageNamespace: "member-73",
+        Banned: 0
+    };
+    const actionToken = {
+        Id: 41,
+        MemberId: member.Id,
+        Purpose: "password-reset",
+        Selector: "070707070707",
+        HashedValidator: crypto.createHash("sha256")
+            .update(RAW_TOKEN.split("-")[1]).digest("hex"),
+        ExpiresOn: new Date("2026-08-26T13:00:00.000Z"),
+        ConsumedOn: null
+    };
+    let authTokens = [{
+        Id: 91,
+        MemberId: member.Id,
+        Selector: "existingselector",
+        HashedValidator: crypto.createHash("sha256")
+            .update("existingvalidator").digest("hex"),
+        Expires: new Date("2030-01-01T00:00:00.000Z"),
+        StayLoggedIn: true
+    }];
+    const events = [];
+    const memberWaiters = [];
+    const lateInserts = [];
+    let lockOwner;
+    let connectionId = 0;
+    let resetUpdateCallback;
+    let signalResetUpdate;
+    const resetUpdateReached = new Promise(resolve => { signalResetUpdate = resolve; });
+
+    function authRow(token) {
+        return {
+            Id: token.Id,
+            MemberId: member.Id,
+            Username: member.Username,
+            Email: member.Email,
+            EmailVerifiedOn: member.EmailVerifiedOn,
+            PendingEmail: member.PendingEmail,
+            StorageNamespace: member.StorageNamespace,
+            HashedValidator: token.HashedValidator,
+            Expires: token.Expires,
+            StayLoggedIn: token.StayLoggedIn,
+            Banned: member.Banned
+        };
+    }
+
+    function acquireMember(connection, operation) {
+        if (!lockOwner || lockOwner === connection) {
+            lockOwner = connection;
+            events.push(`member-lock-${connection.id}`);
+            operation();
+            return;
+        }
+        events.push(`member-wait-${connection.id}`);
+        memberWaiters.push({connection, operation});
+    }
+
+    function releaseMember(connection) {
+        if (lockOwner !== connection)
+            return;
+        lockOwner = undefined;
+        const next = memberWaiters.shift();
+        if (next) {
+            lockOwner = next.connection;
+            events.push(`member-lock-after-wait-${next.connection.id}`);
+            next.operation();
+        }
+    }
+
+    function executeQuery(connection, sql, values, callback) {
+        if (sql.includes("DELETE FROM AccountActionTokens")) {
+            callback(null, {affectedRows: 0});
+            return;
+        }
+        if (sql.includes("FROM AccountActionTokens") && sql.includes("JOIN Members")) {
+            acquireMember(connection, function() {
+                callback(null, actionToken.ConsumedOn ? [] : [{
+                    ...actionToken,
+                    Username: member.Username,
+                    Email: member.Email,
+                    EmailVerifiedOn: member.EmailVerifiedOn
+                }]);
+            });
+            return;
+        }
+        if (sql.includes("UPDATE Members SET Password")) {
+            connection.changes.password = values[0];
+            events.push("reset-paused-with-member-lock");
+            signalResetUpdate();
+            resetUpdateCallback = callback;
+            return;
+        }
+        if (sql.includes("DELETE FROM AuthTokens WHERE MemberId")) {
+            connection.changes.deleteAllSessions = true;
+            callback(null, {affectedRows: authTokens.length});
+            return;
+        }
+        if (sql.includes("UPDATE AccountActionTokens") && sql.includes("Id = ?")) {
+            connection.changes.consumeAction = true;
+            callback(null, {affectedRows: actionToken.ConsumedOn ? 0 : 1});
+            return;
+        }
+        if (sql.includes("FROM Members") && sql.includes("WHERE Id = ?")) {
+            const readMemberId = () => callback(null,
+                values[0] === member.Id && !member.Banned ? [{Id: member.Id}] : []);
+            if (sql.includes("FOR UPDATE"))
+                acquireMember(connection, readMemberId);
+            else
+                readMemberId();
+            return;
+        }
+        if (sql.includes("FROM Members") && sql.includes("Username = ?")) {
+            const readMember = () => callback(null, [{
+                Id: member.Id,
+                Password: member.Password,
+                Banned: member.Banned
+            }]);
+            if (sql.includes("FOR UPDATE"))
+                acquireMember(connection, readMember);
+            else
+                readMember();
+            return;
+        }
+        if (sql.includes("FROM AuthTokens AT")) {
+            const readToken = function() {
+                const token = authTokens.find(candidate =>
+                    candidate.Selector === values[0]);
+                callback(null, token ? [authRow(token)] : []);
+            };
+            if (sql.includes("FOR UPDATE")) {
+                const source = authTokens.find(candidate =>
+                    candidate.Selector === values[0]);
+                if (!source) {
+                    callback(null, []);
+                    return;
+                }
+                acquireMember(connection, readToken);
+            }
+            else {
+                readToken();
+            }
+            return;
+        }
+        if (sql.startsWith("UPDATE Members SET LastLoginDate")) {
+            callback(null, {affectedRows: 1});
+            return;
+        }
+        if (sql.startsWith("INSERT INTO AuthTokens")) {
+            const insert = function() {
+                const token = {
+                    Id: 92 + authTokens.length,
+                    MemberId: values[2],
+                    Selector: values[0],
+                    HashedValidator: values[1],
+                    StayLoggedIn: values[3],
+                    Expires: values[4]
+                };
+                if (connection)
+                    connection.changes.insertSessions.push(token);
+                else
+                    authTokens.push(token);
+                events.push(connection ? "transactional-session-insert" : "late-session-insert");
+                callback(null, {affectedRows: 1, insertId: token.Id});
+            };
+            if (connection)
+                insert();
+            else
+                lateInserts.push(insert);
+            return;
+        }
+        if (sql.startsWith("DELETE FROM AuthTokens WHERE Id")) {
+            if (connection)
+                connection.changes.deleteSessionIds.push(values[0]);
+            else
+                authTokens = authTokens.filter(token => token.Id !== values[0]);
+            callback(null, {affectedRows: 1});
+            return;
+        }
+        assert.fail(`Unexpected concurrent database query: ${sql}`);
+    }
+
+    const pool = {
+        query(sql, values, callback) {
+            executeQuery(null, sql, values, callback);
+        },
+        getConnection(callback) {
+            const connection = {
+                id: ++connectionId,
+                changes: {
+                    password: undefined,
+                    deleteAllSessions: false,
+                    insertSessions: [],
+                    deleteSessionIds: [],
+                    consumeAction: false
+                },
+                query(sql, values, done) {
+                    executeQuery(connection, sql, values, done);
+                },
+                beginTransaction(done) {
+                    events.push(`begin-${connection.id}`);
+                    done(null);
+                },
+                commit(done) {
+                    if (connection.changes.password)
+                        member.Password = connection.changes.password;
+                    if (connection.changes.deleteAllSessions)
+                        authTokens = authTokens.filter(token => token.MemberId !== member.Id);
+                    if (connection.changes.deleteSessionIds.length > 0) {
+                        authTokens = authTokens.filter(token =>
+                            !connection.changes.deleteSessionIds.includes(token.Id));
+                    }
+                    authTokens.push(...connection.changes.insertSessions);
+                    if (connection.changes.consumeAction)
+                        actionToken.ConsumedOn = NOW;
+                    events.push(`commit-${connection.id}`);
+                    releaseMember(connection);
+                    done(null);
+                },
+                rollback(done) {
+                    events.push(`rollback-${connection.id}`);
+                    releaseMember(connection);
+                    done(null);
+                },
+                release() {
+                    events.push(`release-${connection.id}`);
+                }
+            };
+            callback(null, connection);
+        }
+    };
+
+    return {
+        pool,
+        events,
+        resetUpdateReached,
+        releaseReset() {
+            const callback = resetUpdateCallback;
+            resetUpdateCallback = undefined;
+            callback(null, {affectedRows: 1});
+        },
+        releaseLateInserts() {
+            for (const insert of lateInserts.splice(0))
+                insert();
+        },
+        get authTokens() { return authTokens.map(token => ({...token})); }
     };
 }
 
@@ -368,6 +646,168 @@ test("valid recovery requests remain generic across throttling, database, and ma
         }), {accepted: true});
     }
     assert.equal(writes.length, 0);
+});
+
+// Catches eligible account latency waiting on SMTP while a missing account can
+// return immediately, which makes response timing an account-existence oracle.
+test("eligible and missing recovery requests resolve without awaiting SMTP", async function() {
+    let releaseDelivery;
+    const delivery = new Promise(resolve => { releaseDelivery = resolve; });
+    const eligibleDatabase = createRecoveryDatabase();
+    const missingDatabase = createRecoveryDatabase({members: []});
+    const eligible = createService(eligibleDatabase, {
+        passwordResetDelivery: function() { return delivery; }
+    });
+    const missing = createService(missingDatabase);
+    let eligibleSettled = false;
+    let missingSettled = false;
+
+    const eligibleRequest = eligible.service.requestRecovery({
+        identity: "player@example.com",
+        ipHash: "eligible-ip"
+    }).then(function(result) {
+        eligibleSettled = true;
+        return result;
+    });
+    const missingRequest = missing.service.requestRecovery({
+        identity: "missing@example.com",
+        ipHash: "missing-ip"
+    }).then(function(result) {
+        missingSettled = true;
+        return result;
+    });
+
+    await new Promise(resolve => setImmediate(resolve));
+    const stateBeforeDelivery = {eligibleSettled, missingSettled};
+    releaseDelivery();
+    const [eligibleResult, missingResult] = await Promise.all([
+        eligibleRequest,
+        missingRequest
+    ]);
+
+    assert.deepEqual(stateBeforeDelivery, {
+        eligibleSettled: true,
+        missingSettled: true
+    });
+    assert.deepEqual(eligibleResult, {accepted: true});
+    assert.deepEqual(missingResult, {accepted: true});
+    assert.equal(eligible.sent.length, 1);
+    assert.equal(missing.sent.length, 0);
+});
+
+// Catches a detached SMTP rejection becoming an unhandled rejection or a
+// secret-bearing console write after the generic request already returned.
+test("background recovery delivery handles rejection without process output", async function(t) {
+    let rejectDelivery;
+    const delivery = new Promise((_resolve, reject) => { rejectDelivery = reject; });
+    const database = createRecoveryDatabase();
+    const {service, sent} = createService(database, {
+        passwordResetDelivery: function() { return delivery; }
+    });
+    const writes = [];
+    const unhandled = [];
+    const onUnhandled = reason => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    t.after(() => process.removeListener("unhandledRejection", onUnhandled));
+    for (const method of ["log", "warn", "error"])
+        t.mock.method(console, method, (...values) => writes.push(values));
+    let settled = false;
+
+    const request = service.requestRecovery({
+        identity: "player@example.com",
+        ipHash: IP_HASH
+    }).then(function(result) {
+        settled = true;
+        return result;
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    const settledBeforeRejection = settled;
+    rejectDelivery(new Error("SMTP smtp-password private@example.com"));
+    const result = await request;
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(settledBeforeRejection, true);
+    assert.deepEqual(result, {accepted: true});
+    assert.equal(sent.length, 1);
+    assert.deepEqual(unhandled, []);
+    assert.deepEqual(writes, []);
+});
+
+function concurrentRecoveryService(database) {
+    return createPasswordRecoveryService({
+        pool: database.pool,
+        mailer: {
+            async sendPasswordReset() {},
+            async sendPasswordChanged() {}
+        },
+        rateLimiter: {async recordAndCheck() {}},
+        clock: () => NOW,
+        randomBytes: size => Buffer.alloc(size, 7)
+    });
+}
+
+// Catches an old-password login reading before reset commits and inserting a
+// new session after reset's member-wide deletion.
+test("reset member lock prevents concurrent old-password login from leaving a session", async function() {
+    const database = createConcurrentSecurityDatabase();
+    const recovery = concurrentRecoveryService(database);
+    const auth = loadAuthApi(database.pool);
+    const reset = recovery.resetPassword({
+        token: RAW_TOKEN,
+        newPassword: "replacement-password"
+    });
+    await database.resetUpdateReached;
+
+    const login = auth.utils.authLogin(
+        "Player", "old-password", false, "login-ip"
+    ).then(
+        result => ({status: "fulfilled", result}),
+        error => ({status: "rejected", error})
+    );
+    await new Promise(resolve => setImmediate(resolve));
+    database.releaseReset();
+    assert.deepEqual(await reset, {success: true});
+    database.releaseLateInserts();
+    const outcome = await login;
+
+    assert.equal(outcome.status, "rejected");
+    assert.equal(outcome.error.message, "Invalid username or password.");
+    assert.deepEqual(database.authTokens, []);
+    assert.equal(database.events.includes("member-wait-2"), true);
+    assert.equal(database.events.indexOf("commit-1") <
+        database.events.indexOf("member-lock-after-wait-2"), true);
+});
+
+// Catches renewal reading a source session before reset commits and inserting
+// its replacement after reset has already deleted all member sessions.
+test("reset member lock prevents concurrent renewal from leaving a replacement session", async function() {
+    const database = createConcurrentSecurityDatabase();
+    const recovery = concurrentRecoveryService(database);
+    const auth = loadAuthApi(database.pool);
+    const reset = recovery.resetPassword({
+        token: RAW_TOKEN,
+        newPassword: "replacement-password"
+    });
+    await database.resetUpdateReached;
+
+    const renewal = auth.utils.authToken(
+        "existingselector-existingvalidator", "renew-ip", true, false
+    ).then(
+        result => ({status: "fulfilled", result}),
+        error => ({status: "rejected", error})
+    );
+    await new Promise(resolve => setImmediate(resolve));
+    database.releaseReset();
+    assert.deepEqual(await reset, {success: true});
+    database.releaseLateInserts();
+    const outcome = await renewal;
+
+    assert.equal(outcome.status, "rejected");
+    assert.equal(outcome.error.message, "Invalid token");
+    assert.deepEqual(database.authTokens, []);
+    assert.equal(database.events.includes("member-wait-2"), true);
+    assert.equal(database.events.indexOf("commit-1") <
+        database.events.indexOf("member-lock-after-wait-2"), true);
 });
 
 // Catches a reset committing password/token state separately from session

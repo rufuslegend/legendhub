@@ -35,10 +35,18 @@ function loadRecoveryService(dependencies) {
 test("renewing an auth token does not write credentials to the console", async function(t) {
     const validator = "testvalidator";
     const statements = [];
-    const auth = loadAuthApi({
+    const mysql = {
         query: function(sql, values, callback) {
             statements.push(sql);
-            if (sql.startsWith("SELECT AT.Id")) {
+            if (sql.includes("SELECT AT.MemberId")) {
+                callback(null, [{MemberId: 73}]);
+                return;
+            }
+            if (sql.includes("SELECT Id FROM Members")) {
+                callback(null, [{Id: 73}]);
+                return;
+            }
+            if (sql.includes("SELECT AT.Id")) {
                 callback(null, [{
                     Id: 41,
                     MemberId: 73,
@@ -55,8 +63,18 @@ test("renewing an auth token does not write credentials to the console", async f
                 return;
             }
             callback(null, {affectedRows: 1});
+        },
+        getConnection(callback) {
+            callback(null, {
+                query: this.query.bind(this),
+                beginTransaction(done) { done(null); },
+                commit(done) { done(null); },
+                rollback(done) { done(null); },
+                release() {}
+            });
         }
-    });
+    };
+    const auth = loadAuthApi(mysql);
     let consoleWrites = 0;
     t.mock.method(console, "log", function() {
         consoleWrites += 1;

@@ -7,6 +7,7 @@ let apiUtils = require("./utils");
 let {createAccountEmailService} = require("./account-email-service");
 let {createPasswordRecoveryService} = require("./password-recovery-service");
 let {createAccountRateLimiter} = require("./account-rate-limit");
+let {query, withTransaction} = require("./database");
 let {createMailer, readMailConfig} = require("../../mail");
 
 let accountEmailService = createAccountEmailService({
@@ -40,11 +41,14 @@ let getIPFromRequest = function(request) {
     return crypto.createHash("sha1").update(ip).digest("hex");
 }
 
-let authLogin = function(identity, password, stayLoggedIn, ip) {
+class InvalidLoginError extends Error {}
+class InvalidSessionTokenError extends Error {}
+
+let authLogin = async function(identity, password, stayLoggedIn, ip) {
     if (apiUtils.isIPBlocked(ip))
         return new gql.GraphQLError("Too many failed attempts. Try again later.");
     if (typeof password !== "string")
-        return Promise.reject(new gql.GraphQLError("Invalid username or password."));
+        throw new gql.GraphQLError("Invalid username or password.");
 
     const trimmedIdentity = typeof identity === "string" ? identity.trim() : "";
     const emailIdentity = trimmedIdentity.includes("@");
@@ -53,161 +57,183 @@ let authLogin = function(identity, password, stayLoggedIn, ip) {
             WHERE Username = ?
                 OR (NormalizedEmail = ? AND EmailVerifiedOn IS NOT NULL)
             ORDER BY CASE WHEN Username = ? THEN 0 ELSE 1 END
-            LIMIT 1`
-        : "SELECT Id, Password, Banned FROM Members WHERE Username = ?";
+            LIMIT 1
+            FOR UPDATE`
+        : `SELECT Id, Password, Banned FROM Members
+            WHERE Username = ?
+            FOR UPDATE`;
     const lookupValues = emailIdentity
         ? [trimmedIdentity, trimmedIdentity.toLowerCase(), trimmedIdentity]
         : [trimmedIdentity];
 
-    return new Promise(function(resolve, reject) {
-        mysql.query(lookup,
-            lookupValues,
-            function(error, results, fields) {
-                if (error) {
-                    reject(new gql.GraphQLError("Invalid username or password."));
-                    return;
-                }
+    try {
+        return await withTransaction(mysql, async function(connection) {
+            const results = await query(connection, lookup, lookupValues);
+            const member = results.find(result =>
+                !result.Banned && phpPass.verify(password, result.Password));
+            if (!member)
+                throw new InvalidLoginError();
 
-                if (results.length > 0) {
-                    for (let i = 0; i < results.length; ++i) { // TODO: log system error if more than 1 result.
-                        if (phpPass.verify(password, results[i].Password)) {
-                            if (results[i].Banned) {
-                                reject(new gql.GraphQLError("Invalid username or password."));
-                                return;
-                            }
+            await query(connection,
+                "UPDATE Members SET LastLoginDate = NOW(), LastLoginIP = ? WHERE Id = ?",
+                [ip, member.Id]);
 
-                            mysql.query(`UPDATE Members SET LastLoginDate = NOW(), LastLoginIP = ? WHERE Id = ?`,
-                                [ip, results[i].Id],
-                                function(error, updateResults, fields) {});
+            const token = crypto.randomBytes(24).toString("hex");
+            const selector = crypto.randomBytes(6).toString("hex");
+            const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+            const futureDate = new Date();
+            if (stayLoggedIn)
+                futureDate.setDate(futureDate.getDate() + 30);
+            else
+                futureDate.setDate(futureDate.getDate() + 1);
 
-                            let token = crypto.randomBytes(24).toString("hex");
-                            let selector = crypto.randomBytes(6).toString("hex");
-                            let tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+            await query(connection,
+                "INSERT INTO AuthTokens (Selector, HashedValidator, MemberId, StayLoggedIn, Expires) VALUES (?, ?, ?, ?, ?)",
+                [selector, tokenHash, member.Id, stayLoggedIn, futureDate]);
 
-                            let placeholderValues = [selector, tokenHash, results[i].Id, stayLoggedIn];
-                            let futureDate = new Date();
-                            if (stayLoggedIn)
-                                futureDate.setDate(futureDate.getDate() + 30);
-                            else
-                                futureDate.setDate(futureDate.getDate() + 1);
-                            placeholderValues.push(futureDate);
-
-                            mysql.query(`INSERT INTO AuthTokens (Selector, HashedValidator, MemberId, StayLoggedIn, Expires) VALUES (?, ?, ?, ?, ?)`,
-                                [selector, tokenHash, results[i].Id, stayLoggedIn, futureDate],
-                                function(error, insertResults, fields) {});
-
-                            resolve({token: `${selector}-${token}`, expires: stayLoggedIn ? futureDate : null});
-                            return;
-                        }
-                    }
-
-                    apiUtils.trackLogin(ip);
-                    reject(new gql.GraphQLError("Invalid username or password."));
-                }
-                else {
-                    apiUtils.trackLogin(ip);
-                    reject(new gql.GraphQLError("Invalid username or password."));
-                }
-            });
-    });
+            return {
+                token: `${selector}-${token}`,
+                expires: stayLoggedIn ? futureDate : null
+            };
+        });
+    }
+    catch (error) {
+        if (error instanceof InvalidLoginError)
+            apiUtils.trackLogin(ip);
+        throw new gql.GraphQLError("Invalid username or password.");
+    }
 };
 
-let authToken = function(token, ip, renew, shouldGetPermissions) {
+const SELECT_AUTH_TOKEN = `
+    SELECT AT.Id, M.Id AS MemberId, M.Username,
+        M.Email, M.EmailVerifiedOn, M.PendingEmail, M.StorageNamespace,
+        AT.HashedValidator, AT.Expires, AT.StayLoggedIn, M.Banned
+    FROM AuthTokens AT
+    JOIN Members M ON M.Id = AT.MemberId
+    WHERE M.Banned = 0 AND AT.Expires > NOW() AND
+        AT.Selector = ?`;
+const DISCOVER_AUTH_TOKEN_MEMBER = `
+    SELECT AT.MemberId
+    FROM AuthTokens AT
+    JOIN Members M ON M.Id = AT.MemberId
+    WHERE M.Banned = 0 AND AT.Expires > NOW() AND AT.Selector = ?
+    LIMIT 1`;
+const LOCK_AUTH_MEMBER = `
+    SELECT Id FROM Members WHERE Id = ? AND Banned = 0 FOR UPDATE`;
+
+let authToken = async function(token, ip, renew, shouldGetPermissions) {
     if (renew === undefined)
         renew = true;
     if (shouldGetPermissions === undefined)
         shouldGetPermissions = false;
 
-    return new Promise(function(resolve, reject) {
-        if (token == null || token == "undefined")
-            return reject(new gql.GraphQLError("Invalid token"));
-        let tokenInfo = token.split("-");
-        if (tokenInfo.length != 2)
-            return reject(new gql.GraphQLError("Invalid token"));
-        mysql.query(`SELECT AT.Id, M.Id AS MemberId, M.Username,
-                M.Email, M.EmailVerifiedOn, M.PendingEmail, M.StorageNamespace,
-                AT.HashedValidator, AT.Expires, AT.StayLoggedIn, M.Banned
-            FROM AuthTokens AT
-            JOIN Members M ON M.Id = AT.MemberId
-            WHERE M.Banned = 0 AND AT.Expires > NOW() AND
-            AT.Selector = ?`,
-            [tokenInfo[0]],
-            function(error, results, fields) {
-                if (error) {
-                    reject(new gql.GraphQLError("Invalid token"));
-                    return;
-                }
+    if (token == null || token == "undefined")
+        throw new gql.GraphQLError("Invalid token");
+    const tokenInfo = token.split("-");
+    if (tokenInfo.length != 2)
+        throw new gql.GraphQLError("Invalid token");
 
-                let tokenHash = crypto.createHash("sha256").update(tokenInfo[1]).digest("hex");
-                for (let i = 0; i < results.length; ++i) {
-                    if (tokenHash === results[i].HashedValidator) {
-                        let stayLoggedIn = results[i].StayLoggedIn;
-                        let expires = results[i].Expires;
+    let response;
+    try {
+        if (renew) {
+            response = await withTransaction(mysql, async function(connection) {
+                const discovered = await query(connection, DISCOVER_AUTH_TOKEN_MEMBER, [
+                    tokenInfo[0]
+                ]);
+                if (!discovered[0])
+                    throw new InvalidSessionTokenError();
 
-                        mysql.query(`UPDATE Members SET LastLoginDate = NOW(), LastLoginIP = ? WHERE Id = ?`,
-                                [ip, results[i].MemberId],
-                                function(error, updateResults, fields) {
-                                });
+                const members = await query(connection, LOCK_AUTH_MEMBER, [
+                    discovered[0].MemberId
+                ]);
+                if (!members[0])
+                    throw new InvalidSessionTokenError();
 
-                        let response = {
-                            memberId: results[i].MemberId,
-                            username: results[i].Username,
-                            email: results[i].Email,
-                            emailVerified: Boolean(results[i].EmailVerifiedOn),
-                            pendingEmail: results[i].PendingEmail,
-                            storageNamespace: results[i].StorageNamespace,
-                            ip: ip
-                        };
-
-                        if (renew) {
-                            let newToken = crypto.randomBytes(24).toString("hex");
-                            let newSelector = crypto.randomBytes(6).toString("hex");
-                            let newTokenHash = crypto.createHash("sha256").update(newToken).digest("hex");
-
-                            let placeholderValues = [newSelector, newTokenHash, results[i].MemberId, stayLoggedIn];
-                            let futureDate = expires;
-                            if (stayLoggedIn) {
-                                futureDate = new Date();
-                                futureDate.setDate(futureDate.getDate() + 30);
-                            }
-                            placeholderValues.push(futureDate);
-
-                            mysql.query(`INSERT INTO AuthTokens (Selector, HashedValidator, MemberId, StayLoggedIn, Expires) VALUES (?, ?, ?, ?, ?)`,
-                                placeholderValues,
-                                function(error, insertResults, fields) {
-                                    mysql.query(`DELETE FROM AuthTokens WHERE Id = ?`,
-                                        [results[i].Id],
-                                        function(error, deleteResults, fields) {});
-                                });
-
-                            response.token = `${newSelector}-${newToken}`;
-                            response.expires = stayLoggedIn ? futureDate : null;
-                        }
-                        else {
-                            response.token = token;
-                            response.expires = stayLoggedIn ? expires : null;
-                        }
-
-                        if (shouldGetPermissions) {
-                            getPermissions(response.memberId).then(
-                                function(permissionResponse) {
-                                    response.permissions = permissionResponse;
-                                    resolve(response);
-                                }
-                            ).catch(error => reject(error));
-                        }
-                        else {
-                            return resolve(response);
-                        }
-
-                        return;
-                    }
-                }
-
-                return reject(new gql.GraphQLError("Invalid token"));
+                return authenticateToken(connection, token, tokenInfo, ip, true);
             });
-    });
+        }
+        else {
+            response = await authenticateToken(mysql, token, tokenInfo, ip, false);
+        }
+    }
+    catch {
+        throw new gql.GraphQLError("Invalid token");
+    }
+
+    if (shouldGetPermissions)
+        response.permissions = await getPermissions(response.memberId);
+    return response;
 };
+
+async function authenticateToken(executor, token, tokenInfo, ip, renew) {
+    const results = await query(
+        executor,
+        renew ? `${SELECT_AUTH_TOKEN}\nFOR UPDATE` : SELECT_AUTH_TOKEN,
+        [tokenInfo[0]]
+    );
+    const tokenHash = crypto.createHash("sha256").update(tokenInfo[1]).digest("hex");
+    const storedToken = results.find(result =>
+        tokenHash === result.HashedValidator);
+    if (!storedToken)
+        throw new InvalidSessionTokenError();
+
+    if (renew) {
+        await query(executor,
+            "UPDATE Members SET LastLoginDate = NOW(), LastLoginIP = ? WHERE Id = ?",
+            [ip, storedToken.MemberId]);
+    }
+    else {
+        mysql.query(
+            "UPDATE Members SET LastLoginDate = NOW(), LastLoginIP = ? WHERE Id = ?",
+            [ip, storedToken.MemberId],
+            function() {}
+        );
+    }
+
+    const response = {
+        memberId: storedToken.MemberId,
+        username: storedToken.Username,
+        email: storedToken.Email,
+        emailVerified: Boolean(storedToken.EmailVerifiedOn),
+        pendingEmail: storedToken.PendingEmail,
+        storageNamespace: storedToken.StorageNamespace,
+        ip
+    };
+
+    if (!renew) {
+        response.token = token;
+        response.expires = storedToken.StayLoggedIn ? storedToken.Expires : null;
+        return response;
+    }
+
+    const newToken = crypto.randomBytes(24).toString("hex");
+    const newSelector = crypto.randomBytes(6).toString("hex");
+    const newTokenHash = crypto.createHash("sha256").update(newToken).digest("hex");
+    let futureDate = storedToken.Expires;
+    if (storedToken.StayLoggedIn) {
+        futureDate = new Date();
+        futureDate.setDate(futureDate.getDate() + 30);
+    }
+
+    await query(executor,
+        "INSERT INTO AuthTokens (Selector, HashedValidator, MemberId, StayLoggedIn, Expires) VALUES (?, ?, ?, ?, ?)",
+        [
+            newSelector,
+            newTokenHash,
+            storedToken.MemberId,
+            storedToken.StayLoggedIn,
+            futureDate
+        ]);
+    const deletion = await query(executor,
+        "DELETE FROM AuthTokens WHERE Id = ?",
+        [storedToken.Id]);
+    if (Number(deletion.affectedRows) !== 1)
+        throw new InvalidSessionTokenError();
+
+    response.token = `${newSelector}-${newToken}`;
+    response.expires = storedToken.StayLoggedIn ? futureDate : null;
+    return response;
+}
 
 let authMutation = function(req, token, shouldGetPermissions) {
     return authApi(req, token, shouldGetPermissions, true);

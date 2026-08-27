@@ -120,14 +120,8 @@ function createPasswordRecoveryService({
             return {...ACCEPTED_RESULT};
         }
 
-        if (delivery) {
-            try {
-                await mailer.sendPasswordReset(delivery);
-            }
-            catch {
-                // The response remains generic and the reset token is committed.
-            }
-        }
+        if (delivery)
+            schedulePasswordResetDelivery(mailer, delivery);
         return {...ACCEPTED_RESULT};
     }
 
@@ -230,6 +224,15 @@ async function cleanupActionTokens(connection, now) {
         retentionCutoff,
         retentionCutoff
     ]);
+}
+
+function schedulePasswordResetDelivery(mailer, delivery) {
+    void Promise.resolve()
+        .then(() => mailer.sendPasswordReset(delivery))
+        .catch(function() {
+            // Delivery is best effort after commit. The handled rejection stays
+            // out of request timing, public responses, and process diagnostics.
+        });
 }
 
 module.exports = {createPasswordRecoveryService};
