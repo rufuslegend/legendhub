@@ -38,12 +38,20 @@ const INSERT_RESET_TOKEN = `
         (MemberId, Purpose, Selector, HashedValidator,
          RequestIPHash, CreatedOn, ExpiresOn)
     VALUES (?, ?, ?, ?, ?, ?, ?)`;
+const DISCOVER_RESET_TOKEN_MEMBER = `
+    SELECT MemberId
+    FROM AccountActionTokens
+    WHERE Selector = ? AND Purpose = 'password-reset'
+    LIMIT 1`;
+const SELECT_MEMBER_FOR_RESET = `
+    SELECT Id, Username, Email, EmailVerifiedOn
+    FROM Members
+    WHERE Id = ?
+    FOR UPDATE`;
 const SELECT_RESET_TOKEN = `
-    SELECT T.Id, T.MemberId, T.HashedValidator, T.ExpiresOn, T.ConsumedOn,
-        M.Username, M.Email, M.EmailVerifiedOn
-    FROM AccountActionTokens T
-    JOIN Members M ON M.Id = T.MemberId
-    WHERE T.Selector = ? AND T.Purpose = 'password-reset'
+    SELECT Id, MemberId, HashedValidator, ExpiresOn, ConsumedOn
+    FROM AccountActionTokens
+    WHERE Selector = ? AND MemberId = ? AND Purpose = 'password-reset'
     FOR UPDATE`;
 const UPDATE_PASSWORD = "UPDATE Members SET Password = ?, PendingEmail = NULL, " +
     "PendingNormalizedEmail = NULL WHERE Id = ?";
@@ -138,10 +146,24 @@ function createPasswordRecoveryService({
         const now = clock();
         let outcome;
         try {
+            await cleanupActionTokens(pool, now);
             outcome = await withTransaction(pool, async function(connection) {
-                await cleanupActionTokens(connection, now);
-                const tokens = await query(connection, SELECT_RESET_TOKEN, [
+                const discovered = await query(connection, DISCOVER_RESET_TOKEN_MEMBER, [
                     parsedToken.selector
+                ]);
+                if (!discovered[0])
+                    return {invalid: true};
+
+                const members = await query(connection, SELECT_MEMBER_FOR_RESET, [
+                    discovered[0].MemberId
+                ]);
+                const member = members[0];
+                if (!member)
+                    return {invalid: true};
+
+                const tokens = await query(connection, SELECT_RESET_TOKEN, [
+                    parsedToken.selector,
+                    member.Id
                 ]);
                 const storedToken = tokens[0];
                 if (!isUsableResetToken(storedToken, parsedToken.validator, now))
@@ -149,22 +171,22 @@ function createPasswordRecoveryService({
 
                 const passwordUpdate = await query(connection, UPDATE_PASSWORD, [
                     passwordHash,
-                    storedToken.MemberId
+                    member.Id
                 ]);
                 if (Number(passwordUpdate.affectedRows) !== 1)
                     throw new Error("Member password update failed");
 
-                await query(connection, DELETE_MEMBER_SESSIONS, [storedToken.MemberId]);
+                await query(connection, DELETE_MEMBER_SESSIONS, [member.Id]);
                 const consumption = await query(connection, CONSUME_MEMBER_ACTION_TOKENS, [
                     now,
-                    storedToken.MemberId
+                    member.Id
                 ]);
                 if (Number(consumption.affectedRows) < 1)
                     throw new InvalidResetTokenError();
 
                 return {notice: {
-                    to: storedToken.Email,
-                    username: storedToken.Username
+                    to: member.Email,
+                    username: member.Username
                 }};
             });
         }

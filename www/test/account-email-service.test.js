@@ -380,7 +380,10 @@ test("a failed named-lock release destroys the pooled connection", async functio
     assert.equal(database.events.includes("send-verification"), true);
 });
 
-function createEmailFlowDatabase({legacyUsernameCollision = false} = {}) {
+function createEmailFlowDatabase({
+    legacyUsernameCollision = false,
+    trackVerificationLockOrder = false
+} = {}) {
     const member = {
         Id: 73,
         Username: "Player",
@@ -429,6 +432,7 @@ function createEmailFlowDatabase({legacyUsernameCollision = false} = {}) {
     const queries = [];
     let nextTokenId = 7;
     let snapshot;
+    let verificationLookupStarted = false;
 
     const connection = {
         beginTransaction(callback) {
@@ -528,15 +532,32 @@ function createEmailFlowDatabase({legacyUsernameCollision = false} = {}) {
                 callback(null, {affectedRows: 1, insertId: nextTokenId - 1});
                 return;
             }
-            if (sql.includes("FROM AccountActionTokens") && sql.includes("FOR UPDATE")) {
+            if (sql.includes("SELECT MemberId") &&
+                sql.includes("FROM AccountActionTokens") &&
+                !sql.includes("FOR UPDATE")) {
                 const token = tokens.find(candidate => candidate.Selector === values[0] &&
                     ["verify-email", "change-email"].includes(candidate.Purpose));
+                verificationLookupStarted = true;
+                if (trackVerificationLockOrder)
+                    events.push("discover-verification-token-member");
+                callback(null, token ? [{MemberId: token.MemberId}] : []);
+                return;
+            }
+            if (sql.includes("FROM AccountActionTokens") && sql.includes("FOR UPDATE")) {
+                const token = tokens.find(candidate => candidate.Selector === values[0] &&
+                    (values.length < 2 || candidate.MemberId === values[1]) &&
+                    ["verify-email", "change-email"].includes(candidate.Purpose));
+                verificationLookupStarted = true;
+                if (trackVerificationLockOrder)
+                    events.push("lock-verification-token");
                 callback(null, token ? [{...token}] : []);
                 return;
             }
             if (sql.includes("FROM Members") && sql.includes("WHERE Id = ?") &&
                 sql.includes("FOR UPDATE")) {
-                events.push("lock-member");
+                events.push(trackVerificationLockOrder && verificationLookupStarted
+                    ? "lock-verification-member"
+                    : "lock-member");
                 callback(null, values[0] === member.Id ? [{...member}] : []);
                 return;
             }
@@ -583,7 +604,10 @@ function createEmailFlowDatabase({legacyUsernameCollision = false} = {}) {
     };
 
     return {
-        pool: {getConnection(callback) { callback(null, connection); }},
+        pool: {
+            query(sql, values, callback) { connection.query(sql, values, callback); },
+            getConnection(callback) { callback(null, connection); }
+        },
         connection,
         member,
         tokens,
@@ -686,8 +710,8 @@ test("email change keeps the verified address active until token verification", 
     assert.equal(database.events.lastIndexOf("commit") <
         database.events.indexOf("send-email-change-notice"), true);
     assert.deepEqual(database.events.slice(verificationEventStart), [
-        "begin",
         "cleanup-action-tokens",
+        "begin",
         "lock-member",
         "promote-pending-email",
         "consume-member-action-tokens",
@@ -828,6 +852,50 @@ test("verification is purpose-bound, single-use, and cleans retained tokens atom
         new Date("2026-08-25T12:00:00.000Z"),
         new Date("2026-08-25T12:00:00.000Z")
     ]);
+});
+
+// Catches verification taking its purpose-token lock before the member lock
+// used by password changes, or carrying a global cleanup token lock into the
+// member-first credential transaction.
+test("verification releases retention cleanup then locks member before its purpose token", async function() {
+    const database = createEmailFlowDatabase({trackVerificationLockOrder: true});
+    database.member.PendingEmail = "new@example.com";
+    database.member.PendingNormalizedEmail = "new@example.com";
+    database.tokens[0].Selector = RAW_TOKEN.split("-")[0];
+    database.tokens[0].HashedValidator = crypto.createHash("sha256")
+        .update(RAW_TOKEN.split("-")[1]).digest("hex");
+    database.tokens[0].PendingEmail = "new@example.com";
+    database.tokens[0].PendingNormalizedEmail = "new@example.com";
+    const {service} = createEmailFlowService(database);
+
+    assert.deepEqual(await service.verifyEmailToken(RAW_TOKEN), {
+        success: true,
+        message: "Your email address has been verified."
+    });
+    assert.deepEqual(database.events.filter(event => [
+        "discover-verification-token-member",
+        "lock-verification-member",
+        "lock-verification-token"
+    ].includes(event)), [
+        "discover-verification-token-member",
+        "lock-verification-member",
+        "lock-verification-token"
+    ]);
+    assert.equal(database.events.indexOf("cleanup-action-tokens") <
+        database.events.indexOf("begin"), true,
+        "autocommit retention cleanup releases token locks before credential locking");
+
+    const discovery = database.queries.find(({sql}) =>
+        sql.includes("SELECT MemberId") && sql.includes("FROM AccountActionTokens"));
+    assert.doesNotMatch(discovery.sql, /FOR UPDATE/i);
+    const memberLock = database.queries.find(({sql}) =>
+        sql.includes("FROM Members") && sql.includes("WHERE Id = ?"));
+    assert.match(memberLock.sql, /FOR UPDATE/i);
+    const purposeTokenLock = database.queries.find(({sql}) =>
+        sql.includes("FROM AccountActionTokens") && sql.includes("FOR UPDATE"));
+    assert.match(purposeTokenLock.sql,
+        /Purpose\s+IN\s*\(\s*'verify-email'\s*,\s*'change-email'\s*\)/i);
+    assert.match(purposeTokenLock.sql, /MemberId\s*=\s*\?/i);
 });
 
 // Catches deriving storage eligibility from legacy account access rather than

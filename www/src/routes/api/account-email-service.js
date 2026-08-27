@@ -77,11 +77,17 @@ const CONSUME_MEMBER_ACTION_TOKENS = `
     UPDATE AccountActionTokens
     SET ConsumedOn = ?
     WHERE MemberId = ? AND ConsumedOn IS NULL`;
+const DISCOVER_VERIFICATION_TOKEN_MEMBER = `
+    SELECT MemberId
+    FROM AccountActionTokens
+    WHERE Selector = ?
+        AND Purpose IN ('verify-email', 'change-email')
+    LIMIT 1`;
 const SELECT_VERIFICATION_TOKEN = `
     SELECT Id, MemberId, Purpose, HashedValidator, PendingEmail,
         PendingNormalizedEmail, ExpiresOn, ConsumedOn
     FROM AccountActionTokens
-    WHERE Selector = ?
+    WHERE Selector = ? AND MemberId = ?
         AND Purpose IN ('verify-email', 'change-email')
     FOR UPDATE`;
 const PROMOTE_PENDING_EMAIL = `
@@ -413,20 +419,29 @@ function createAccountEmailService({
         const now = clock();
         let outcome;
         try {
+            await cleanupActionTokens(pool, now);
             outcome = await withTransaction(pool, async function(connection) {
-                await cleanupActionTokens(connection, now);
-                const tokens = await query(connection, SELECT_VERIFICATION_TOKEN, [
-                    parsed.selector
-                ]);
-                const storedToken = tokens[0];
-                if (!isUsableVerificationToken(storedToken, parsed.validator, now))
+                const discovered = await query(
+                    connection,
+                    DISCOVER_VERIFICATION_TOKEN_MEMBER,
+                    [parsed.selector]
+                );
+                if (!discovered[0])
                     return {result: {...INVALID_VERIFICATION_RESULT}};
 
                 const members = await query(connection, SELECT_MEMBER_FOR_VERIFICATION, [
-                    storedToken.MemberId
+                    discovered[0].MemberId
                 ]);
                 const member = members[0];
                 if (!member)
+                    return {result: {...INVALID_VERIFICATION_RESULT}};
+
+                const tokens = await query(connection, SELECT_VERIFICATION_TOKEN, [
+                    parsed.selector,
+                    member.Id
+                ]);
+                const storedToken = tokens[0];
+                if (!isUsableVerificationToken(storedToken, parsed.validator, now))
                     return {result: {...INVALID_VERIFICATION_RESULT}};
 
                 let notice = null;

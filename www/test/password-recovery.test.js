@@ -156,6 +156,16 @@ function createRecoveryDatabase(options = {}) {
                 callback(null, {affectedRows: 1});
                 return;
             }
+            if (sql.includes("SELECT MemberId") &&
+                sql.includes("FROM AccountActionTokens") &&
+                !sql.includes("FOR UPDATE")) {
+                const token = actionTokens.find(candidate =>
+                    candidate.Selector === values[0] &&
+                    candidate.Purpose === "password-reset");
+                events.push("discover-reset-token-member");
+                callback(null, token ? [{MemberId: token.MemberId}] : []);
+                return;
+            }
             if (sql.includes("FROM AccountActionTokens") &&
                 sql.includes("JOIN Members")) {
                 const token = actionTokens.find(candidate =>
@@ -163,6 +173,8 @@ function createRecoveryDatabase(options = {}) {
                     candidate.Purpose === "password-reset");
                 const member = token && members.find(candidate =>
                     candidate.Id === token.MemberId);
+                events.push("lock-reset-token");
+                events.push("lock-reset-member");
                 callback(null, token && member ? [{
                     ...token,
                     MemberId: member.Id,
@@ -170,6 +182,23 @@ function createRecoveryDatabase(options = {}) {
                     Email: member.Email,
                     EmailVerifiedOn: member.EmailVerifiedOn
                 }] : []);
+                return;
+            }
+            if (sql.includes("FROM Members") && sql.includes("WHERE Id = ?") &&
+                sql.includes("FOR UPDATE")) {
+                const member = members.find(candidate => candidate.Id === values[0]);
+                events.push("lock-reset-member");
+                callback(null, member ? [{...member}] : []);
+                return;
+            }
+            if (sql.includes("FROM AccountActionTokens") &&
+                sql.includes("FOR UPDATE")) {
+                const token = actionTokens.find(candidate =>
+                    candidate.Selector === values[0] &&
+                    candidate.MemberId === values[1] &&
+                    candidate.Purpose === "password-reset");
+                events.push("lock-reset-token");
+                callback(null, token ? [{...token}] : []);
                 return;
             }
             if (sql.includes("UPDATE Members SET Password")) {
@@ -222,7 +251,10 @@ function createRecoveryDatabase(options = {}) {
     };
 
     return {
-        pool: {getConnection(callback) { callback(null, connection); }},
+        pool: {
+            query(sql, values, callback) { connection.query(sql, values, callback); },
+            getConnection(callback) { callback(null, connection); }
+        },
         members,
         actionTokens,
         authTokens,
@@ -362,6 +394,21 @@ function createConcurrentSecurityDatabase() {
                     EmailVerifiedOn: member.EmailVerifiedOn
                 }]);
             });
+            return;
+        }
+        if (sql.includes("SELECT MemberId") &&
+            sql.includes("FROM AccountActionTokens") &&
+            !sql.includes("FOR UPDATE")) {
+            callback(null, actionToken.ConsumedOn
+                ? []
+                : [{MemberId: actionToken.MemberId}]);
+            return;
+        }
+        if (sql.includes("FROM AccountActionTokens") && sql.includes("FOR UPDATE")) {
+            callback(null,
+                !actionToken.ConsumedOn && values[1] === actionToken.MemberId
+                    ? [{...actionToken}]
+                    : []);
             return;
         }
         if (sql.includes("UPDATE Members SET Password")) {
@@ -1086,6 +1133,54 @@ test("reset consumes the token and invalidates all sessions atomically", async f
     }), /invalid or expired/i);
 });
 
+// Catches reset taking an action-token lock before the member lock used by an
+// ordinary password change, including through retention cleanup in the same
+// credential transaction. That inverse ordering can deadlock the two paths.
+test("reset releases retention cleanup then locks member before its purpose token", async function() {
+    const database = createRecoveryDatabase({actionTokens: [{
+        Id: 41,
+        MemberId: 73,
+        Purpose: "password-reset",
+        Selector: "070707070707",
+        HashedValidator: crypto.createHash("sha256")
+            .update(RAW_TOKEN.split("-")[1]).digest("hex"),
+        RequestIPHash: IP_HASH,
+        CreatedOn: NOW,
+        ExpiresOn: new Date("2026-08-26T13:00:00.000Z"),
+        ConsumedOn: null
+    }]});
+    const {service} = createService(database);
+
+    assert.deepEqual(await service.resetPassword({
+        token: RAW_TOKEN,
+        newPassword: "replacement-password"
+    }), {success: true});
+
+    assert.deepEqual(database.events.filter(event => [
+        "discover-reset-token-member",
+        "lock-reset-member",
+        "lock-reset-token"
+    ].includes(event)), [
+        "discover-reset-token-member",
+        "lock-reset-member",
+        "lock-reset-token"
+    ]);
+    assert.equal(database.events.indexOf("cleanup-action-tokens") <
+        database.events.indexOf("begin"), true,
+        "autocommit retention cleanup releases token locks before credential locking");
+
+    const discovery = database.queries.find(({sql}) =>
+        sql.includes("SELECT MemberId") && sql.includes("FROM AccountActionTokens"));
+    assert.doesNotMatch(discovery.sql, /FOR UPDATE/i);
+    const memberLock = database.queries.find(({sql}) =>
+        sql.includes("FROM Members") && sql.includes("WHERE Id = ?"));
+    assert.match(memberLock.sql, /FOR UPDATE/i);
+    const purposeTokenLock = database.queries.find(({sql}) =>
+        sql.includes("FROM AccountActionTokens") && sql.includes("FOR UPDATE"));
+    assert.match(purposeTokenLock.sql, /Purpose\s*=\s*'password-reset'/i);
+    assert.match(purposeTokenLock.sql, /MemberId\s*=\s*\?/i);
+});
+
 // Catches a failed session purge leaving a changed password or consumed token,
 // and catches private transaction diagnostics escaping the service boundary.
 test("reset rollback preserves password, sessions, token, and private diagnostics", async function(t) {
@@ -1132,7 +1227,7 @@ test("reset rollback preserves password, sessions, token, and private diagnostic
 });
 
 // Catches weak-password acceptance, malformed/tampered/expired token use, or
-// token cleanup happening outside the reset transaction/injected clock.
+// retention cleanup using a different clock or retaining locks into reset.
 test("reset enforces the existing password minimum and rejects unusable tokens generically", async function() {
     const database = createRecoveryDatabase({actionTokens: [{
         Id: 41,
@@ -1179,10 +1274,12 @@ test("reset enforces the existing password minimum and rejects unusable tokens g
         new Date("2026-08-25T12:00:00.000Z")
     ]);
     const selectorLookup = database.queries.find(({sql}) =>
-        sql.includes("JOIN Members"));
+        sql.includes("SELECT MemberId") && sql.includes("AccountActionTokens"));
     assert.deepEqual(selectorLookup.values, ["070707070707"]);
     assert.equal(JSON.stringify(database.queries).includes(RAW_TOKEN), false);
     assert.equal(database.actionTokens.some(token => token.Id === 39), false,
         "invalid consumption still commits the injected-clock cleanup");
     assert.equal(database.events.includes("commit"), true);
+    assert.equal(database.events.indexOf("cleanup-action-tokens") <
+        database.events.indexOf("begin"), true);
 });
