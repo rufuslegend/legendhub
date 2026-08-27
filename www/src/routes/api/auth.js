@@ -5,6 +5,7 @@ let phpPass = require("./php-password");
 let crypto = require("crypto");
 let apiUtils = require("./utils");
 let {createAccountEmailService} = require("./account-email-service");
+let {createPasswordRecoveryService} = require("./password-recovery-service");
 let {createAccountRateLimiter} = require("./account-rate-limit");
 let {createMailer, readMailConfig} = require("../../mail");
 
@@ -14,6 +15,21 @@ let accountEmailService = createAccountEmailService({
         sendVerification: function(message) {
             return createMailer({config: readMailConfig(process.env)})
                 .sendVerification(message);
+        }
+    },
+    rateLimiter: createAccountRateLimiter({pool: mysql})
+});
+
+let passwordRecoveryService = createPasswordRecoveryService({
+    pool: mysql,
+    mailer: {
+        sendPasswordReset: function(message) {
+            return createMailer({config: readMailConfig(process.env)})
+                .sendPasswordReset(message);
+        },
+        sendPasswordChanged: function(message) {
+            return createMailer({config: readMailConfig(process.env)})
+                .sendPasswordChanged(message);
         }
     },
     rateLimiter: createAccountRateLimiter({pool: mysql})
@@ -366,9 +382,37 @@ let mFields = {
         resolve: function(_, {username, email, password, recaptcha}, req) {
             return register(username, email, password, recaptcha, getIPFromRequest(req));
         }
+    },
+    requestPasswordRecovery: {
+        type: new gql.GraphQLNonNull(gql.GraphQLBoolean),
+        args: {
+            identity: {type: new gql.GraphQLNonNull(gql.GraphQLString)}
+        },
+        resolve: async function(_, {identity}, req) {
+            const result = await passwordRecoveryService.requestRecovery({
+                identity,
+                ipHash: getIPFromRequest(req)
+            });
+            return result.accepted;
+        }
+    },
+    resetPassword: {
+        type: new gql.GraphQLNonNull(gql.GraphQLBoolean),
+        args: {
+            token: {type: new gql.GraphQLNonNull(gql.GraphQLString)},
+            newPassword: {type: new gql.GraphQLNonNull(gql.GraphQLString)}
+        },
+        resolve: async function(_, {token, newPassword}) {
+            const result = await passwordRecoveryService.resetPassword({
+                token,
+                newPassword
+            });
+            return result.success;
+        }
     }
 };
 
 module.exports.mutationFields = mFields;
 module.exports.types = { tokenRenewalType, idMutationResponseType };
 module.exports.utils = { getIPFromRequest, authLogin, authToken, authQuery, authMutation, logout, getPermissions };
+module.exports.passwordRecoveryService = passwordRecoveryService;

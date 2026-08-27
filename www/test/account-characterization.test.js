@@ -64,7 +64,7 @@ function loadAccountApi(mysql, auth, accountEmailService = {}) {
     }
 }
 
-function loadAuthApi(mysql, accountEmailService) {
+function loadAuthApi(mysql, accountEmailService, passwordRecoveryService = {}) {
     const originalLoad = Module._load;
     Module._load = function(request, parent, isMain) {
         if (request === "./mysql-connection" && parent?.filename === authApiPath)
@@ -73,6 +73,13 @@ function loadAuthApi(mysql, accountEmailService) {
             return {
                 createAccountEmailService: function() {
                     return accountEmailService;
+                }
+            };
+        }
+        if (request === "./password-recovery-service" && parent?.filename === authApiPath) {
+            return {
+                createPasswordRecoveryService: function() {
+                    return passwordRecoveryService;
                 }
             };
         }
@@ -88,6 +95,49 @@ function loadAuthApi(mysql, accountEmailService) {
         Module._load = originalLoad;
     }
 }
+
+// Catches omission of the public non-null recovery mutations, non-Boolean
+// adapters, or failure to pass the request IP hash through the auth boundary.
+test("password recovery GraphQL mutations delegate Boolean outcomes", async function() {
+    const calls = [];
+    const recovery = {
+        async requestRecovery(input) {
+            calls.push(["request", input]);
+            return {accepted: true};
+        },
+        async resetPassword(input) {
+            calls.push(["reset", input]);
+            return {success: true};
+        }
+    };
+    const auth = loadAuthApi(mysqlWithMembers([]), {
+        register: async function() { return {registered: true}; }
+    }, recovery);
+    const requestField = auth.mutationFields.requestPasswordRecovery;
+    const resetField = auth.mutationFields.resetPassword;
+
+    assert.equal(String(requestField.type), "Boolean!");
+    assert.equal(String(requestField.args.identity.type), "String!");
+    assert.equal(String(resetField.type), "Boolean!");
+    assert.equal(String(resetField.args.token.type), "String!");
+    assert.equal(String(resetField.args.newPassword.type), "String!");
+
+    const request = {headers: {"x-forwarded-for": "192.0.2.44"}};
+    assert.equal(await requestField.resolve(null, {
+        identity: "player@example.com"
+    }, request), true);
+    assert.equal(await resetField.resolve(null, {
+        token: "selector-validator",
+        newPassword: "replacement-password"
+    }, request), true);
+    assert.deepEqual(calls, [["request", {
+        identity: "player@example.com",
+        ipHash: crypto.createHash("sha1").update("192.0.2.44").digest("hex")
+    }], ["reset", {
+        token: "selector-validator",
+        newPassword: "replacement-password"
+    }]]);
+});
 
 function mysqlWithMembers(members) {
     const queries = [];

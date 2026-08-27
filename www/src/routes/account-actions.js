@@ -7,6 +7,12 @@ module.exports = function createAccountActionsRouter(options = {}) {
     const router = express.Router();
     const accountEmailService = options.accountEmailService ||
         require("./api/account").accountEmailService;
+    const authApi = options.passwordRecoveryService && options.getIPFromRequest
+        ? null
+        : require("./api/auth");
+    const passwordRecoveryService = options.passwordRecoveryService ||
+        authApi.passwordRecoveryService;
+    const getIPFromRequest = options.getIPFromRequest || authApi.utils.getIPFromRequest;
 
     router.get("/verify-email.html", function(req, res) {
         const token = typeof req.query?.token === "string" ? req.query.token : "";
@@ -26,6 +32,73 @@ module.exports = function createAccountActionsRouter(options = {}) {
         }
         catch (error) {
             return next(error);
+        }
+    });
+
+    router.get("/forgot-password.html", function(req, res) {
+        return res.render("account-actions/forgot-password", {
+            title: "Forgot Password",
+            vm: {message: null}
+        });
+    });
+
+    router.post("/forgot-password.html", requireSameOrigin, async function(req, res, next) {
+        try {
+            await passwordRecoveryService.requestRecovery({
+                identity: req.body?.identity,
+                ipHash: getIPFromRequest(req)
+            });
+            return res.render("account-actions/forgot-password", {
+                title: "Forgot Password",
+                vm: {
+                    message: "If that account has a verified email address, password reset instructions have been sent."
+                }
+            });
+        }
+        catch (error) {
+            return next(error);
+        }
+    });
+
+    router.get("/reset-password.html", function(req, res) {
+        const token = typeof req.query?.token === "string" ? req.query.token : "";
+        return res.render("account-actions/reset-password", {
+            title: "Reset Password",
+            vm: {token, message: null, success: false}
+        });
+    });
+
+    router.post("/reset-password.html", requireSameOrigin, async function(req, res) {
+        const token = typeof req.body?.token === "string" ? req.body.token : "";
+        const newPassword = typeof req.body?.newPassword === "string"
+            ? req.body.newPassword
+            : "";
+        const confirmPassword = typeof req.body?.confirmPassword === "string"
+            ? req.body.confirmPassword
+            : "";
+        if (newPassword !== confirmPassword) {
+            return res.render("account-actions/reset-password", {
+                title: "Reset Password",
+                vm: {token, message: "Passwords must match.", success: false}
+            });
+        }
+
+        try {
+            await passwordRecoveryService.resetPassword({token, newPassword});
+            return res.render("account-actions/reset-password", {
+                title: "Password Changed",
+                vm: {
+                    token: "",
+                    success: true,
+                    message: "Your password has been changed. Sign in again to continue."
+                }
+            });
+        }
+        catch (error) {
+            return res.render("account-actions/reset-password", {
+                title: "Reset Password",
+                vm: {token, message: error.message, success: false}
+            });
         }
     });
 

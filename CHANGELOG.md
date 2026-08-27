@@ -5,6 +5,10 @@ with version 2.6.0.
 
 ## [3.1.0-beta] - 2026-08-26
 
+### Added
+
+- Added password recovery through a verified email address, with one-hour reset links that sign out every existing session after the password changes.
+
 ## [3.0.0] - 2026-08-26
 
 ### Changed

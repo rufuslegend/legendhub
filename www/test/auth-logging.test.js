@@ -25,6 +25,12 @@ function loadAuthApi(mysql) {
     }
 }
 
+function loadRecoveryService(dependencies) {
+    const recoveryPath = require.resolve("../src/routes/api/password-recovery-service");
+    delete require.cache[recoveryPath];
+    return require(recoveryPath).createPasswordRecoveryService(dependencies);
+}
+
 // Catches renewed session credentials being written to process diagnostics.
 test("renewing an auth token does not write credentials to the console", async function(t) {
     const validator = "testvalidator";
@@ -122,4 +128,54 @@ test("permission lookup failures expose only a stable generic error", async func
         error => error.message === "Unable to load permissions." &&
             !error.message.includes(privateDiagnostic)
     );
+});
+
+// Catches recovery SQL/SMTP diagnostics, raw action tokens, identities, or
+// passwords being written to process diagnostics or reflected publicly.
+test("password recovery failures expose generic errors and write no secrets", async function(t) {
+    const rawToken = "070707070707-" + "07".repeat(24);
+    const privateValues = [
+        rawToken,
+        "private@example.com",
+        "replacement-password",
+        "smtp-password",
+        "Builder payload",
+        "private SQL diagnostic"
+    ];
+    const writes = [];
+    for (const method of ["log", "warn", "error"])
+        t.mock.method(console, method, (...values) => writes.push(values));
+    const connection = {
+        beginTransaction(callback) { callback(null); },
+        commit(callback) { callback(null); },
+        rollback(callback) { callback(null); },
+        release() {},
+        query(sql, values, callback) {
+            if (sql.includes("DELETE FROM AccountActionTokens")) {
+                callback(null, {affectedRows: 0});
+                return;
+            }
+            callback(new Error(privateValues.join(" ")));
+        }
+    };
+    const service = loadRecoveryService({
+        pool: {getConnection(callback) { callback(null, connection); }},
+        mailer: {
+            async sendPasswordReset() { throw new Error(privateValues.join(" ")); },
+            async sendPasswordChanged() { throw new Error(privateValues.join(" ")); }
+        },
+        rateLimiter: {async recordAndCheck() {}},
+        clock: () => new Date("2026-08-26T12:00:00.000Z")
+    });
+
+    assert.deepEqual(await service.requestRecovery({
+        identity: "private@example.com",
+        ipHash: "request-ip-hash"
+    }), {accepted: true});
+    await assert.rejects(service.resetPassword({
+        token: rawToken,
+        newPassword: "replacement-password"
+    }), error => error.message === "Password reset failed." &&
+        privateValues.every(value => !error.message.includes(value)));
+    assert.equal(writes.length, 0);
 });

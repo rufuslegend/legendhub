@@ -57,8 +57,11 @@ module.exports = function createApp(options = {}) {
     app.use(compression());
     if (options.logging !== false)
         app.use(logger("dev", {
-            skip: req => req.path.replace(/\/+$/, "").toLowerCase() ===
-                "/verify-email.html"
+            skip: function(req) {
+                const requestPath = req.path.replace(/\/+$/, "").toLowerCase();
+                return requestPath === "/verify-email.html" ||
+                    requestPath === "/reset-password.html";
+            }
         }));
     app.use(express.json());
     app.use(express.urlencoded({ extended: false }));
@@ -87,7 +90,8 @@ module.exports = function createApp(options = {}) {
     app.use(authRouter);
 
     app.use("/", createAccountActionsRouter({
-        accountEmailService: options.accountEmailService
+        accountEmailService: options.accountEmailService,
+        passwordRecoveryService: options.passwordRecoveryService
     }));
 
     app.use("/", createFeedbackRouter({
