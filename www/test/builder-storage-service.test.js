@@ -37,13 +37,22 @@ function profile(overrides = {}) {
 
 function createHarness(overrides = {}) {
     const events = [];
+    const trace = [];
     const connection = {kind: "transaction-connection"};
+    let state;
+    let transactionSnapshot;
     const pool = {
         getConnection(callback) {
             callback(null, {
                 ...connection,
                 beginTransaction(done) {
                     events.push("begin");
+                    trace.push("begin");
+                    transactionSnapshot = {
+                        profiles: structuredClone(state.profiles),
+                        preferences: structuredClone(state.preferences),
+                        receipts: structuredClone(state.receipts)
+                    };
                     done(null);
                 },
                 commit(done) {
@@ -52,6 +61,9 @@ function createHarness(overrides = {}) {
                 },
                 rollback(done) {
                     events.push("rollback");
+                    state.profiles = transactionSnapshot.profiles;
+                    state.preferences = transactionSnapshot.preferences;
+                    state.receipts = transactionSnapshot.receipts;
                     done(null);
                 },
                 release() {
@@ -60,7 +72,7 @@ function createHarness(overrides = {}) {
             });
         }
     };
-    const state = {
+    state = {
         ownerMemberId: overrides.ownerMemberId || auth.memberId,
         profiles: (overrides.profiles || []).map(value => ({...value})),
         preferences: overrides.preferences === null ? null : {
@@ -72,6 +84,9 @@ function createHarness(overrides = {}) {
             ...overrides.preferences
         },
         usedBytesResult: overrides.usedBytesResult,
+        receipts: new Map(overrides.receipts || []),
+        insertAttempts: 0,
+        insertCount: 0,
         calls: []
     };
     let nextId = 0;
@@ -122,9 +137,11 @@ function createHarness(overrides = {}) {
         async insert(value, options) {
             requireConnection(options);
             state.calls.push(["insert", value]);
-            if (overrides.insertError)
-                throw overrides.insertError;
+            state.insertAttempts += 1;
+            if (overrides.insertError || state.insertAttempts === overrides.insertErrorAt)
+                throw overrides.insertError || new Error("insert failed");
             state.profiles.push({...value});
+            state.insertCount += 1;
             return ++nextId;
         },
         async update(memberId, id, value, options) {
@@ -157,12 +174,20 @@ function createHarness(overrides = {}) {
             };
             return 1;
         },
-        async readImportReceipt() {
-            state.calls.push(["readImportReceipt"]);
-            return null;
+        async readImportReceipt(memberId, idempotencyKey, options) {
+            requireConnection(options);
+            state.calls.push(["readImportReceipt", memberId, idempotencyKey]);
+            const result = state.receipts.get(`${memberId}:${idempotencyKey}`);
+            return result && {result: structuredClone(result), createdOn: NOW};
         },
-        async writeImportReceipt() {
-            state.calls.push(["writeImportReceipt"]);
+        async writeImportReceipt(memberId, idempotencyKey, result, createdOn, options) {
+            requireConnection(options);
+            state.calls.push([
+                "writeImportReceipt", memberId, idempotencyKey, result, createdOn
+            ]);
+            if (overrides.writeReceiptError)
+                throw overrides.writeReceiptError;
+            state.receipts.set(`${memberId}:${idempotencyKey}`, structuredClone(result));
             return 1;
         }
     };
@@ -170,13 +195,19 @@ function createHarness(overrides = {}) {
     const validateCalls = [];
     async function validateProfile(input) {
         validateCalls.push(input);
-        if (overrides.validationError)
-            throw overrides.validationError;
+        trace.push(`validate:${typeof input?.name === "string" ? input.name : "invalid"}`);
+        const validationError = overrides.validationErrors?.[input?.name] ||
+            overrides.validationError;
+        if (validationError)
+            throw validationError;
+        const profileValidated = overrides.validatedByName?.[input.name] || validated;
         return {
             name: input.name,
-            payload: validated.payload || `canonical-${input.payload}`,
-            payloadVersion: validated.payloadVersion || 6,
-            byteLength: validated.byteLength === undefined ? 70 : validated.byteLength,
+            payload: profileValidated.payload || `canonical-${input.payload}`,
+            payloadVersion: profileValidated.payloadVersion || 6,
+            byteLength: profileValidated.byteLength === undefined
+                ? 70
+                : profileValidated.byteLength,
             decoded: {name: input.name}
         };
     }
@@ -190,19 +221,24 @@ function createHarness(overrides = {}) {
             decoded: {...validatedProfile.decoded, name}
         };
     }
+    let uuidIndex = 0;
     const uuids = ["created-id", "conflict-id", "third-id"];
     const serviceOptions = {
         pool,
         repository,
         clock: () => NOW,
-        randomUUID: () => uuids.shift()
+        randomUUID() {
+            const value = uuids[uuidIndex] || `created-${uuidIndex + 1}`;
+            uuidIndex += 1;
+            return value;
+        }
     };
     if (!overrides.useRealProfileBoundary) {
         serviceOptions.validateProfile = validateProfile;
         serviceOptions.renameProfile = renameProfile;
     }
     const service = createBuilderStorageService(serviceOptions);
-    return {service, repository, state, events, validateCalls};
+    return {service, repository, state, events, trace, validateCalls};
 }
 
 // Catches any storage method querying by profile before enforcing verified
@@ -217,6 +253,7 @@ test("unverified member cannot read or mutate account storage", async function()
         () => service.updateProfile(unverified, {}),
         () => service.deleteProfile(unverified, {}),
         () => service.updatePreferences(unverified, {}),
+        () => service.importProfiles(unverified, {}),
         () => service.deleteAll(unverified, {})
     ];
 
@@ -523,4 +560,282 @@ test("delete-all tombstones every active row and bumps generation in one transac
     ]);
     assert.equal(state.preferences.storageGeneration, 2);
     assert.deepEqual(events, ["begin", "commit", "release"]);
+});
+
+// Catches batch validation occurring under locks, raw invalid payloads leaking
+// into results, canonical equality being missed, Local suffix collisions being
+// overwritten, or imported per-profile preferences retaining local/stale IDs.
+test("batch import validates independently then classifies and commits one result", async function() {
+    const privatePayload = "raw-private-broken-profile";
+    const existing = [
+        profile({id: "account-same", name: "Same", payload: "canonical-identical", payloadBytes: 19}),
+        profile({id: "account-hero", name: "Hero", payload: "canonical-server", payloadBytes: 16}),
+        profile({id: "account-local", name: "Hero Local", payload: "occupied", payloadBytes: 8})
+    ];
+    const {service, state, trace} = createHarness({
+        profiles: existing,
+        validationErrors: {Broken: new Error(`invalid ${privatePayload}`)}
+    });
+    const input = {
+        idempotencyKey: "batch-key",
+        storageGeneration: 1,
+        replacePreferences: true,
+        preferencePayload: {
+            version: 1,
+            theme: "dark",
+            itemsPerPage: 50,
+            itemColumns: ["Name"],
+            builderColumns: {
+                "local-same": ["Slot"],
+                "local-hero": ["Rent"],
+                "local-fresh": ["Name"],
+                stale: ["Name"]
+            },
+            selectedProfileId: "local-hero",
+            selectedVariant: "Tank",
+            cookieConsent: true,
+            loginToken: "secret",
+            timezone: 300
+        },
+        profiles: [
+            {id: "local-same", name: "Same", payload: "identical"},
+            {id: "local-hero", name: "Hero", payload: "client"},
+            {id: "local-fresh", name: "Fresh", payload: "fresh"},
+            {id: "local-broken", name: "Broken", payload: privatePayload}
+        ]
+    };
+
+    const result = await service.importProfiles(auth, input);
+
+    assert.deepEqual(result.copied, ["Fresh"]);
+    assert.deepEqual(result.renamed, [{from: "Hero", to: "Hero Local 2"}]);
+    assert.deepEqual(result.deduplicated, ["Same"]);
+    assert.deepEqual(result.rejected, [{
+        name: "Broken",
+        reason: "The Builder profile is invalid."
+    }]);
+    assert.equal(JSON.stringify(result.rejected).includes(privatePayload), false);
+    assert.equal(result.preferencesImported, true);
+    assert.equal(state.insertCount, 2);
+    assert.deepEqual(trace, [
+        "validate:Same", "validate:Hero", "validate:Fresh", "validate:Broken", "begin"
+    ]);
+    assert.deepEqual(state.calls.slice(0, 4).map(call => call[0]), [
+        "readImportReceipt", "preferences", "list", "usedBytes"
+    ]);
+    const firstInsert = state.calls.findIndex(call => call[0] === "insert");
+    assert.ok(state.calls.findIndex(call => call[0] === "usedBytes") < firstInsert);
+    assert.deepEqual(state.preferences.payload.builderColumns, {
+        "account-same": ["Slot"],
+        "created-id": ["Rent"],
+        "conflict-id": ["Name"]
+    });
+    assert.equal(state.preferences.payload.selectedProfileId, "created-id");
+    assert.equal(state.preferences.payload.selectedVariant, "Tank");
+    assert.equal(Object.hasOwn(state.preferences.payload, "cookieConsent"), false);
+    assert.equal(Object.hasOwn(state.preferences.payload, "loginToken"), false);
+    assert.equal(Object.hasOwn(state.preferences.payload, "timezone"), false);
+    assert.equal(state.calls.at(-1)[0], "writeImportReceipt");
+    assert.equal(result.state.storageGeneration, 1);
+    assert.equal(result.state.usedBytes,
+        existing.reduce((total, value) => total + value.payloadBytes, 0) +
+        state.profiles.slice(existing.length).reduce((total, value) => total + value.payloadBytes, 0));
+});
+
+// Catches a repeated request key being reclassified against the now-mutated
+// account and inserting another row instead of returning its durable receipt.
+test("repeating an import key returns the stored result without new rows", async function() {
+    const {service, state} = createHarness();
+    const input = {
+        idempotencyKey: "repeat-key",
+        storageGeneration: 1,
+        replacePreferences: false,
+        profiles: [{name: "Fresh", payload: "fresh"}]
+    };
+
+    const first = await service.importProfiles(auth, input);
+    const second = await service.importProfiles(auth, input);
+
+    assert.deepEqual(second, first);
+    assert.equal(state.insertCount, first.copied.length + first.renamed.length);
+    assert.equal(state.calls.filter(call => call[0] === "preferences").length, 1);
+    assert.equal(state.calls.filter(call => call[0] === "readImportReceipt").length, 2);
+});
+
+// Catches a canonical duplicate of an earlier local row losing its source-ID
+// mapping because the destination UUID did not exist during classification.
+test("within-batch deduplication maps every local preference ID to one account row", async function() {
+    const {service, state} = createHarness();
+
+    const result = await service.importProfiles(auth, {
+        idempotencyKey: "within-batch-dedup-key",
+        storageGeneration: 1,
+        replacePreferences: true,
+        preferencePayload: {
+            builderColumns: {second: ["Slot"]},
+            selectedProfileId: "second",
+            selectedVariant: "Tank"
+        },
+        profiles: [
+            {id: "first", name: "Same", payload: "same"},
+            {id: "second", name: "Same", payload: "same"}
+        ]
+    });
+
+    assert.deepEqual(result.copied, ["Same"]);
+    assert.deepEqual(result.deduplicated, ["Same"]);
+    assert.equal(state.insertCount, 1);
+    assert.deepEqual(state.preferences.payload.builderColumns, {"created-id": ["Slot"]});
+    assert.equal(state.preferences.payload.selectedProfileId, "created-id");
+});
+
+// Catches per-row quota checks that allow an early insert before discovering
+// the complete accepted batch exceeds 10 MiB.
+test("batch import enforces quota across all accepted rows before inserting", async function() {
+    const {service, state, events} = createHarness({usedBytesResult: QUOTA_BYTES - 100});
+
+    await assert.rejects(service.importProfiles(auth, {
+        idempotencyKey: "quota-key",
+        storageGeneration: 1,
+        replacePreferences: false,
+        profiles: [
+            {name: "One", payload: "one"},
+            {name: "Two", payload: "two"}
+        ]
+    }), error => error.extensions.code === 413);
+
+    assert.equal(state.insertAttempts, 0);
+    assert.equal(state.profiles.length, 0);
+    assert.equal(state.receipts.size, 0);
+    assert.deepEqual(events, ["begin", "rollback", "release"]);
+});
+
+// Catches a mid-batch persistence failure leaving the first row or an import
+// receipt durable even though the transaction reported failure.
+test("batch import rolls back every row and receipt after a later insert fails", async function() {
+    const {service, state, events} = createHarness({insertErrorAt: 2});
+
+    await assert.rejects(service.importProfiles(auth, {
+        idempotencyKey: "rollback-key",
+        storageGeneration: 1,
+        replacePreferences: false,
+        profiles: [
+            {name: "One", payload: "one"},
+            {name: "Two", payload: "two"}
+        ]
+    }), error => error.message === "The request could not be completed.");
+
+    assert.equal(state.profiles.length, 0);
+    assert.equal(state.receipts.size, 0);
+    assert.deepEqual(events, ["begin", "rollback", "release"]);
+});
+
+// Catches receipt persistence occurring outside the transaction or preference
+// replacement surviving when the completed receipt cannot be stored.
+test("batch import rolls back rows and preferences when receipt storage fails", async function() {
+    const {service, state, events} = createHarness({
+        writeReceiptError: new Error("receipt storage failed")
+    });
+
+    await assert.rejects(service.importProfiles(auth, {
+        idempotencyKey: "receipt-failure-key",
+        storageGeneration: 1,
+        replacePreferences: true,
+        preferencePayload: {theme: "dark"},
+        profiles: [{name: "One", payload: "one"}]
+    }), error => error.message === "The request could not be completed.");
+
+    assert.equal(state.profiles.length, 0);
+    assert.deepEqual(state.preferences.payload, {});
+    assert.equal(state.preferences.revision, 2);
+    assert.equal(state.receipts.size, 0);
+    assert.deepEqual(events, ["begin", "rollback", "release"]);
+});
+
+// Catches generation verification happening before the receipt lock, after
+// writes, or before every profile has independently completed validation.
+test("batch import locks receipt then generation and rejects stale state before writes", async function() {
+    const {service, state, trace} = createHarness({preferences: {storageGeneration: 2}});
+
+    await assert.rejects(service.importProfiles(auth, {
+        idempotencyKey: "stale-generation-key",
+        storageGeneration: 1,
+        replacePreferences: false,
+        profiles: [
+            {name: "One", payload: "one"},
+            {name: "Two", payload: "two"}
+        ]
+    }), error => error.extensions.code === 409);
+
+    assert.deepEqual(trace, ["validate:One", "validate:Two", "begin"]);
+    assert.deepEqual(state.calls.map(call => call[0]), [
+        "readImportReceipt", "preferences"
+    ]);
+    assert.equal(state.insertAttempts, 0);
+});
+
+// Catches preference writes retaining device fields or stale profile IDs, and
+// catches optimistic preference revisions preventing the later commit from
+// winning independently of profile revisions.
+test("preference updates are canonical and the last committed update wins", async function() {
+    const active = profile({id: "active-id"});
+    const {service, state} = createHarness({profiles: [active]});
+
+    await service.updatePreferences(auth, {
+        storageGeneration: 1,
+        payload: {
+            theme: "light",
+            builderColumns: {"active-id": ["Name"], deleted: ["Slot"]},
+            selectedProfileId: "deleted",
+            selectedVariant: "Tank",
+            cookieConsent: true
+        }
+    });
+    const result = await service.updatePreferences(auth, {
+        storageGeneration: 1,
+        payload: {
+            theme: "glass-amber",
+            builderColumns: {"active-id": ["Slot"]},
+            selectedProfileId: "active-id",
+            selectedVariant: "Caster"
+        }
+    });
+
+    assert.equal(result.preferences.revision, 4);
+    assert.deepEqual(state.preferences.payload, {
+        version: 1,
+        theme: "glass-amber",
+        itemsPerPage: 20,
+        itemColumns: [],
+        builderColumns: {"active-id": ["Slot"]},
+        selectedProfileId: "active-id",
+        selectedVariant: "Caster"
+    });
+});
+
+// Catches an import collision changing only the SQL row name while retaining
+// the original character name inside one or more canonical payload variants.
+test("batch import re-encodes every variant under its generated Local name", async function() {
+    const localPayload = multiVariantHero.replace(baseStats, `1U${baseStats.slice(2)}`);
+    const existingBytes = Buffer.byteLength(multiVariantHero, "utf8");
+    const {service, state} = createHarness({
+        useRealProfileBoundary: true,
+        profiles: [profile({payload: multiVariantHero, payloadBytes: existingBytes})]
+    });
+
+    const result = await service.importProfiles(auth, {
+        idempotencyKey: "real-rename-key",
+        storageGeneration: 1,
+        replacePreferences: false,
+        profiles: [{name: "Hero", payload: localPayload}]
+    });
+    const codec = await import("../shared/builder-codec.mjs");
+    const inserted = state.profiles.find(value => value.id === "created-id");
+
+    assert.deepEqual(result.renamed, [{from: "Hero", to: "Hero Local"}]);
+    assert.deepEqual(codec.decodeBuilderEntries(inserted.payload).map(entry => entry.name), [
+        "Hero Local", "Hero Local"
+    ]);
+    assert.equal(inserted.payloadBytes, Buffer.byteLength(inserted.payload, "utf8"));
+    await validateBuilderProfile({name: "Hero Local", payload: inserted.payload});
 });

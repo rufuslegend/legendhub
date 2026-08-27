@@ -8,6 +8,8 @@ const {
     renameValidatedBuilderProfile,
     validateBuilderProfile
 } = require("./builder-payload");
+const {classifyImport} = require("./builder-import");
+const {validatePreferences} = require("./builder-preferences");
 const {
     BadRequestError,
     ConflictError,
@@ -16,6 +18,7 @@ const {
 } = require("./utils");
 
 const QUOTA_BYTES = 10_485_760;
+const IDEMPOTENCY_KEY = /^[\x21-\x7e]{1,64}$/;
 
 function forbidden() {
     return new gql.GraphQLError("A verified account is required.", {
@@ -99,6 +102,75 @@ function nextConflictName(name, profiles) {
         suffix += 1;
     }
     return candidate;
+}
+
+function requireIdempotencyKey(value) {
+    if (typeof value !== "string" || !IDEMPOTENCY_KEY.test(value))
+        throw new BadRequestError("A valid import idempotency key is required.");
+    return value;
+}
+
+function rejectedProfileName(profile, index) {
+    return typeof profile?.name === "string" && profile.name
+        ? profile.name
+        : `Profile ${index + 1}`;
+}
+
+async function validateImportProfiles(profiles, validateProfile) {
+    if (!Array.isArray(profiles))
+        throw new BadRequestError("Builder import profiles must be an array.");
+    const accepted = [];
+    const rejected = [];
+    for (let index = 0; index < profiles.length; index += 1) {
+        const profile = profiles[index];
+        try {
+            if (!profile || typeof profile !== "object" || Array.isArray(profile))
+                throw new Error("Invalid profile input.");
+            const validated = await validateProfile({
+                name: profile.name,
+                payload: profile.payload
+            });
+            accepted.push({
+                ...validated,
+                sourceId: typeof profile.id === "string" && profile.id
+                    ? profile.id
+                    : null
+            });
+        }
+        catch {
+            rejected.push({
+                name: rejectedProfileName(profile, index),
+                reason: "The Builder profile is invalid."
+            });
+        }
+    }
+    return {accepted, rejected};
+}
+
+function rememberImportedId(idMap, profile, destinationId) {
+    if (profile.sourceId && destinationId)
+        idMap.set(profile.sourceId, destinationId);
+}
+
+function canonicalProfileKey(profile) {
+    return JSON.stringify([profile.name, profile.payload]);
+}
+
+function remapImportedPreferences(preferences, idMap) {
+    const builderColumns = {};
+    for (const [profileId, columns] of Object.entries(preferences.builderColumns))
+        builderColumns[idMap.get(profileId) || profileId] = columns;
+    return {
+        ...preferences,
+        builderColumns,
+        selectedProfileId: preferences.selectedProfileId
+            ? idMap.get(preferences.selectedProfileId) || preferences.selectedProfileId
+            : null
+    };
+}
+
+function jsonResult(value) {
+    return JSON.parse(JSON.stringify(value));
 }
 
 async function validateStorageProfile(validateProfile, input) {
@@ -320,22 +392,19 @@ function createBuilderStorageService({
         const expectedGeneration = requireGeneration(input);
         if (!Object.hasOwn(input, "payload"))
             throw new BadRequestError("A preference payload is required.");
+        const validated = validatePreferences(input.payload);
 
         return runStorageTransaction(pool, async function(connection) {
             const options = {executor: connection};
             const current = await repository.readPreferencesForUpdate(memberId, options);
             assertGeneration(current, expectedGeneration);
-            try {
-                JSON.stringify(input.payload);
-            }
-            catch {
-                throw new BadRequestError("The preference payload is invalid.");
-            }
+            const profiles = await repository.list(memberId, options);
+            const payload = validatePreferences(validated, {
+                activeProfileIds: profiles.map(profile => profile.id)
+            });
             const preferences = {
-                documentVersion: Number.isSafeInteger(input.documentVersion)
-                    ? input.documentVersion
-                    : 1,
-                payload: input.payload,
+                documentVersion: 1,
+                payload,
                 revision: current.revision + 1,
                 storageGeneration: current.storageGeneration,
                 updatedOn: clock()
@@ -349,6 +418,133 @@ function createBuilderStorageService({
                 usedBytes,
                 quotaBytes: QUOTA_BYTES
             };
+        });
+    }
+
+    async function importProfiles(auth, input) {
+        const memberId = requireVerifiedMember(auth);
+        requireObject(input);
+        const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
+        const expectedGeneration = requireGeneration(input);
+        if (input.replacePreferences !== undefined &&
+            typeof input.replacePreferences !== "boolean") {
+            throw new BadRequestError("A valid preference replacement choice is required.");
+        }
+        const replacePreferences = input.replacePreferences === true;
+        const validation = await validateImportProfiles(input.profiles, validateProfile);
+        let importedPreferences = null;
+        if (replacePreferences) {
+            if (!Object.hasOwn(input, "preferencePayload"))
+                throw new BadRequestError("An imported preference payload is required.");
+            importedPreferences = validatePreferences(input.preferencePayload);
+        }
+
+        return runStorageTransaction(pool, async function(connection) {
+            const options = {executor: connection};
+            const receipt = await repository.readImportReceipt(
+                memberId, idempotencyKey, options
+            );
+            if (receipt)
+                return receipt.result;
+
+            const currentPreferences = await repository.readPreferencesForUpdate(
+                memberId, options
+            );
+            assertGeneration(currentPreferences, expectedGeneration);
+            const accountProfiles = await repository.list(memberId, options);
+            const actions = classifyImport({
+                localProfiles: validation.accepted,
+                accountProfiles
+            });
+            const importedIds = new Map();
+            const destinationIds = new Map(accountProfiles.map(profile => [
+                canonicalProfileKey(profile), profile.id
+            ]));
+            const rows = [];
+            const copied = [];
+            const renamed = [];
+            const deduplicated = [];
+            const now = clock();
+
+            for (const action of actions) {
+                if (action.type === "deduplicate") {
+                    deduplicated.push(action.profile.name);
+                    rememberImportedId(
+                        importedIds,
+                        action.profile,
+                        action.accountProfile.id || destinationIds.get(
+                            canonicalProfileKey(action.profile)
+                        )
+                    );
+                    continue;
+                }
+                let validated = action.profile;
+                if (action.type === "rename") {
+                    validated = await validateStorageProfile(
+                        profile => renameProfile(profile, action.to),
+                        action.profile
+                    );
+                    renamed.push({from: action.profile.name, to: action.to});
+                }
+                else {
+                    copied.push(action.profile.name);
+                }
+                const row = savedProfile(
+                    memberId, randomUUID(), validated, 1, now, now
+                );
+                rows.push(row);
+                rememberImportedId(importedIds, action.profile, row.id);
+                destinationIds.set(canonicalProfileKey(row), row.id);
+            }
+
+            const usedBytes = await repository.usedBytes(memberId, options);
+            const importedBytes = rows.reduce(
+                (total, profile) => total + profile.payloadBytes,
+                0
+            );
+            const nextUsedBytes = usedBytes + importedBytes;
+            assertWithinQuota(nextUsedBytes);
+            for (const row of rows)
+                await repository.insert(row, options);
+
+            let preferences = currentPreferences;
+            if (replacePreferences) {
+                const activeProfileIds = [
+                    ...accountProfiles.map(profile => profile.id),
+                    ...rows.map(profile => profile.id)
+                ];
+                const payload = validatePreferences(
+                    remapImportedPreferences(importedPreferences, importedIds),
+                    {activeProfileIds}
+                );
+                preferences = {
+                    documentVersion: 1,
+                    payload,
+                    revision: currentPreferences.revision + 1,
+                    storageGeneration: currentPreferences.storageGeneration,
+                    updatedOn: now
+                };
+                await repository.writePreferences(memberId, preferences, options);
+            }
+
+            const result = jsonResult({
+                copied,
+                renamed,
+                deduplicated,
+                rejected: validation.rejected,
+                preferencesImported: replacePreferences,
+                state: {
+                    profiles: [...accountProfiles, ...rows].map(publicProfile),
+                    preferences,
+                    storageGeneration: preferences.storageGeneration,
+                    usedBytes: nextUsedBytes,
+                    quotaBytes: QUOTA_BYTES
+                }
+            });
+            await repository.writeImportReceipt(
+                memberId, idempotencyKey, result, now, options
+            );
+            return result;
         });
     }
 
@@ -393,6 +589,7 @@ function createBuilderStorageService({
         updateProfile,
         deleteProfile,
         updatePreferences,
+        importProfiles,
         deleteAll
     };
 }
