@@ -54,6 +54,21 @@ function blankItem(index) {
     return {id: 0, slot: SLOT_ORDER[index], locked: false};
 }
 
+function readLegacyNumber(value) {
+    if (value === undefined || value.trim() === "" ||
+        (value !== "NaN" && !Number.isFinite(Number(value))))
+        invalidList();
+    return value === "NaN" ? 0 : Number(value);
+}
+
+function readLegacyItem(value, index) {
+    const locked = value[0] === "!";
+    const id = locked ? value.slice(1) : value;
+    if (id.trim() === "" || !Number.isFinite(Number(id)))
+        invalidList();
+    return {id: Number(id), slot: SLOT_ORDER[index], locked};
+}
+
 function decodeLegacy(encoded) {
     const fields = encoded.split("_");
     const [name, variantName = "Original"] = fields.shift().split("!");
@@ -62,18 +77,15 @@ function decodeLegacy(encoded) {
     const baseStats = {};
     for (const stat of ATTRIBUTE_NAMES) {
         const value = fields.shift();
-        baseStats[stat] = value === "NaN" ? 0 : Number(value);
+        baseStats[stat] = readLegacyNumber(value);
     }
-    baseStats.longhouse = Number(fields.shift());
-    baseStats.amulet = Number(fields.shift());
-    baseStats.hazelnut = Number(fields.shift());
+    baseStats.longhouse = readLegacyNumber(fields.shift());
+    baseStats.amulet = readLegacyNumber(fields.shift());
+    baseStats.hazelnut = readLegacyNumber(fields.shift());
     baseStats.quest_hp = 0;
     baseStats.quest_mana = 0;
     baseStats.quest_move = 0;
-    const items = fields.slice(0, SLOT_ORDER.length).map(function(value, index) {
-        const locked = value[0] === "!";
-        return {id: Number(locked ? value.slice(1) : value), slot: SLOT_ORDER[index], locked};
-    });
+    const items = fields.slice(0, SLOT_ORDER.length).map(readLegacyItem);
     while (items.length < SLOT_ORDER.length)
         items.push(blankItem(items.length));
     return {
@@ -99,6 +111,21 @@ function takeName(encoded) {
     return [value, encoded.slice(index + 1)];
 }
 
+function takeBase62(encoded, length) {
+    const width = encoded[0] === "-" ? length + 1 : length;
+    const value = encoded.slice(0, width);
+    if (!(new RegExp(`^-?[0-9A-Za-z]{${length}}$`)).test(value))
+        invalidList();
+    return [toBase62(value), encoded.slice(width)];
+}
+
+function takeSelection(encoded) {
+    const value = encoded[0];
+    if (!/^[0-9A-Za-z_]$/.test(value))
+        invalidList();
+    return [value === "_" ? -1 : toBase62(value), encoded.slice(1)];
+}
+
 function decodeCompact(encoded, version) {
     let name;
     let variantName;
@@ -108,20 +135,18 @@ function decodeCompact(encoded, version) {
     const ksmStats = {};
 
     for (const stat of ATTRIBUTE_NAMES) {
-        const width = encoded[0] === "-" ? 3 : 2;
-        baseStats[stat] = toBase62(encoded.slice(0, width));
-        encoded = encoded.slice(width);
+        [baseStats[stat], encoded] = takeBase62(encoded, 2);
     }
     for (const stat of ATTRIBUTE_NAMES) {
-        const width = encoded[0] === "-" ? 2 : 1;
-        ksmStats[stat] = toBase62(encoded.slice(0, width));
-        encoded = encoded.slice(width);
+        [ksmStats[stat], encoded] = takeBase62(encoded, 1);
     }
 
-    baseStats.longhouse = encoded[0] === "_" ? -1 : toBase62(encoded[0]);
-    baseStats.amulet = encoded[1] === "_" ? -1 : toBase62(encoded[1]);
-    baseStats.hazelnut = version >= 3 ? (encoded[2] === "_" ? -1 : toBase62(encoded[2])) : 5;
-    encoded = encoded.slice(version >= 3 ? 3 : 2);
+    [baseStats.longhouse, encoded] = takeSelection(encoded);
+    [baseStats.amulet, encoded] = takeSelection(encoded);
+    if (version >= 3)
+        [baseStats.hazelnut, encoded] = takeSelection(encoded);
+    else
+        baseStats.hazelnut = 5;
     baseStats.quest_hp = 0;
     baseStats.quest_mana = 0;
     baseStats.quest_move = 0;
@@ -162,11 +187,13 @@ function decodeCompact(encoded, version) {
             locked = true;
             encoded = encoded.slice(1);
         }
+        if (!encoded)
+            invalidList();
         if (encoded[0] === "_") {
             items.push({...blankItem(index), locked});
             encoded = encoded.slice(1);
         } else if (encoded[0] === "-") {
-            if (version >= 5 && !/^-[A-Y]{5}/.test(encoded))
+            if (encoded.length < 6 || (version >= 5 && !/^-[A-Y]{5}/.test(encoded)))
                 invalidList();
             items.push({id: RUNE_CHARM_ID, slot: SLOT_ORDER[index], locked});
             const charmSlot = RUNE_CHARM_ITEM_INDEX[index];
@@ -174,7 +201,7 @@ function decodeCompact(encoded, version) {
                 runeCharms[charmSlot] = encoded.slice(1, 6);
             encoded = encoded.slice(6);
         } else {
-            if (version >= 5 && !/^[0-9A-Za-z]{3}/.test(encoded))
+            if (!/^[0-9A-Za-z]{3}/.test(encoded))
                 invalidList();
             items.push({id: toBase62(encoded.slice(0, 3)), slot: SLOT_ORDER[index], locked});
             encoded = encoded.slice(3);

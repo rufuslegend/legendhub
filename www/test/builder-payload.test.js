@@ -35,3 +35,47 @@ test("server validator retains all current-format variants for one character", a
     assert.deepEqual(result.decoded.variants.map(variant => variant.name), ["Tank", "Caster"]);
     assert.equal(result.payload, payload);
 });
+
+// Catches the server converting truncated or non-numeric legacy/compact fields into zeroes.
+test("server validator rejects missing and non-numeric required Builder fields", async function() {
+    const truncatedPayloads = [
+        "Hero",
+        "1*Hero",
+        "2*Hero~Original~",
+        "3*Hero~Original~",
+        "4*Hero~Original~",
+        "5*Hero~Original~",
+        "6*Hero~Original~"
+    ];
+
+    for (const payload of truncatedPayloads)
+        await assert.rejects(validateBuilderProfile({name: "Hero", payload}), /Invalid list/);
+    await assert.rejects(
+        validateBuilderProfile({
+            name: "Hero",
+            payload: legacyHero.replace("_30_30_30_30_30_30_", "_30_30_30_30_30_not-a-number_")
+        }),
+        /Invalid list/
+    );
+    await assert.rejects(
+        validateBuilderProfile({
+            name: "Hero",
+            payload: `2*Hero~Original~${baseStats.replace("0U", "@U")}000000__${"_".repeat(29)}`
+        }),
+        /Invalid list/
+    );
+    await assert.rejects(
+        validateBuilderProfile({name: "Hero", payload: legacyHero.replace("_101_", "_not-a-number_")}),
+        /Invalid list/
+    );
+});
+
+// Catches server-side acceptance of whitespace that is not a literal ASCII space.
+test("server validator limits character names to ASCII letters digits and spaces", async function() {
+    for (const name of ["Hero\t", "Hero\n"]) {
+        await assert.rejects(
+            validateBuilderProfile({name, payload: legacyHero.replace("Hero", name)}),
+            /character name/
+        );
+    }
+});
