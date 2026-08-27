@@ -226,6 +226,9 @@ function EmailEditor({editor, dispatch}) {
                         className="text-info mt-2"
                         role="status"
                         aria-live="polite"
+                        aria-label={resending
+                            ? "Resending email verification"
+                            : "Saving email address"}
                         tabIndex="-1"
                     >
                         {resending ? "Resending email verification…" : "Saving email address…"}
@@ -233,7 +236,9 @@ function EmailEditor({editor, dispatch}) {
                 )}
                 {editor.announcement === "verification-sent" && (
                     <p className="text-success mt-2" role="status" aria-live="polite">
-                        Verification email sent. The new address remains pending until verified.
+                        {editor.pendingEmail
+                            ? "Verification email sent. The pending address remains inactive until verified."
+                            : "Verification email sent. Your current address remains unverified until you use the link."}
                     </p>
                 )}
             </div>

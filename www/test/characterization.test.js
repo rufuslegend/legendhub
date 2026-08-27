@@ -17,6 +17,25 @@ async function renderHome(cookies = {}) {
     });
 }
 
+async function renderAuthenticatedPage(user, cookies = {}) {
+    const ejs = require("ejs");
+    const {normalizeTheme} = require("../src/view-helpers");
+    const body = await ejs.renderFile(path.join(__dirname, "../src/views/index.ejs"), {
+        cookies,
+        normalizeTheme,
+        showDiscordWidget: false,
+        title: "Home",
+        url: {path: "/"},
+        user: {
+            notifications: [],
+            moreNotifications: false,
+            ...user
+        },
+        version: "test"
+    });
+    return {body};
+}
+
 async function renderLogin(vm) {
     const ejs = require("ejs");
     const {normalizeTheme} = require("../src/view-helpers");
@@ -46,6 +65,40 @@ test("EJS renders the home page and its shared includes", async function() {
     assert.match(html, /Welcome to LegendHUB!/);
     assert.match(html, /Builder/);
     assert.match(html, /Cookie Policy/);
+});
+
+// Catches the login-time verification invitation disappearing for legacy
+// members or losing its account destination and session dismissal action.
+test("grandfathered member sees a dismissible prompt after each login", async function() {
+    const response = await renderAuthenticatedPage({
+        username: "LegacyMember",
+        emailVerified: false,
+        canUseAccountStorage: false
+    });
+
+    assert.match(response.body, /Enter and verify your email address now/);
+    assert.match(response.body, /href="\/account\/#email-heading"/);
+    assert.match(response.body, /action="\/dismiss-email-prompt"/);
+    assert.match(response.body, /Existing LegendHUB features remain available/);
+});
+
+// Catches either verified members being nagged or a dismissal leaking beyond
+// the current login-page render contract.
+test("verified and session-dismissed members never see the prompt", async function() {
+    const verified = await renderAuthenticatedPage({
+        username: "VerifiedMember",
+        email: "verified@example.test",
+        emailVerified: true,
+        canUseAccountStorage: true
+    });
+    assert.doesNotMatch(verified.body, /dismiss-email-prompt/);
+
+    const dismissed = await renderAuthenticatedPage({
+        username: "LegacyMember",
+        emailVerified: false,
+        canUseAccountStorage: false
+    }, {emailPromptDismissed: "true"});
+    assert.doesNotMatch(dismissed.body, /dismiss-email-prompt/);
 });
 
 // Catches regressions to username-only copy, optional email registration, or

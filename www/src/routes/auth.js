@@ -41,6 +41,11 @@ var authFunc = async function(req, res, next) {
     if (req.cookies.loginToken) {
         try {
             res.locals.user = await authApi.utils.authToken(req.cookies.loginToken, authApi.utils.getIPFromRequest(req), false, true);
+            const canUseAccountStorage = Boolean(
+                res.locals.user.email && res.locals.user.emailVerified
+            );
+            res.locals.user.emailVerified = canUseAccountStorage;
+            res.locals.user.canUseAccountStorage = canUseAccountStorage;
         }
         catch (e) {
             if (e.message === "Invalid token") {

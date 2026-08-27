@@ -7,7 +7,14 @@ with version 2.6.0.
 
 ### Added
 
+- Added verified email addresses to accounts. New accounts now require an email address and receive a verification link before email-only features become available.
+- Added a dismissible email-verification reminder after each login for existing accounts without a verified address; all features available before 3.1 continue to work without one.
 - Added password recovery through a verified email address, with one-hour reset links that sign out every existing session after the password changes.
+
+### Changed
+
+- Sign-in now accepts either a username or a verified email address.
+- Added secure account email changes and verification resends. A verified address stays active until its replacement is verified, and the previous address receives a security notice after the change.
 
 ## [3.0.0] - 2026-08-26
 

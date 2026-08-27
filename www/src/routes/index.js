@@ -4,6 +4,13 @@ let apiUtils = require("./api/utils");
 let mysql = require("./api/mysql-connection");
 let {normalizeReturnUrl, requireSameOrigin} = require("./request-security");
 
+const EMAIL_PROMPT_COOKIE_OPTIONS = Object.freeze({
+    path: "/",
+    secure: true,
+    httpOnly: true,
+    sameSite: "lax"
+});
+
 router.get(["/", "/index.html"], function(req, res) {
     return res.render("index", {
         title: "Home",
@@ -66,6 +73,7 @@ router.post(["/login.html"], requireSameOrigin, async function(req, res) {
             data.authLogin.token,
             cookieOptions
         );
+        res.clearCookie("emailPromptDismissed", EMAIL_PROMPT_COOKIE_OPTIONS);
         return res.redirect(normalizeReturnUrl(body.returnUrl));
     }
     else if (vm.body.register_username) {
@@ -120,6 +128,8 @@ router.post(["/logout.html"], requireSameOrigin, function(req, res) {
         auth.utils.logout(req.cookies.loginToken);
         res.clearCookie("loginToken", {path: "/"});
     }
+
+    res.clearCookie("emailPromptDismissed", EMAIL_PROMPT_COOKIE_OPTIONS);
 
     res.redirect("/");
 });

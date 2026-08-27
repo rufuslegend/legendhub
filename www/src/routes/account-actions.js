@@ -1,7 +1,14 @@
 "use strict";
 
 const express = require("express");
-const {requireSameOrigin} = require("./request-security");
+const {normalizeReturnUrl, requireSameOrigin} = require("./request-security");
+
+const EMAIL_PROMPT_COOKIE_OPTIONS = Object.freeze({
+    path: "/",
+    secure: true,
+    httpOnly: true,
+    sameSite: "lax"
+});
 
 module.exports = function createAccountActionsRouter(options = {}) {
     const router = express.Router();
@@ -13,6 +20,13 @@ module.exports = function createAccountActionsRouter(options = {}) {
     const passwordRecoveryService = options.passwordRecoveryService ||
         authApi.passwordRecoveryService;
     const getIPFromRequest = options.getIPFromRequest || authApi.utils.getIPFromRequest;
+
+    router.post("/dismiss-email-prompt", requireSameOrigin, function(req, res) {
+        if (res.locals.user && !res.locals.user.emailVerified) {
+            res.cookie("emailPromptDismissed", "true", EMAIL_PROMPT_COOKIE_OPTIONS);
+        }
+        return res.redirect(normalizeReturnUrl(req.body?.returnUrl));
+    });
 
     router.get("/verify-email.html", function(req, res) {
         const token = typeof req.query?.token === "string" ? req.query.token : "";
