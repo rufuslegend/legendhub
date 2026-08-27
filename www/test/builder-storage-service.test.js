@@ -6,6 +6,7 @@ const test = require("node:test");
 const {
     createBuilderStorageService
 } = require("../src/routes/api/builder-storage-service");
+const {validateBuilderProfile} = require("../src/routes/api/builder-payload");
 
 const NOW = new Date("2026-08-27T12:00:00.000Z");
 const QUOTA_BYTES = 10_485_760;
@@ -14,6 +15,10 @@ const auth = {
     emailVerified: true,
     storageNamespace: "00112233445566778899aabbccddeeff"
 };
+const baseStats = "0U0U0U0U0U0U";
+const blanks35 = "_".repeat(35);
+const multiVariantHero = `6*Hero~Tank~${baseStats}000000___00000000000000000${blanks35}*` +
+    `Hero~Caster~${baseStats}000000___00000000000000000${blanks35}*`;
 
 function profile(overrides = {}) {
     return {
@@ -175,14 +180,28 @@ function createHarness(overrides = {}) {
             decoded: {name: input.name}
         };
     }
+    async function renameProfile(validatedProfile, name) {
+        const payload = `${validatedProfile.payload}|${name}`;
+        return {
+            ...validatedProfile,
+            name,
+            payload,
+            byteLength: Buffer.byteLength(payload, "utf8"),
+            decoded: {...validatedProfile.decoded, name}
+        };
+    }
     const uuids = ["created-id", "conflict-id", "third-id"];
-    const service = createBuilderStorageService({
+    const serviceOptions = {
         pool,
         repository,
-        validateProfile,
         clock: () => NOW,
         randomUUID: () => uuids.shift()
-    });
+    };
+    if (!overrides.useRealProfileBoundary) {
+        serviceOptions.validateProfile = validateProfile;
+        serviceOptions.renameProfile = renameProfile;
+    }
+    const service = createBuilderStorageService(serviceOptions);
     return {service, repository, state, events, validateCalls};
 }
 
@@ -332,9 +351,67 @@ test("stale update preserves the server row and creates a conflict copy", async 
     assert.equal(result.profile.revision, 4);
     assert.equal(result.profile.payload, "canonical-server-payload");
     assert.equal(result.conflictProfile.name, "Hero Conflict");
-    assert.equal(result.conflictProfile.payload, "canonical-stale-payload");
+    assert.equal(result.conflictProfile.payload,
+        "canonical-stale-payload|Hero Conflict");
     assert.equal(state.profiles.find(value => value.id === "profile-id").payload,
         "canonical-server-payload");
+});
+
+// Catches the service persisting a generated conflict row name beside a
+// payload whose per-variant names and byte metadata still describe the stale
+// original profile.
+test("real stale conflict copy renames every variant and recomputes canonical metadata", async function() {
+    const {service, state} = createHarness({
+        useRealProfileBoundary: true,
+        profiles: [
+            profile({payload: multiVariantHero, payloadBytes: Buffer.byteLength(multiVariantHero)}),
+            profile({id: "existing-conflict", name: "Hero Conflict"})
+        ]
+    });
+
+    const result = await service.updateProfile(auth, {
+        id: "profile-id",
+        name: "Hero",
+        payload: multiVariantHero,
+        revision: 3,
+        storageGeneration: 1
+    });
+    const codec = await import("../shared/builder-codec.mjs");
+    const inserted = state.profiles.find(value => value.id === "created-id");
+
+    assert.equal(result.conflictProfile.name, "Hero Conflict 2");
+    assert.deepEqual(codec.decodeBuilderEntries(result.conflictProfile.payload)
+        .map(entry => entry.name), ["Hero Conflict 2", "Hero Conflict 2"]);
+    assert.deepEqual(codec.decodeBuilderLists(result.conflictProfile.payload)[0].variants
+        .map(variant => variant.name), ["Tank", "Caster"]);
+    assert.equal(result.conflictProfile.payloadVersion, 6);
+    assert.equal(result.conflictProfile.payloadBytes,
+        Buffer.byteLength(result.conflictProfile.payload, "utf8"));
+    assert.deepEqual(inserted, {...result.conflictProfile, memberId: auth.memberId});
+    await validateBuilderProfile({
+        name: result.conflictProfile.name,
+        payload: result.conflictProfile.payload
+    });
+});
+
+// Catches quota enforcement using the shorter pre-rename payload even though
+// each re-encoded conflict variant grows with the generated suffix.
+test("renamed conflict byte growth cannot exceed the account quota", async function() {
+    const originalBytes = Buffer.byteLength(multiVariantHero, "utf8");
+    const {service, state} = createHarness({
+        useRealProfileBoundary: true,
+        profiles: [profile({payload: multiVariantHero, payloadBytes: originalBytes})],
+        usedBytesResult: QUOTA_BYTES - originalBytes
+    });
+
+    await assert.rejects(service.updateProfile(auth, {
+        id: "profile-id",
+        name: "Hero",
+        payload: multiVariantHero,
+        revision: 3,
+        storageGeneration: 1
+    }), error => error.extensions.code === 413);
+    assert.equal(state.calls.some(([operation]) => operation === "insert"), false);
 });
 
 // Catches case-insensitive collision detection or reusing an already-active

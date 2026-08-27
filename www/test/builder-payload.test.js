@@ -2,7 +2,10 @@
 
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const {validateBuilderProfile} = require("../src/routes/api/builder-payload");
+const {
+    renameValidatedBuilderProfile,
+    validateBuilderProfile
+} = require("../src/routes/api/builder-payload");
 
 const baseStats = "0U0U0U0U0U0U";
 const blanks35 = "_".repeat(35);
@@ -10,6 +13,8 @@ const legacyHero = "Hero!Original_30_30_30_30_30_30_-1_-1_-1_101_" +
     Array(34).fill("0").join("_");
 const encodedHero = `6*Hero~Original~${baseStats}000000___00000000000000000${blanks35}*`;
 const twoCharacters = `${legacyHero}*${legacyHero.replace("Hero", "Other")}`;
+const multiVariantHero = `6*Hero~Tank~${baseStats}000000___00000000000000000${blanks35}*` +
+    `Hero~Caster~${baseStats}000000___00000000000000000${blanks35}*`;
 
 // Catches the server retaining a legacy payload instead of storing current canonical text.
 test("server validator canonicalizes one legacy character", async function() {
@@ -34,6 +39,23 @@ test("server validator retains all current-format variants for one character", a
 
     assert.deepEqual(result.decoded.variants.map(variant => variant.name), ["Tank", "Caster"]);
     assert.equal(result.payload, payload);
+});
+
+// Catches a collision-safe row rename leaving any encoded variant under the
+// original character name or retaining the pre-rename byte count.
+test("validated profile rename re-encodes every variant canonically", async function() {
+    const validated = await validateBuilderProfile({name: "Hero", payload: multiVariantHero});
+    const renamed = await renameValidatedBuilderProfile(validated, "Hero Conflict 2");
+    const codec = await import("../shared/builder-codec.mjs");
+
+    assert.equal(renamed.name, "Hero Conflict 2");
+    assert.deepEqual(codec.decodeBuilderEntries(renamed.payload).map(entry => entry.name), [
+        "Hero Conflict 2", "Hero Conflict 2"
+    ]);
+    assert.deepEqual(renamed.decoded.variants.map(variant => variant.name), ["Tank", "Caster"]);
+    assert.equal(renamed.payloadVersion, 6);
+    assert.equal(renamed.byteLength, Buffer.byteLength(renamed.payload, "utf8"));
+    assert.ok(renamed.byteLength > validated.byteLength);
 });
 
 // Catches the server converting truncated or non-numeric legacy/compact fields into zeroes.

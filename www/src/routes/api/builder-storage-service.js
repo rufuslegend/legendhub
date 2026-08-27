@@ -4,7 +4,10 @@ const crypto = require("node:crypto");
 const gql = require("graphql");
 const {withTransaction} = require("./database");
 const {createBuilderProfileRepository} = require("./builder-profile-repository");
-const {validateBuilderProfile} = require("./builder-payload");
+const {
+    renameValidatedBuilderProfile,
+    validateBuilderProfile
+} = require("./builder-payload");
 const {
     BadRequestError,
     ConflictError,
@@ -124,6 +127,7 @@ function createBuilderStorageService({
     pool,
     repository = createBuilderProfileRepository({pool}),
     validateProfile = validateBuilderProfile,
+    renameProfile = renameValidatedBuilderProfile,
     clock = () => new Date(),
     randomUUID = crypto.randomUUID
 }) {
@@ -238,14 +242,18 @@ function createBuilderStorageService({
                 });
             }
 
-            assertWithinQuota(usedBytes + validated.byteLength);
             const profiles = await repository.list(memberId, options);
             const conflictName = nextConflictName(validated.name, profiles);
+            const renamed = await validateStorageProfile(
+                input => renameProfile(validated, input.name),
+                {name: conflictName}
+            );
+            assertWithinQuota(usedBytes + renamed.byteLength);
             const now = clock();
             const conflict = savedProfile(
                 memberId,
                 randomUUID(),
-                {...validated, name: conflictName},
+                renamed,
                 1,
                 now,
                 now
@@ -256,7 +264,7 @@ function createBuilderStorageService({
                 profile: current,
                 conflictProfile: conflict,
                 preferences,
-                usedBytes: usedBytes + validated.byteLength
+                usedBytes: usedBytes + renamed.byteLength
             });
         });
     }
