@@ -20,6 +20,12 @@ router.get(["/", "/index.html"], async function(req, res, next) {
             wikiPageUpdated
             changelogAdded
         }
+        getAccountEmailStatus(authToken: $authToken) {
+            email
+            verified
+            pendingEmail
+            canUseAccountStorage
+        }
     }
     `;
     try {
@@ -32,7 +38,8 @@ router.get(["/", "/index.html"], async function(req, res, next) {
     }
 
     let vm = {
-        notificationSettings: data.getNotificationSettings
+        notificationSettings: data.getNotificationSettings,
+        emailStatus: data.getAccountEmailStatus
     };
     res.render("account/index", {title: "Account", vm});
 });

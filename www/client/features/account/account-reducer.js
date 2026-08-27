@@ -6,7 +6,15 @@ const emptyPasswordEditor = {
     error: null
 };
 
-export function createInitialAccountState(notificationSettings) {
+const emptyEmailStatus = {
+    email: null,
+    verified: false,
+    pendingEmail: null,
+    canUseAccountStorage: false
+};
+
+export function createInitialAccountState(notificationSettings, suppliedEmailStatus) {
+    const emailStatus = {...emptyEmailStatus, ...suppliedEmailStatus};
     return {
         notificationEditor: {
             status: "viewing",
@@ -14,7 +22,18 @@ export function createInitialAccountState(notificationSettings) {
             draft: {...notificationSettings},
             error: null
         },
-        passwordEditor: {...emptyPasswordEditor}
+        passwordEditor: {...emptyPasswordEditor},
+        emailEditor: {
+            status: "viewing",
+            email: emailStatus.email,
+            draftEmail: emailStatus.pendingEmail || emailStatus.email || "",
+            verified: Boolean(emailStatus.verified),
+            pendingEmail: emailStatus.pendingEmail,
+            canUseAccountStorage: Boolean(emailStatus.canUseAccountStorage),
+            password: "",
+            error: null,
+            announcement: null
+        }
     };
 }
 
@@ -136,6 +155,124 @@ export function accountReducer(state, action) {
                     ...state.passwordEditor,
                     status: "editing",
                     error: "network"
+                }
+            };
+        case "email/edit":
+            return {
+                ...state,
+                emailEditor: {
+                    ...state.emailEditor,
+                    status: "editing",
+                    draftEmail: state.emailEditor.pendingEmail ||
+                        state.emailEditor.email || "",
+                    password: "",
+                    error: null,
+                    announcement: null
+                }
+            };
+        case "email/change":
+            return {
+                ...state,
+                emailEditor: {
+                    ...state.emailEditor,
+                    [action.field === "email" ? "draftEmail" : action.field]: action.value,
+                    error: null,
+                    announcement: null
+                }
+            };
+        case "email/cancel":
+            return {
+                ...state,
+                emailEditor: {
+                    ...state.emailEditor,
+                    status: "viewing",
+                    draftEmail: state.emailEditor.pendingEmail ||
+                        state.emailEditor.email || "",
+                    password: "",
+                    error: null,
+                    announcement: null
+                }
+            };
+        case "email/save-requested":
+            if (state.emailEditor.status === "saving")
+                return state;
+            return {
+                ...state,
+                emailEditor: {
+                    ...state.emailEditor,
+                    status: "saving",
+                    error: null,
+                    announcement: null
+                }
+            };
+        case "email/save-succeeded":
+            return {
+                ...state,
+                emailEditor: {
+                    ...state.emailEditor,
+                    status: "viewing",
+                    draftEmail: action.pendingEmail,
+                    pendingEmail: action.pendingEmail,
+                    password: "",
+                    error: null,
+                    announcement: "verification-sent"
+                }
+            };
+        case "email/invalid-current-password":
+            return {
+                ...state,
+                emailEditor: {
+                    ...state.emailEditor,
+                    status: "editing",
+                    password: "",
+                    error: "invalid-current-password",
+                    announcement: null
+                }
+            };
+        case "email/save-failed":
+            return {
+                ...state,
+                emailEditor: {
+                    ...state.emailEditor,
+                    status: "editing",
+                    password: "",
+                    error: "network",
+                    announcement: null
+                }
+            };
+        case "email/resend-requested":
+            if (state.emailEditor.status === "resending")
+                return state;
+            return {
+                ...state,
+                emailEditor: {
+                    ...state.emailEditor,
+                    status: "resending",
+                    password: "",
+                    error: null,
+                    announcement: null
+                }
+            };
+        case "email/resend-succeeded":
+            return {
+                ...state,
+                emailEditor: {
+                    ...state.emailEditor,
+                    status: "viewing",
+                    password: "",
+                    error: null,
+                    announcement: "verification-sent"
+                }
+            };
+        case "email/resend-failed":
+            return {
+                ...state,
+                emailEditor: {
+                    ...state.emailEditor,
+                    status: "viewing",
+                    password: "",
+                    error: "network",
+                    announcement: null
                 }
             };
         default:

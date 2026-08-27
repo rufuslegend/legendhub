@@ -9,7 +9,10 @@
         <%-include("../shared/header")-%>
         <div data-react-root="account-settings"></div>
         <script type="application/json" data-react-props="account-settings"><%-
-            serializeJsonForHtml({notificationSettings: vm.notificationSettings})
+            serializeJsonForHtml({
+                notificationSettings: vm.notificationSettings,
+                emailStatus: vm.emailStatus
+            })
         %></script>
         <%-include("../shared/footer")-%>
         <%-include("../shared/scripts")-%>

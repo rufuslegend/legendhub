@@ -3,6 +3,23 @@ let gql = require("graphql");
 let apiUtils = require("./utils");
 let auth = require("./auth")
 let phpPass = require("./php-password");
+let {createAccountEmailService} = require("./account-email-service");
+let {createAccountRateLimiter} = require("./account-rate-limit");
+let {createMailer, readMailConfig} = require("../../mail");
+
+function runtimeMailer() {
+    return createMailer({config: readMailConfig(process.env)});
+}
+
+let accountEmailService = createAccountEmailService({
+    pool: mysql,
+    mailer: {
+        sendVerification: message => runtimeMailer().sendVerification(message),
+        sendEmailChanged: message => runtimeMailer().sendEmailChanged(message),
+        sendEmailChangeNotice: message => runtimeMailer().sendEmailChangeNotice(message)
+    },
+    rateLimiter: createAccountRateLimiter({pool: mysql})
+});
 
 class NotificationSetting {
     constructor(sqlResult) {
@@ -122,6 +139,37 @@ let updatePassword = function(req, authToken, currentPassword, newPassword) {
     });
 };
 
+let getAccountEmailStatus = async function(req, authToken) {
+    const authResult = await auth.utils.authQuery(req, authToken, false);
+    return accountEmailService.getAccountEmailStatus(authResult);
+};
+
+let requestEmailChange = async function(req, authToken, currentPassword, email) {
+    const authResult = await auth.utils.authMutation(req, authToken, false);
+    const result = await accountEmailService.requestEmailChange({
+        auth: authResult,
+        currentPassword,
+        email,
+        ipHash: authResult.ip
+    });
+    return {
+        ...result,
+        tokenRenewal: {token: authResult.token, expires: authResult.expires}
+    };
+};
+
+let resendVerification = async function(req, authToken) {
+    const authResult = await auth.utils.authMutation(req, authToken, false);
+    const result = await accountEmailService.resendVerification({
+        auth: authResult,
+        ipHash: authResult.ip
+    });
+    return {
+        ...result,
+        tokenRenewal: {token: authResult.token, expires: authResult.expires}
+    };
+};
+
 let updatePasswordType = new gql.GraphQLObjectType({
     name: "UpdatePassword",
     fields: () => ({
@@ -147,6 +195,33 @@ let notificationSettingType = new gql.GraphQLObjectType({
     })
 });
 
+let accountEmailStatusType = new gql.GraphQLObjectType({
+    name: "AccountEmailStatus",
+    fields: () => ({
+        email: {type: gql.GraphQLString},
+        verified: {type: new gql.GraphQLNonNull(gql.GraphQLBoolean)},
+        pendingEmail: {type: gql.GraphQLString},
+        canUseAccountStorage: {type: new gql.GraphQLNonNull(gql.GraphQLBoolean)}
+    })
+});
+
+let accountEmailChangeType = new gql.GraphQLObjectType({
+    name: "AccountEmailChange",
+    fields: () => ({
+        success: {type: new gql.GraphQLNonNull(gql.GraphQLBoolean)},
+        pendingEmail: {type: gql.GraphQLString},
+        tokenRenewal: {type: new gql.GraphQLNonNull(auth.types.tokenRenewalType)}
+    })
+});
+
+let resendVerificationType = new gql.GraphQLObjectType({
+    name: "ResendVerification",
+    fields: () => ({
+        accepted: {type: new gql.GraphQLNonNull(gql.GraphQLBoolean)},
+        tokenRenewal: {type: new gql.GraphQLNonNull(auth.types.tokenRenewalType)}
+    })
+});
+
 let qFields = {
     getNotificationSettings: {
         type: notificationSettingType,
@@ -155,6 +230,15 @@ let qFields = {
         },
         resolve: function(_, {authToken}, req) {
             return getNotificationSettings(req, authToken);
+        }
+    },
+    getAccountEmailStatus: {
+        type: new gql.GraphQLNonNull(accountEmailStatusType),
+        args: {
+            authToken: {type: new gql.GraphQLNonNull(gql.GraphQLString)}
+        },
+        resolve: function(_, {authToken}, req) {
+            return getAccountEmailStatus(req, authToken);
         }
     }
 };
@@ -217,8 +301,29 @@ let mFields = {
                 newPassword
             );
         }
+    },
+    requestEmailChange: {
+        type: new gql.GraphQLNonNull(accountEmailChangeType),
+        args: {
+            authToken: {type: new gql.GraphQLNonNull(gql.GraphQLString)},
+            currentPassword: {type: new gql.GraphQLNonNull(gql.GraphQLString)},
+            email: {type: new gql.GraphQLNonNull(gql.GraphQLString)}
+        },
+        resolve: function(_, {authToken, currentPassword, email}, req) {
+            return requestEmailChange(req, authToken, currentPassword, email);
+        }
+    },
+    resendVerification: {
+        type: new gql.GraphQLNonNull(resendVerificationType),
+        args: {
+            authToken: {type: new gql.GraphQLNonNull(gql.GraphQLString)}
+        },
+        resolve: function(_, {authToken}, req) {
+            return resendVerification(req, authToken);
+        }
     }
 };
 
 module.exports.queryFields = qFields;
 module.exports.mutationFields = mFields;
+module.exports.accountEmailService = accountEmailService;

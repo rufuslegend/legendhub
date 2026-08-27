@@ -1,6 +1,8 @@
 import {useEffect, useReducer, useRef} from "react";
 import {
     EDITABLE_NOTIFICATION_FIELDS,
+    requestEmailChange,
+    resendVerification,
     updateNotificationSettings,
     updatePassword
 } from "./account-api.js";
@@ -23,6 +25,11 @@ const passwordErrors = {
     network: "Password could not be saved. Try again."
 };
 
+const emailErrors = {
+    "invalid-current-password": "Current password is invalid.",
+    network: "Email settings could not be saved. Try again."
+};
+
 function useEditorFocus(status, error) {
     const triggerRef = useRef(null);
     const firstFieldRef = useRef(null);
@@ -32,20 +39,206 @@ function useEditorFocus(status, error) {
     const previousError = useRef(error);
 
     useEffect(function() {
-        if (status === "viewing" && previousStatus.current !== "viewing")
+        if (error && error !== previousError.current)
+            errorRef.current?.focus();
+        else if (status === "viewing" && previousStatus.current !== "viewing")
             triggerRef.current?.focus();
         else if (status === "editing" && previousStatus.current === "viewing")
             firstFieldRef.current?.focus();
-        else if (status === "saving" && previousStatus.current !== "saving")
+        else if (["saving", "resending"].includes(status) &&
+            previousStatus.current !== status)
             pendingRef.current?.focus();
-        else if (error && error !== previousError.current)
-            errorRef.current?.focus();
 
         previousStatus.current = status;
         previousError.current = error;
     }, [status, error]);
 
     return {triggerRef, firstFieldRef, pendingRef, errorRef};
+}
+
+function EmailEditor({editor, dispatch}) {
+    const editing = editor.status === "editing" || editor.status === "saving";
+    const saving = editor.status === "saving";
+    const resending = editor.status === "resending";
+    const busy = saving || resending;
+    const canResend = Boolean(editor.pendingEmail || (editor.email && !editor.verified));
+    const focus = useEditorFocus(editor.status, editor.error);
+
+    async function save(event) {
+        event.preventDefault();
+        if (saving)
+            return;
+
+        dispatch({type: "email/save-requested"});
+        try {
+            const result = await requestEmailChange(editor);
+            dispatch(result.success ? {
+                type: "email/save-succeeded",
+                pendingEmail: result.pendingEmail
+            } : {type: "email/invalid-current-password"});
+        }
+        catch (_error) {
+            dispatch({type: "email/save-failed"});
+        }
+    }
+
+    async function resend() {
+        if (resending)
+            return;
+
+        dispatch({type: "email/resend-requested"});
+        try {
+            await resendVerification();
+            dispatch({type: "email/resend-succeeded"});
+        }
+        catch (_error) {
+            dispatch({type: "email/resend-failed"});
+        }
+    }
+
+    return (
+        <section className="row py-3 border-bottom border-primary" aria-labelledby="email-heading">
+            <div className={editing ? "col-12 col-lg-4" : "col-4 col-lg-4"}>
+                <h2 className="h4" id="email-heading">Email</h2>
+            </div>
+            <div className={editing ? "col-12 col-lg-8" : "col-8 col-lg-8"}>
+                {!editing && (
+                    <div>
+                        <p className="mb-1">
+                            <strong>Current:</strong>{" "}
+                            {editor.email || "No email address added"}
+                            {editor.email && ` (${editor.verified ? "verified" : "not verified"})`}
+                        </p>
+                        {editor.pendingEmail && (
+                            <p className="mb-2">
+                                <strong>Pending:</strong> {editor.pendingEmail}
+                            </p>
+                        )}
+                        <div className="row">
+                            <div className="col-12 col-md-6 mb-2">
+                                <button
+                                    ref={focus.triggerRef}
+                                    type="button"
+                                    className="btn btn-default btn-block"
+                                    aria-label={editor.email ? "Change email address" : "Add email address"}
+                                    disabled={busy}
+                                    onClick={() => dispatch({type: "email/edit"})}
+                                >
+                                    {editor.email ? "Change" : "Add"}
+                                </button>
+                            </div>
+                            {canResend && (
+                                <div className="col-12 col-md-6 mb-2">
+                                    <button
+                                        type="button"
+                                        className="btn btn-outline-primary btn-block"
+                                        aria-label={resending
+                                            ? "Resending email verification"
+                                            : "Resend email verification"}
+                                        disabled={busy}
+                                        onClick={resend}
+                                    >
+                                        {resending ? "Resending…" : "Resend verification"}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+                {editing && (
+                    <form onSubmit={save}>
+                        <div className="form-group">
+                            <label htmlFor="emailInput">Email address</label>
+                            <input
+                                ref={focus.firstFieldRef}
+                                type="email"
+                                className="form-control"
+                                id="emailInput"
+                                autoComplete="email"
+                                value={editor.draftEmail}
+                                disabled={saving}
+                                required
+                                onChange={(event) => dispatch({
+                                    type: "email/change",
+                                    field: "email",
+                                    value: event.target.value
+                                })}
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label htmlFor="emailPasswordInput">Current Password</label>
+                            <input
+                                type="password"
+                                className="form-control"
+                                id="emailPasswordInput"
+                                autoComplete="current-password"
+                                value={editor.password}
+                                disabled={saving}
+                                required
+                                aria-describedby={editor.error ? "email-error" : undefined}
+                                onChange={(event) => dispatch({
+                                    type: "email/change",
+                                    field: "password",
+                                    value: event.target.value
+                                })}
+                            />
+                        </div>
+                        <div className="row">
+                            <div className="col-12 col-md-6">
+                                <button
+                                    type="submit"
+                                    className="btn btn-primary btn-block"
+                                    aria-label={saving ? "Saving email address" : "Save email address"}
+                                    disabled={saving}
+                                >
+                                    {saving ? "Saving…" : "Save"}
+                                </button>
+                            </div>
+                            <div className="col-12 col-md-6">
+                                <button
+                                    type="button"
+                                    className="btn btn-link btn-block"
+                                    aria-label="Cancel email changes"
+                                    disabled={saving}
+                                    onClick={() => dispatch({type: "email/cancel"})}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                )}
+                {editor.error && (
+                    <p
+                        ref={focus.errorRef}
+                        className="text-danger mt-2"
+                        id="email-error"
+                        role="alert"
+                        aria-live="assertive"
+                        tabIndex="-1"
+                    >
+                        {emailErrors[editor.error]}
+                    </p>
+                )}
+                {busy && (
+                    <p
+                        ref={focus.pendingRef}
+                        className="text-info mt-2"
+                        role="status"
+                        aria-live="polite"
+                        tabIndex="-1"
+                    >
+                        {resending ? "Resending email verification…" : "Saving email address…"}
+                    </p>
+                )}
+                {editor.announcement === "verification-sent" && (
+                    <p className="text-success mt-2" role="status" aria-live="polite">
+                        Verification email sent. The new address remains pending until verified.
+                    </p>
+                )}
+            </div>
+        </section>
+    );
 }
 
 function NotificationEditor({editor, dispatch}) {
@@ -320,11 +513,14 @@ function PasswordEditor({editor, dispatch}) {
     );
 }
 
-export default function AccountSettings({notificationSettings}) {
+export default function AccountSettings({notificationSettings, emailStatus}) {
     const [state, dispatch] = useReducer(
         accountReducer,
-        notificationSettings,
-        createInitialAccountState
+        {notificationSettings, emailStatus},
+        initial => createInitialAccountState(
+            initial.notificationSettings,
+            initial.emailStatus
+        )
     );
 
     return (
@@ -334,6 +530,7 @@ export default function AccountSettings({notificationSettings}) {
                     <h1>Account Settings</h1>
                 </div>
             </div>
+            <EmailEditor editor={state.emailEditor} dispatch={dispatch} />
             <NotificationEditor editor={state.notificationEditor} dispatch={dispatch} />
             <PasswordEditor editor={state.passwordEditor} dispatch={dispatch} />
         </main>

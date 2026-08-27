@@ -81,7 +81,7 @@ test("verification mail contains the public HTTPS link without logging its token
     assert.doesNotMatch(JSON.stringify(sent[0]), /SMTP_PASSWORD/);
 });
 
-test("email-change mail uses its purpose-specific confirmation link", async function() {
+test("email-change mail uses the scanner-safe verification route", async function() {
     const sent = [];
     const mailer = createMailer({
         transport: {sendMail: async message => sent.push(message)},
@@ -95,7 +95,24 @@ test("email-change mail uses its purpose-specific confirmation link", async func
     });
 
     assert.equal(sent[0].subject, "Confirm your new LegendHUB email address");
-    assert.match(sent[0].text, /https:\/\/legendhub\.org\/confirm-email-change\.html\?token=selector-validator/);
+    assert.match(sent[0].text, /https:\/\/legendhub\.org\/verify-email\.html\?token=selector-validator/);
+});
+
+test("email-change notice tells the old verified address without a token", async function() {
+    const sent = [];
+    const mailer = createMailer({
+        transport: {sendMail: async message => sent.push(message)},
+        config: {from: "LegendHUB <noreply@example.com>", baseUrl: "https://legendhub.org"}
+    });
+
+    await mailer.sendEmailChangeNotice({
+        to: "old@example.com",
+        username: "Player"
+    });
+
+    assert.equal(sent[0].subject, "Your LegendHUB email address was changed");
+    assert.match(sent[0].text, /email address was changed/i);
+    assert.doesNotMatch(sent[0].text, /token=/);
 });
 
 test("password-reset mail uses its purpose-specific reset link", async function() {

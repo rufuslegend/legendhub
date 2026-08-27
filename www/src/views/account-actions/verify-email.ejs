@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <%-include("../shared/meta")-%>
+        <meta name="robots" content="none">
+    </head>
+    <body>
+        <%-include("../shared/header")-%>
+        <main class="container">
+            <div class="row justify-content-center">
+                <section class="col-12 col-md-8 text-center" aria-labelledby="verify-email-heading">
+                    <h1 id="verify-email-heading">Verify your email address</h1>
+                    <p>Confirm to finish verifying this email address.</p>
+                    <form method="post" action="/verify-email.html">
+                        <input type="hidden" name="token" value="<%=vm.token%>">
+                        <button type="submit" class="btn btn-primary">Verify email</button>
+                    </form>
+                </section>
+            </div>
+        </main>
+        <%-include("../shared/footer")-%>
+        <%-include("../shared/scripts")-%>
+    </body>
+</html>

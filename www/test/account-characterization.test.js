@@ -29,13 +29,27 @@ function loadAccountRoute(postAsync) {
     }
 }
 
-function loadAccountApi(mysql, auth) {
+function loadAccountApi(mysql, auth, accountEmailService = {}) {
     const originalLoad = Module._load;
     Module._load = function(request, parent, isMain) {
         if (request === "./mysql-connection" && parent.filename === accountApiPath)
             return mysql;
         if (request === "./auth" && parent.filename === accountApiPath)
             return auth;
+        if (request === "./account-email-service" && parent.filename === accountApiPath) {
+            return {
+                createAccountEmailService: function() {
+                    return accountEmailService;
+                }
+            };
+        }
+        if (request === "./account-rate-limit" && parent.filename === accountApiPath) {
+            return {
+                createAccountRateLimiter: function() {
+                    return {recordAndCheck: async function() {}};
+                }
+            };
+        }
 
         return originalLoad.call(this, request, parent, isMain);
     };
@@ -126,7 +140,15 @@ test("account route renders all notification settings", async function() {
         captured = {query, ip, variables};
         for (const setting of Object.keys(notificationSettings))
             assert.match(query, new RegExp(`\\b${setting}\\b`));
-        return {getNotificationSettings: notificationSettings};
+        return {
+            getNotificationSettings: notificationSettings,
+            getAccountEmailStatus: {
+                email: "player@example.com",
+                verified: true,
+                pendingEmail: null,
+                canUseAccountStorage: true
+            }
+        };
     });
     let rendered;
 
@@ -148,9 +170,106 @@ test("account route renders all notification settings", async function() {
 
     assert.equal(rendered.view, "account/index");
     assert.deepEqual(rendered.locals.vm.notificationSettings, notificationSettings);
+    assert.deepEqual(rendered.locals.vm.emailStatus, {
+        email: "player@example.com",
+        verified: true,
+        pendingEmail: null,
+        canUseAccountStorage: true
+    });
+    for (const field of ["email", "verified", "pendingEmail", "canUseAccountStorage"])
+        assert.match(captured.query, new RegExp(`\\b${field}\\b`));
     assert.doesNotMatch(captured.query, /account-token/);
     assert.equal(captured.ip, undefined);
     assert.deepEqual(captured.variables, {authToken: "account-token"});
+});
+
+// Catches account email queries/mutations bypassing the established auth and
+// email-service boundaries or dropping the structured status contract.
+test("account email GraphQL fields authenticate and delegate structured status and mutations", async function() {
+    const authResult = {
+        memberId: 73,
+        username: "Player",
+        email: "old@example.com",
+        emailVerified: true,
+        pendingEmail: null,
+        ip: "request-ip-hash",
+        token: "renewed-token",
+        expires: "2030-01-01T00:00:00.000Z"
+    };
+    const calls = [];
+    const emailStatus = {
+        email: "old@example.com",
+        verified: true,
+        pendingEmail: null,
+        canUseAccountStorage: true
+    };
+    const accountEmailService = {
+        getAccountEmailStatus(auth) {
+            calls.push({operation: "status", auth});
+            return emailStatus;
+        },
+        async requestEmailChange(input) {
+            calls.push({operation: "change", input});
+            return {success: true, pendingEmail: "new@example.com"};
+        },
+        async resendVerification(input) {
+            calls.push({operation: "resend", input});
+            return {accepted: true};
+        }
+    };
+    const account = loadAccountApi({query() {
+        assert.fail("the email service owns account email database work");
+    }}, {
+        types: {tokenRenewalType: require("graphql").GraphQLString},
+        utils: {
+            authQuery: async function() { return authResult; },
+            authMutation: async function() { return authResult; }
+        }
+    }, accountEmailService);
+
+    const statusField = account.queryFields.getAccountEmailStatus;
+    for (const field of ["email", "verified", "pendingEmail", "canUseAccountStorage"])
+        assert.ok(statusField.type.ofType.getFields()[field]);
+    assert.deepEqual(await statusField.resolve(null, {
+        authToken: "account-token"
+    }, {}), emailStatus);
+
+    const change = await account.mutationFields.requestEmailChange.resolve(null, {
+        authToken: "account-token",
+        currentPassword: "current-secret",
+        email: "new@example.com"
+    }, {});
+    assert.deepEqual(change, {
+        success: true,
+        pendingEmail: "new@example.com",
+        tokenRenewal: {
+            token: "renewed-token",
+            expires: "2030-01-01T00:00:00.000Z"
+        }
+    });
+
+    const resend = await account.mutationFields.resendVerification.resolve(null, {
+        authToken: "account-token"
+    }, {});
+    assert.deepEqual(resend, {
+        accepted: true,
+        tokenRenewal: {
+            token: "renewed-token",
+            expires: "2030-01-01T00:00:00.000Z"
+        }
+    });
+    assert.deepEqual(calls, [{operation: "status", auth: authResult}, {
+        operation: "change",
+        input: {
+            auth: authResult,
+            currentPassword: "current-secret",
+            email: "new@example.com",
+            ipHash: "request-ip-hash"
+        }
+    }, {
+        operation: "resend",
+        input: {auth: authResult, ipHash: "request-ip-hash"}
+    }]);
 });
 
 test("notification mutation preserves every boolean field", async function() {

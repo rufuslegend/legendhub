@@ -9,6 +9,7 @@ const createErrorHandlers = require("./error-handlers");
 const {normalizeTheme, serializeJsonForHtml} = require("./view-helpers");
 const authRouter = require("./routes/auth");
 const createFeedbackRouter = require("./routes/feedback");
+const createAccountActionsRouter = require("./routes/account-actions");
 
 const indexRouter = require("./routes/index");
 const apiRouter = require("./routes/api");
@@ -55,7 +56,9 @@ module.exports = function createApp(options = {}) {
     }));
     app.use(compression());
     if (options.logging !== false)
-        app.use(logger("dev"));
+        app.use(logger("dev", {
+            skip: req => req.path === "/verify-email.html"
+        }));
     app.use(express.json());
     app.use(express.urlencoded({ extended: false }));
     app.use(function(req, res, next) {
@@ -81,6 +84,10 @@ module.exports = function createApp(options = {}) {
         changelogPath: options.changelogPath
     }));
     app.use(authRouter);
+
+    app.use("/", createAccountActionsRouter({
+        accountEmailService: options.accountEmailService
+    }));
 
     app.use("/", createFeedbackRouter({
         fetchImpl: options.fetchImpl,

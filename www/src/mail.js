@@ -100,8 +100,14 @@ function createMailer({transport, config}) {
             username,
             token,
             subject: "Confirm your new LegendHUB email address",
-            path: "confirm-email-change.html",
+            path: "verify-email.html",
             action: "Confirm your new LegendHUB email address"
+        }),
+        sendEmailChangeNotice: ({to, username}) => sendEmailChangeNotice({
+            transport: mailTransport,
+            config,
+            to,
+            username
         }),
         sendPasswordReset: ({to, username, token}) => sendActionMail({
             transport: mailTransport,
@@ -145,6 +151,18 @@ function sendPasswordChangedMail({transport, config, to, username}) {
         subject: "Your LegendHUB password was changed",
         text: `${greeting}\n\nYour LegendHUB password was changed. If you did not make this change, contact support immediately.\n`,
         html: `<p>${escapeHtml(greeting)}</p><p>Your LegendHUB password was changed. If you did not make this change, contact support immediately.</p>`
+    });
+}
+
+function sendEmailChangeNotice({transport, config, to, username}) {
+    const greeting = `Hello ${username},`;
+    const notice = "Your LegendHUB email address was changed. If you did not make this change, contact support immediately.";
+    return transport.sendMail({
+        from: config.from,
+        to,
+        subject: "Your LegendHUB email address was changed",
+        text: `${greeting}\n\n${notice}\n`,
+        html: `<p>${escapeHtml(greeting)}</p><p>${escapeHtml(notice)}</p>`
     });
 }
 

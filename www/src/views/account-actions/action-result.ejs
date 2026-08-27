@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <%-include("../shared/meta")-%>
+        <meta name="robots" content="none">
+    </head>
+    <body>
+        <%-include("../shared/header")-%>
+        <main class="container">
+            <div class="row justify-content-center">
+                <section class="col-12 col-md-8 text-center" aria-labelledby="account-action-heading">
+                    <h1 id="account-action-heading"><%=title%></h1>
+                    <p role="status"><%=vm.message%></p>
+                    <a class="btn btn-primary" href="<%=vm.success ? '/account/' : '/'%>">
+                        <%=vm.success ? "Go to account settings" : "Return to LegendHUB"%>
+                    </a>
+                </section>
+            </div>
+        </main>
+        <%-include("../shared/footer")-%>
+        <%-include("../shared/scripts")-%>
+    </body>
+</html>

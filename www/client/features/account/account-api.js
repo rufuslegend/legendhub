@@ -64,6 +64,39 @@ const updatePasswordMutation = `
     }
 `;
 
+const requestEmailChangeMutation = `
+    mutation RequestEmailChange(
+        $authToken: String!
+        $currentPassword: String!
+        $email: String!
+    ) {
+        requestEmailChange(
+            authToken: $authToken
+            currentPassword: $currentPassword
+            email: $email
+        ) {
+            success
+            pendingEmail
+            tokenRenewal {
+                token
+                expires
+            }
+        }
+    }
+`;
+
+const resendVerificationMutation = `
+    mutation ResendVerification($authToken: String!) {
+        resendVerification(authToken: $authToken) {
+            accepted
+            tokenRenewal {
+                token
+                expires
+            }
+        }
+    }
+`;
+
 function currentCookies(document) {
     return parseCookieHeader(document.cookie);
 }
@@ -104,4 +137,28 @@ export async function updatePassword(passwords, document = window.document) {
     });
     persistTokenRenewal(document, data.updatePassword.tokenRenewal);
     return data.updatePassword;
+}
+
+export async function requestEmailChange(emailEditor, document = window.document) {
+    const cookies = currentCookies(document);
+    const data = await graphqlRequest({
+        query: requestEmailChangeMutation,
+        variables: {
+            authToken: cookies.loginToken,
+            currentPassword: emailEditor.password,
+            email: emailEditor.draftEmail ?? emailEditor.email
+        }
+    });
+    persistTokenRenewal(document, data.requestEmailChange.tokenRenewal);
+    return data.requestEmailChange;
+}
+
+export async function resendVerification(document = window.document) {
+    const cookies = currentCookies(document);
+    const data = await graphqlRequest({
+        query: resendVerificationMutation,
+        variables: {authToken: cookies.loginToken}
+    });
+    persistTokenRenewal(document, data.resendVerification.tokenRenewal);
+    return data.resendVerification;
 }
