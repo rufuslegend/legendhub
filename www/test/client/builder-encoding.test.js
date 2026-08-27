@@ -7,6 +7,10 @@ async function loadEncoding() {
     return import("../../client/features/builder/builder-encoding.js");
 }
 
+async function loadSharedCodec() {
+    return import("../../shared/builder-codec.mjs");
+}
+
 async function loadReducer() {
     return import("../../client/features/builder/builder-reducer.js");
 }
@@ -88,6 +92,24 @@ const fixtures = [
         }
     }
 ];
+
+// Catches the client compatibility layer diverging from the server's source of truth
+// for any deployed import format.
+test("shared Builder codec matches the client compatibility module for every supported version", async function() {
+    const compatibility = await loadEncoding();
+    const shared = await loadSharedCodec();
+
+    for (const fixture of fixtures) {
+        const compatibilityDecoded = compatibility.decodeBuilderLists(fixture.encoded);
+        const sharedDecoded = shared.decodeBuilderLists(fixture.encoded);
+        assert.deepEqual(sharedDecoded, compatibilityDecoded, fixture.label);
+        assert.equal(
+            shared.encodeBuilderLists(sharedDecoded),
+            compatibility.encodeBuilderLists(compatibilityDecoded),
+            fixture.label
+        );
+    }
+});
 
 // Catches removal or field-shifting in any deployed Builder encoding and proves every decoded fixture remains calculable.
 test("builder decodes every supported list version with stable items and derived totals", async function() {
