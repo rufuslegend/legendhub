@@ -52,9 +52,9 @@ function createAccountRateLimiter({pool, clock = () => new Date()}) {
 
 async function readCountsForUpdate(connection, purpose, identityHash, ipHash, now) {
     const [withinMinute, identityHour, ipHour] = await Promise.all([
-        query(connection, SELECT_WITHIN_MINUTE, [purpose, identityHash, new Date(now.getTime() - LIMITS.minimumMs)]),
-        query(connection, SELECT_IDENTITY_HOUR, [purpose, identityHash, new Date(now.getTime() - 60 * 60 * 1000)]),
-        query(connection, SELECT_IP_HOUR, [purpose, ipHash, new Date(now.getTime() - 60 * 60 * 1000)])
+        query(connection, SELECT_WITHIN_MINUTE, [purpose, identityHash, now]),
+        query(connection, SELECT_IDENTITY_HOUR, [purpose, identityHash, now]),
+        query(connection, SELECT_IP_HOUR, [purpose, ipHash, now])
     ]);
     return {
         withinMinute: Number(withinMinute[0].Count),

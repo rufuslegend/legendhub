@@ -77,6 +77,23 @@ test("rate limiter accepts delivery below all identity and IP limits", async fun
     ]);
 });
 
+test("rate limiter passes the current time to the one-minute and one-hour query windows", async function() {
+    const database = createPool();
+    const now = new Date("2026-08-26T12:00:00Z");
+    const limiter = createAccountRateLimiter({pool: database.pool, clock: () => now});
+
+    await limiter.recordAndCheck(input);
+
+    const minuteQuery = database.queries.find(({sql}) => sql.includes("INTERVAL 1 MINUTE"));
+    const identityHourQuery = database.queries.find(({sql}) =>
+        sql.includes("IdentityHash") && sql.includes("INTERVAL 1 HOUR"));
+    const ipHourQuery = database.queries.find(({sql}) => sql.includes("RequestIPHash"));
+
+    assert.deepEqual(minuteQuery.values.at(-1), now);
+    assert.deepEqual(identityHourQuery.values.at(-1), now);
+    assert.deepEqual(ipHourQuery.values.at(-1), now);
+});
+
 test("rate limiter blocks an identity after five deliveries in one hour", async function() {
     const database = createPool({identityHour: 5});
     const limiter = createAccountRateLimiter({pool: database.pool, clock: () => new Date("2026-08-26T12:00:00Z")});
