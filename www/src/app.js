@@ -1,6 +1,7 @@
 require("dotenv").config();
 
 const migrations = require("./routes/api/migrations");
+const {readMailConfig} = require("./mail");
 
 function validatePort(value) {
     const port = typeof value === "string" && /^\d+$/.test(value)
@@ -21,7 +22,10 @@ async function start(options = {}) {
     const configuredPort = options.port === undefined ? process.env.PORT : options.port;
     const port = validatePort(configuredPort);
     const log = options.log || console.log;
+    const environment = options.environment || process.env;
+    const validateMailConfig = options.readMailConfig || readMailConfig;
 
+    validateMailConfig(environment);
     await migrate();
 
     const createApplication = options.createApplication || require("./create-app");

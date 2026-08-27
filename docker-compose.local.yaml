@@ -17,6 +17,13 @@ services:
         environment:
             RECAPTCHA_SITEKEY: 6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI
             RECAPTCHA_SECRET: 6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe
+            SMTP_HOST: localhost
+            SMTP_PORT: "1025"
+            SMTP_SECURE: "false"
+            SMTP_USER: local-test
+            SMTP_PASSWORD: local-test-password
+            SMTP_FROM: LegendHUB <noreply@localhost>
+            APP_BASE_URL: https://localhost
     nginx:
         image: nginx:1.27-alpine
         depends_on:

@@ -72,6 +72,13 @@ services:
             - GITHUB_REPOSITORY=${GITHUB_REPOSITORY}
             - RECAPTCHA_SITEKEY=${RECAPTCHA_SITEKEY}
             - RECAPTCHA_SECRET=${RECAPTCHA_SECRET}
+            - SMTP_HOST=${SMTP_HOST}
+            - SMTP_PORT=${SMTP_PORT}
+            - SMTP_SECURE=${SMTP_SECURE}
+            - SMTP_USER=${SMTP_USER}
+            - SMTP_PASSWORD=${SMTP_PASSWORD}
+            - SMTP_FROM=${SMTP_FROM}
+            - APP_BASE_URL=${APP_BASE_URL}
         networks:
             - legendhub
         restart: unless-stopped

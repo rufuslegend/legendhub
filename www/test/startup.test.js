@@ -64,6 +64,24 @@ test("application waits for migrations before listening", async function() {
     ]);
 });
 
+test("production mail configuration is validated before migrations", async function() {
+    const startup = require("../src/app");
+    let migrationStarted = false;
+
+    await assert.rejects(
+        startup.start({
+            port: 8080,
+            environment: {NODE_ENV: "production"},
+            migrate: async function() {
+                migrationStarted = true;
+            }
+        }),
+        /SMTP_HOST is required/
+    );
+
+    assert.equal(migrationStarted, false);
+});
+
 test("numeric port configuration is normalized before listening", async function() {
     let listeningPort;
     const startup = require("../src/app");
@@ -204,7 +222,8 @@ test("default migration operation closes its pool after database work finishes",
         {Id: 4},
         {Id: 5},
         {Id: 6},
-        {Id: 7}
+        {Id: 7},
+        {Id: 8}
     ]);
     await migrationPromise;
 
