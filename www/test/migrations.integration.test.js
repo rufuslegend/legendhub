@@ -377,29 +377,39 @@ test("Builder storage migration verifies its additive schema and is retry-safe",
             await query(
                 pool,
                 `
-                    SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, CHARACTER_SET_NAME
+                    SELECT
+                        TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, CHARACTER_SET_NAME,
+                        COLUMN_DEFAULT, EXTRA
                     FROM information_schema.columns
                     WHERE TABLE_SCHEMA = DATABASE()
                         AND (
                             (TABLE_NAME = 'BuilderProfiles' AND COLUMN_NAME IN (
-                                'ActiveNameHash', 'Payload', 'PayloadBytes', 'DeletedOn'
+                                'ActiveNameHash', 'DeletedOn', 'Id', 'Payload', 'PayloadBytes', 'Revision'
                             ))
-                            OR (TABLE_NAME = 'AccountPreferences' AND COLUMN_NAME = 'Payload')
+                            OR (TABLE_NAME = 'AccountPreferences' AND COLUMN_NAME IN (
+                                'DocumentVersion', 'Payload', 'Revision', 'StorageGeneration'
+                            ))
                             OR (TABLE_NAME = 'BuilderImportReceipts' AND COLUMN_NAME IN (
-                                'IdempotencyKey', 'ResultPayload'
+                                'Id', 'IdempotencyKey', 'ResultPayload'
                             ))
                         )
                     ORDER BY TABLE_NAME, COLUMN_NAME
                 `
             ),
             [
-                {TABLE_NAME: "AccountPreferences", COLUMN_NAME: "Payload", COLUMN_TYPE: "json", IS_NULLABLE: "NO", CHARACTER_SET_NAME: "utf8mb4"},
-                {TABLE_NAME: "BuilderImportReceipts", COLUMN_NAME: "IdempotencyKey", COLUMN_TYPE: "char(64)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: "ascii"},
-                {TABLE_NAME: "BuilderImportReceipts", COLUMN_NAME: "ResultPayload", COLUMN_TYPE: "json", IS_NULLABLE: "NO", CHARACTER_SET_NAME: "utf8mb4"},
-                {TABLE_NAME: "BuilderProfiles", COLUMN_NAME: "ActiveNameHash", COLUMN_TYPE: "binary(32)", IS_NULLABLE: "YES", CHARACTER_SET_NAME: null},
-                {TABLE_NAME: "BuilderProfiles", COLUMN_NAME: "DeletedOn", COLUMN_TYPE: "datetime", IS_NULLABLE: "YES", CHARACTER_SET_NAME: null},
-                {TABLE_NAME: "BuilderProfiles", COLUMN_NAME: "Payload", COLUMN_TYPE: "mediumtext", IS_NULLABLE: "YES", CHARACTER_SET_NAME: "utf8mb4"},
-                {TABLE_NAME: "BuilderProfiles", COLUMN_NAME: "PayloadBytes", COLUMN_TYPE: "int", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null}
+                {TABLE_NAME: "AccountPreferences", COLUMN_NAME: "DocumentVersion", COLUMN_TYPE: "int(11)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: "1", EXTRA: ""},
+                {TABLE_NAME: "AccountPreferences", COLUMN_NAME: "Payload", COLUMN_TYPE: "json", IS_NULLABLE: "NO", CHARACTER_SET_NAME: "utf8mb4", COLUMN_DEFAULT: null, EXTRA: ""},
+                {TABLE_NAME: "AccountPreferences", COLUMN_NAME: "Revision", COLUMN_TYPE: "bigint(20)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: "1", EXTRA: ""},
+                {TABLE_NAME: "AccountPreferences", COLUMN_NAME: "StorageGeneration", COLUMN_TYPE: "bigint(20)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: "1", EXTRA: ""},
+                {TABLE_NAME: "BuilderImportReceipts", COLUMN_NAME: "Id", COLUMN_TYPE: "bigint(20)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: null, EXTRA: "auto_increment"},
+                {TABLE_NAME: "BuilderImportReceipts", COLUMN_NAME: "IdempotencyKey", COLUMN_TYPE: "char(64)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: "ascii", COLUMN_DEFAULT: null, EXTRA: ""},
+                {TABLE_NAME: "BuilderImportReceipts", COLUMN_NAME: "ResultPayload", COLUMN_TYPE: "json", IS_NULLABLE: "NO", CHARACTER_SET_NAME: "utf8mb4", COLUMN_DEFAULT: null, EXTRA: ""},
+                {TABLE_NAME: "BuilderProfiles", COLUMN_NAME: "ActiveNameHash", COLUMN_TYPE: "binary(32)", IS_NULLABLE: "YES", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: null, EXTRA: ""},
+                {TABLE_NAME: "BuilderProfiles", COLUMN_NAME: "DeletedOn", COLUMN_TYPE: "datetime", IS_NULLABLE: "YES", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: null, EXTRA: ""},
+                {TABLE_NAME: "BuilderProfiles", COLUMN_NAME: "Id", COLUMN_TYPE: "bigint(20)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: null, EXTRA: "auto_increment"},
+                {TABLE_NAME: "BuilderProfiles", COLUMN_NAME: "Payload", COLUMN_TYPE: "mediumtext", IS_NULLABLE: "YES", CHARACTER_SET_NAME: "utf8mb4", COLUMN_DEFAULT: null, EXTRA: ""},
+                {TABLE_NAME: "BuilderProfiles", COLUMN_NAME: "PayloadBytes", COLUMN_TYPE: "int(11)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: "0", EXTRA: ""},
+                {TABLE_NAME: "BuilderProfiles", COLUMN_NAME: "Revision", COLUMN_TYPE: "bigint(20)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: "1", EXTRA: ""}
             ]
         );
         assert.deepEqual(

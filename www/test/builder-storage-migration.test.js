@@ -46,6 +46,15 @@ const EXPECTED_TABLES = {
     }
 };
 
+const COLUMN_DEFAULTS = {
+    "BuilderProfiles.PayloadBytes": "0",
+    "BuilderProfiles.Revision": "1",
+    "AccountPreferences.DocumentVersion": "1",
+    "AccountPreferences.Revision": "1",
+    "AccountPreferences.StorageGeneration": "1"
+};
+const AUTO_INCREMENT_COLUMNS = new Set(["BuilderProfiles.Id", "BuilderImportReceipts.Id"]);
+
 function createSchemaContext({tables = [], mutateSchema} = {}) {
     const schemas = new Map(tables.map((tableName) => [tableName, schemaFromExpectation(tableName)]));
     if (mutateSchema)
@@ -76,9 +85,7 @@ function createSchemaContext({tables = [], mutateSchema} = {}) {
 function schemaFromExpectation(tableName) {
     const expected = EXPECTED_TABLES[tableName];
     return {
-        columns: expected.columns.map(([COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, CHARACTER_SET_NAME]) => ({
-            COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, CHARACTER_SET_NAME
-        })),
+        columns: expected.columns.map((column) => expectedColumnMetadata(tableName, column)),
         indexes: expected.indexes.map(([INDEX_NAME, NON_UNIQUE, COLUMN_NAME], index) => ({
             INDEX_NAME, NON_UNIQUE, COLUMN_NAME,
             SEQ_IN_INDEX: expected.indexes.slice(0, index).filter((item) => item[0] === INDEX_NAME).length + 1
@@ -87,6 +94,22 @@ function schemaFromExpectation(tableName) {
             CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
         ]) => ({CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME}))
     };
+}
+
+function expectedColumnMetadata(tableName, [COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, CHARACTER_SET_NAME]) {
+    const key = `${tableName}.${COLUMN_NAME}`;
+    return {
+        COLUMN_NAME,
+        COLUMN_TYPE: mysql57ColumnType(COLUMN_TYPE),
+        IS_NULLABLE,
+        CHARACTER_SET_NAME,
+        COLUMN_DEFAULT: COLUMN_DEFAULTS[key] || null,
+        EXTRA: AUTO_INCREMENT_COLUMNS.has(key) ? "auto_increment" : ""
+    };
+}
+
+function mysql57ColumnType(type) {
+    return {bigint: "bigint(20)", int: "int(11)", smallint: "smallint(6)"}[type] || type;
 }
 
 function parseTableDefinition(sql) {
@@ -120,10 +143,12 @@ function parseTableDefinition(sql) {
                 throw new Error(`Unexpected table DDL entry: ${entry}`);
             const [, COLUMN_NAME, type, rest] = column;
             columns.push({
-                COLUMN_NAME, COLUMN_TYPE: type.toLowerCase(),
+                COLUMN_NAME, COLUMN_TYPE: mysql57ColumnType(type.toLowerCase()),
                 IS_NULLABLE: rest.includes("NOT NULL") ? "NO" : "YES",
                 CHARACTER_SET_NAME: rest.includes("CHARACTER SET ascii") ? "ascii" :
-                    ["TEXT", "MEDIUMTEXT", "JSON"].includes(type) ? "utf8mb4" : null
+                    ["TEXT", "MEDIUMTEXT", "JSON"].includes(type) ? "utf8mb4" : null,
+                COLUMN_DEFAULT: /DEFAULT (\S+)/.exec(rest)?.[1] || null,
+                EXTRA: rest.includes("AUTO_INCREMENT") ? "auto_increment" : ""
             });
         }
     }
@@ -151,11 +176,9 @@ test("storage migration produces the required MySQL 5.7 table contracts", async 
 
     for (const [tableName, expected] of Object.entries(EXPECTED_TABLES)) {
         assert.deepEqual(await context.query("test columns", `
-            SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, CHARACTER_SET_NAME
+            SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, CHARACTER_SET_NAME, COLUMN_DEFAULT, EXTRA
             FROM information_schema.columns WHERE TABLE_NAME = '${tableName}'
-        `), expected.columns.map(([COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, CHARACTER_SET_NAME]) => ({
-            COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, CHARACTER_SET_NAME
-        })));
+        `), expected.columns.map((column) => expectedColumnMetadata(tableName, column)));
         assert.deepEqual(await context.query("test indexes", `
             SELECT INDEX_NAME, NON_UNIQUE, COLUMN_NAME, SEQ_IN_INDEX
             FROM information_schema.statistics WHERE TABLE_NAME = '${tableName}'
@@ -184,4 +207,78 @@ test("storage migration verification rejects a missing active-name uniqueness ke
     });
 
     assert.equal(await migration.verify(context), false);
+});
+
+test("storage migration verification accepts MySQL 5.7 integer display widths", async function() {
+    const context = createSchemaContext({
+        tables: Object.keys(EXPECTED_TABLES),
+        mutateSchema: function(schemas) {
+            for (const schema of schemas.values()) {
+                for (const column of schema.columns) {
+                    column.COLUMN_TYPE = {
+                        bigint: "bigint(20)",
+                        int: "int(11)",
+                        smallint: "smallint(6)"
+                    }[column.COLUMN_TYPE] || column.COLUMN_TYPE;
+                }
+            }
+        }
+    });
+
+    assert.equal(await migration.verify(context), true);
+});
+
+test("storage migration verification rejects an incorrect column default", async function() {
+    const context = createSchemaContext({
+        tables: Object.keys(EXPECTED_TABLES),
+        mutateSchema: function(schemas) {
+            schemas.get("BuilderProfiles").columns.find(
+                (column) => column.COLUMN_NAME === "PayloadBytes"
+            ).COLUMN_DEFAULT = "1";
+        }
+    });
+
+    assert.equal(await migration.verify(context), false);
+});
+
+test("storage migration verification rejects a missing auto-increment column property", async function() {
+    const context = createSchemaContext({
+        tables: Object.keys(EXPECTED_TABLES),
+        mutateSchema: function(schemas) {
+            schemas.get("BuilderProfiles").columns.find(
+                (column) => column.COLUMN_NAME === "Id"
+            ).EXTRA = "";
+        }
+    });
+
+    assert.equal(await migration.verify(context), false);
+});
+
+test("storage migration verification rejects unexpected columns and indexes", async function(t) {
+    await t.test("column", async function() {
+        const context = createSchemaContext({
+            tables: Object.keys(EXPECTED_TABLES),
+            mutateSchema: function(schemas) {
+                schemas.get("AccountPreferences").columns.push({
+                    COLUMN_NAME: "Unexpected", COLUMN_TYPE: "int", IS_NULLABLE: "YES",
+                    CHARACTER_SET_NAME: null
+                });
+            }
+        });
+
+        assert.equal(await migration.verify(context), false);
+    });
+
+    await t.test("index", async function() {
+        const context = createSchemaContext({
+            tables: Object.keys(EXPECTED_TABLES),
+            mutateSchema: function(schemas) {
+                schemas.get("AccountPreferences").indexes.push({
+                    INDEX_NAME: "IX_Unexpected", NON_UNIQUE: 1, COLUMN_NAME: "UpdatedOn", SEQ_IN_INDEX: 1
+                });
+            }
+        });
+
+        assert.equal(await migration.verify(context), false);
+    });
 });

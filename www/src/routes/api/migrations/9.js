@@ -22,15 +22,15 @@ const TABLES = {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         `,
         columns: [
-            {name: "Id", type: "bigint", nullable: "NO"},
+            {name: "Id", type: "bigint", nullable: "NO", autoIncrement: true},
             {name: "PublicId", type: "char(36)", nullable: "NO", characterSet: "ascii"},
             {name: "MemberId", type: "int", nullable: "NO"},
             {name: "Name", type: "text", nullable: "NO", characterSet: "utf8mb4"},
             {name: "ActiveNameHash", type: "binary(32)", nullable: "YES"},
             {name: "Payload", type: "mediumtext", nullable: "YES", characterSet: "utf8mb4"},
             {name: "PayloadVersion", type: "smallint", nullable: "YES"},
-            {name: "PayloadBytes", type: "int", nullable: "NO"},
-            {name: "Revision", type: "bigint", nullable: "NO"},
+            {name: "PayloadBytes", type: "int", nullable: "NO", defaultValue: "0"},
+            {name: "Revision", type: "bigint", nullable: "NO", defaultValue: "1"},
             {name: "CreatedOn", type: "datetime", nullable: "NO"},
             {name: "UpdatedOn", type: "datetime", nullable: "NO"},
             {name: "DeletedOn", type: "datetime", nullable: "YES"}
@@ -58,10 +58,10 @@ const TABLES = {
         `,
         columns: [
             {name: "MemberId", type: "int", nullable: "NO"},
-            {name: "DocumentVersion", type: "int", nullable: "NO"},
+            {name: "DocumentVersion", type: "int", nullable: "NO", defaultValue: "1"},
             {name: "Payload", type: "json", nullable: "NO", characterSet: "utf8mb4"},
-            {name: "Revision", type: "bigint", nullable: "NO"},
-            {name: "StorageGeneration", type: "bigint", nullable: "NO"},
+            {name: "Revision", type: "bigint", nullable: "NO", defaultValue: "1"},
+            {name: "StorageGeneration", type: "bigint", nullable: "NO", defaultValue: "1"},
             {name: "UpdatedOn", type: "datetime", nullable: "NO"}
         ],
         indexes: [{name: "PRIMARY", unique: 0, columns: ["MemberId"]}],
@@ -82,7 +82,7 @@ const TABLES = {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         `,
         columns: [
-            {name: "Id", type: "bigint", nullable: "NO"},
+            {name: "Id", type: "bigint", nullable: "NO", autoIncrement: true},
             {name: "MemberId", type: "int", nullable: "NO"},
             {name: "IdempotencyKey", type: "char(64)", nullable: "NO", characterSet: "ascii"},
             {name: "ResultPayload", type: "json", nullable: "NO", characterSet: "utf8mb4"},
@@ -137,19 +137,16 @@ async function tableColumnsMatch(query, tableName, expectedColumns) {
     const columns = await query(
         `inspect ${tableName} columns`,
         `
-            SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, CHARACTER_SET_NAME
+            SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, CHARACTER_SET_NAME, COLUMN_DEFAULT, EXTRA
             FROM information_schema.columns
             WHERE TABLE_SCHEMA = DATABASE()
                 AND TABLE_NAME = '${tableName}'
         `
     );
-    return expectedColumns.every(function(expected) {
-        const column = columns.find((candidate) => candidate.COLUMN_NAME === expected.name);
-        return column &&
-            column.COLUMN_TYPE === expected.type &&
-            column.IS_NULLABLE === expected.nullable &&
-            (expected.characterSet === undefined || column.CHARACTER_SET_NAME === expected.characterSet);
-    });
+    const expectedSignatures = expectedColumns.map(columnSignature).sort();
+    const actualSignatures = columns.map(columnSignature).sort();
+    return actualSignatures.length === expectedSignatures.length &&
+        actualSignatures.every((signature, index) => signature === expectedSignatures[index]);
 }
 
 async function tableIndexesMatch(query, tableName, expectedIndexes) {
@@ -163,17 +160,45 @@ async function tableIndexesMatch(query, tableName, expectedIndexes) {
             ORDER BY INDEX_NAME, SEQ_IN_INDEX
         `
     );
-    return expectedIndexes.every(function(expected) {
-        const actual = indexes
-            .filter((index) => index.INDEX_NAME === expected.name)
-            .sort((left, right) => left.SEQ_IN_INDEX - right.SEQ_IN_INDEX);
-        return actual.length === expected.columns.length &&
-            actual.every(function(index, position) {
-                return index.NON_UNIQUE === expected.unique &&
-                    index.COLUMN_NAME === expected.columns[position] &&
-                    index.SEQ_IN_INDEX === position + 1;
+    const expectedSignatures = expectedIndexes.flatMap(function(expected) {
+        return expected.columns.map(function(column, position) {
+            return indexSignature({
+                INDEX_NAME: expected.name,
+                NON_UNIQUE: expected.unique,
+                COLUMN_NAME: column,
+                SEQ_IN_INDEX: position + 1
             });
-    });
+        });
+    }).sort();
+    const actualSignatures = indexes.map(indexSignature).sort();
+    return actualSignatures.length === expectedSignatures.length &&
+        actualSignatures.every((signature, index) => signature === expectedSignatures[index]);
+}
+
+function columnSignature(column) {
+    return [
+        column.COLUMN_NAME || column.name,
+        normalizeIntegerDisplayWidth(column.COLUMN_TYPE || column.type),
+        column.IS_NULLABLE || column.nullable,
+        column.CHARACTER_SET_NAME === undefined ? column.characterSet || null : column.CHARACTER_SET_NAME,
+        normalizeColumnDefault(column.COLUMN_DEFAULT === undefined ? column.defaultValue : column.COLUMN_DEFAULT),
+        column.EXTRA === undefined ? column.autoIncrement ? "auto_increment" : "" : column.EXTRA
+    ].join("|");
+}
+
+function indexSignature(index) {
+    return [index.INDEX_NAME, index.NON_UNIQUE, index.SEQ_IN_INDEX, index.COLUMN_NAME].join("|");
+}
+
+function normalizeIntegerDisplayWidth(type) {
+    return type.replace(
+        /^(tinyint|smallint|mediumint|int|bigint)\(\d+\)( unsigned)?$/,
+        "$1$2"
+    );
+}
+
+function normalizeColumnDefault(value) {
+    return value === null || value === undefined ? null : String(value);
 }
 
 async function foreignKeyMatches(query, tableName, expected) {
