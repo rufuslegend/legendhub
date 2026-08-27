@@ -3,6 +3,8 @@
 All notable user-facing changes to LegendHUB are documented here beginning
 with version 2.6.0.
 
+## [3.1.0-beta] - 2026-08-26
+
 ## [3.0.0] - 2026-08-26
 
 ### Changed
