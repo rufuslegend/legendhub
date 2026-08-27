@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-26
 
-**Status:** Approved in conversation; awaiting written-spec review
+**Status:** Approved; implementation planned
 
 **Target:** LegendHUB 3.1.0
 
