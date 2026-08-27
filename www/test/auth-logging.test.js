@@ -106,3 +106,20 @@ test("session token database failures expose only the generic invalid-token erro
         error => error.message === "Invalid token" && !error.message.includes(rawToken)
     );
 });
+
+// Catches permission-query driver diagnostics crossing authToken/authApi's
+// forwarded rejection boundary into a public GraphQL error.
+test("permission lookup failures expose only a stable generic error", async function() {
+    const privateDiagnostic = "permission SQL failed near private table metadata";
+    const auth = loadAuthApi({
+        query: function(sql, values, callback) {
+            callback({sqlMessage: privateDiagnostic});
+        }
+    });
+
+    await assert.rejects(
+        auth.utils.getPermissions(73),
+        error => error.message === "Unable to load permissions." &&
+            !error.message.includes(privateDiagnostic)
+    );
+});

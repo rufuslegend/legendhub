@@ -80,6 +80,15 @@ function mysqlWithMembers(members) {
         queries,
         query: function(sql, values, callback) {
             queries.push({sql, values});
+            if (sql.includes("FROM Members") && sql.includes("NormalizedEmail") &&
+                sql.includes("Username = ?")) {
+                const usernameMatches = members.filter(member => member.Username === values[0]);
+                const emailMatches = members.filter(member =>
+                    member.NormalizedEmail === values[1] && member.EmailVerifiedOn &&
+                    !usernameMatches.includes(member));
+                callback(null, [...usernameMatches, ...emailMatches].slice(0, 1));
+                return;
+            }
             if (sql.includes("FROM Members") && sql.includes("NormalizedEmail")) {
                 callback(null, members.filter(member =>
                     member.NormalizedEmail === values[0] && member.EmailVerifiedOn));
@@ -277,8 +286,35 @@ test("login accepts a verified normalized email but rejects pending email", asyn
     assert.equal(identityQueries.every(({sql}) =>
         sql.includes("EmailVerifiedOn IS NOT NULL") && !sql.includes("PendingNormalizedEmail")), true);
     assert.deepEqual(identityQueries.map(({values}) => values), [
-        ["player@example.com"], ["pending@example.com"]
+        ["PLAYER@EXAMPLE.COM", "player@example.com", "PLAYER@EXAMPLE.COM"],
+        ["pending@example.com", "pending@example.com", "pending@example.com"]
     ]);
+});
+
+// Catches omitted or non-string GraphQL passwords reaching bcrypt inside an
+// asynchronous MySQL callback, where they can throw and disclose account state.
+test("login rejects a missing or non-string password generically before querying", async function() {
+    const passwords = require("../src/routes/api/php-password");
+    for (const password of [undefined, null, 7, {}]) {
+        let queryCount = 0;
+        const auth = loadAuthApi({
+            query: function(sql, values, callback) {
+                queryCount += 1;
+                callback(null, [{
+                    Id: 7,
+                    Username: "Player",
+                    Password: passwords.hash("correct-password"),
+                    Banned: 0
+                }]);
+            }
+        }, {register: async () => ({registered: true})});
+
+        await assert.rejects(
+            auth.utils.authLogin("Player", password, false, "ip-hash"),
+            error => error.message === "Invalid username or password."
+        );
+        assert.equal(queryCount, 0);
+    }
 });
 
 // Catches locked-account enumeration through a credential-dependent public
@@ -324,6 +360,56 @@ test("username login remains valid for a grandfathered member without email", as
     assert.deepEqual(lookup.values, ["LegacyPlayer"]);
 });
 
+// Catches routing every @ identity exclusively to normalized email, which
+// would lock out a grandfathered account whose exact username contains @.
+test("an @ identity prefers an exact legacy username over verified email only", async function() {
+    const passwords = require("../src/routes/api/php-password");
+    const password = "correct-password";
+    const mysql = mysqlWithMembers([{
+        Id: 81,
+        Username: "Legacy@Player",
+        NormalizedEmail: null,
+        EmailVerifiedOn: null,
+        Password: passwords.hash(password),
+        Banned: 0
+    }, {
+        Id: 82,
+        Username: "DifferentPlayer",
+        NormalizedEmail: "legacy@player",
+        EmailVerifiedOn: new Date("2026-08-26T00:00:00Z"),
+        Password: passwords.hash("different-password"),
+        Banned: 0
+    }, {
+        Id: 83,
+        Username: "UnverifiedPlayer",
+        NormalizedEmail: "unverified@example.com",
+        PendingNormalizedEmail: "pending@example.com",
+        EmailVerifiedOn: null,
+        Password: passwords.hash(password),
+        Banned: 0
+    }]);
+    const auth = loadAuthApi(mysql, {register: async () => ({registered: true})});
+
+    assert.ok(await auth.utils.authLogin(
+        "Legacy@Player", password, false, "ip-hash"));
+    for (const identity of ["unverified@example.com", "pending@example.com"]) {
+        await assert.rejects(
+            auth.utils.authLogin(identity, password, false, "ip-hash"),
+            error => error.message === "Invalid username or password."
+        );
+    }
+
+    const lookups = mysql.queries.filter(({sql}) => sql.includes("FROM Members"));
+    assert.equal(lookups.every(({sql}) =>
+        sql.includes("Username = ?") &&
+        sql.includes("NormalizedEmail = ? AND EmailVerifiedOn IS NOT NULL") &&
+        /ORDER BY[\s\S]+Username = \?/i.test(sql) &&
+        /LIMIT 1/i.test(sql)), true);
+    assert.deepEqual(lookups[0].values, [
+        "Legacy@Player", "legacy@player", "Legacy@Player"
+    ]);
+});
+
 // Catches removing the legacy GraphQL username argument or letting it override
 // the new identity argument when both are supplied by an older/newer client mix.
 test("GraphQL login resolves identity first and retains optional username compatibility", async function() {
@@ -348,7 +434,9 @@ test("GraphQL login resolves identity first and retains optional username compat
         stayLoggedIn: false
     }, {headers: {"x-forwarded-for": "192.0.2.7"}}));
     assert.deepEqual(mysql.queries.find(({sql}) =>
-        sql.includes("FROM Members")).values, ["player@example.com"]);
+        sql.includes("FROM Members")).values, [
+        "PLAYER@example.com", "player@example.com", "PLAYER@example.com"
+    ]);
 });
 
 // Catches the GraphQL adapter omitting required registration email or storing
@@ -385,4 +473,30 @@ test("registration GraphQL adapter requires email and delegates an unverified ac
     assert.equal(passwords.verify("long-password", registrationInput.passwordHash), true);
     assert.equal(mysql.queries.length, 0,
         "the service owns transactional registration database work");
+});
+
+// Catches measuring a stripped username while persisting the original value,
+// which can create new accounts that the login identity router cannot reach.
+test("registration rejects non-alphanumeric usernames before service storage", async function(t) {
+    let registrations = 0;
+    const auth = loadAuthApi(mysqlWithMembers([]), {
+        register: async function() {
+            registrations += 1;
+            return {registered: true};
+        }
+    });
+    t.mock.method(global, "fetch", async function() {
+        return {json: async () => ({success: true})};
+    });
+
+    for (const username of ["Player Name", "Player@Name", "Player-Name", " Player"]) {
+        const result = await auth.mutationFields.register.resolve(null, {
+            username,
+            email: "player@example.com",
+            password: "long-password",
+            recaptcha: "ok"
+        }, {headers: {"x-forwarded-for": "192.0.2.7"}});
+        assert.equal(result.message, "Username may contain only letters and numbers.");
+    }
+    assert.equal(registrations, 0);
 });

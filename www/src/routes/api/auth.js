@@ -27,18 +27,25 @@ let getIPFromRequest = function(request) {
 let authLogin = function(identity, password, stayLoggedIn, ip) {
     if (apiUtils.isIPBlocked(ip))
         return new gql.GraphQLError("Too many failed attempts. Try again later.");
+    if (typeof password !== "string")
+        return Promise.reject(new gql.GraphQLError("Invalid username or password."));
 
     const trimmedIdentity = typeof identity === "string" ? identity.trim() : "";
     const emailIdentity = trimmedIdentity.includes("@");
-    const lookupValue = emailIdentity ? trimmedIdentity.toLowerCase() : trimmedIdentity;
     const lookup = emailIdentity
         ? `SELECT Id, Password, Banned FROM Members
-            WHERE NormalizedEmail = ? AND EmailVerifiedOn IS NOT NULL`
+            WHERE Username = ?
+                OR (NormalizedEmail = ? AND EmailVerifiedOn IS NOT NULL)
+            ORDER BY CASE WHEN Username = ? THEN 0 ELSE 1 END
+            LIMIT 1`
         : "SELECT Id, Password, Banned FROM Members WHERE Username = ?";
+    const lookupValues = emailIdentity
+        ? [trimmedIdentity, trimmedIdentity.toLowerCase(), trimmedIdentity]
+        : [trimmedIdentity];
 
     return new Promise(function(resolve, reject) {
         mysql.query(lookup,
-            [lookupValue],
+            lookupValues,
             function(error, results, fields) {
                 if (error) {
                     reject(new gql.GraphQLError("Invalid username or password."));
@@ -234,7 +241,7 @@ let getPermissions = function(memberId) {
             [memberId],
             function(error, results, fields) {
                 if (error) {
-                    reject(new gql.GraphQLError(error.sqlMessage));
+                    reject(new gql.GraphQLError("Unable to load permissions."));
                     return;
                 }
 
@@ -287,12 +294,11 @@ let register = async function(username, email, password, recaptcha, ip) {
         return new gql.GraphQLError("reCAPTCHA failed.");
     }
 
-    let cleanUsername = typeof username === "string"
-        ? username.replace(/[^A-Za-z0-9]*/g, "")
-        : "";
-    if (cleanUsername.toLowerCase() === "dataimport")
+    if (typeof username !== "string" || !/^[A-Za-z0-9]+$/.test(username))
+        return new gql.GraphQLError("Username may contain only letters and numbers.");
+    if (username.toLowerCase() === "dataimport")
         return new gql.GraphQLError("Username taken.");
-    if (cleanUsername.length < 5 || cleanUsername.length > 25)
+    if (username.length < 5 || username.length > 25)
         return new gql.GraphQLError("Username must be between 5 and 25 characters.");
     if (typeof password !== "string" || password.length < 8)
         return new gql.GraphQLError("Password must be larger than 8 characters.");
