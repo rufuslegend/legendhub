@@ -269,8 +269,18 @@ async function ensureStorageNamespace(executor, member) {
     return assigned;
 }
 
+let authenticate = function(req, token, {
+    renew = false,
+    permissions = false
+} = {}) {
+    return authApi(req, token, permissions, renew);
+};
+
 let authMutation = function(req, token, shouldGetPermissions) {
-    return authApi(req, token, shouldGetPermissions, true);
+    return authenticate(req, token, {
+        renew: true,
+        permissions: Boolean(shouldGetPermissions)
+    });
 };
 
 let changePassword = async function(req, token, currentPassword, newPassword) {
@@ -340,7 +350,10 @@ let changePassword = async function(req, token, currentPassword, newPassword) {
 };
 
 let authQuery = function(req, token, shouldGetPermissions) {
-    return authApi(req, token, shouldGetPermissions, false);
+    return authenticate(req, token, {
+        renew: false,
+        permissions: Boolean(shouldGetPermissions)
+    });
 };
 
 let authApi = function(req, token, shouldGetPermissions, renew) {
@@ -544,6 +557,7 @@ module.exports.utils = {
     getIPFromRequest,
     authLogin,
     authToken,
+    authenticate,
     authQuery,
     authMutation,
     changePassword,

@@ -289,6 +289,23 @@ test("session authentication lazily assigns a rollback-created storage namespace
     assert.equal(assignment, true, "lazy assignment neither rotates the session nor opens renewal");
 });
 
+// Catches the storage authentication entry point inheriting mutation-style
+// renewal by default, while preserving the verified-email and namespace data
+// needed to authorize account storage.
+test("authenticate defaults to a validated non-renewing storage session", async function() {
+    const mysql = mysqlWithAuthToken();
+    const auth = loadAuthApi(mysql, {register: async () => ({registered: true})});
+
+    const result = await auth.utils.authenticate({ip: "192.0.2.73"}, mysql.token);
+
+    assert.equal(result.memberId, 73);
+    assert.equal(result.emailVerified, true);
+    assert.equal(result.storageNamespace, "member-73");
+    assert.equal(result.token, mysql.token);
+    assert.deepEqual(mysql.authTokenWrites, []);
+    assert.deepEqual(mysql.transactionEvents, []);
+});
+
 function addTransactionSupport(database) {
     database.getConnection = function(callback) {
         callback(null, {
