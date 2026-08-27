@@ -146,3 +146,129 @@ test("non-transactional migrations recover from a partially committed DDL attemp
         await end(pool);
     }
 });
+
+test("email migration reaches its verified schema state and can recover on a second run", {
+    skip: !enabled
+}, async function() {
+    const database = process.env.MYSQL_MIGRATION_TEST_DATABASE;
+    if (!database || !database.endsWith("_migration_test"))
+        throw new Error("MYSQL_MIGRATION_TEST_DATABASE must name a dedicated *_migration_test database");
+
+    const pool = mysql.createPool({
+        connectionLimit: 1,
+        host: process.env.MYSQL_HOST,
+        port: process.env.MYSQL_PORT,
+        user: process.env.MYSQL_USER,
+        password: process.env.MYSQL_PASSWORD,
+        database,
+        multipleStatements: true
+    });
+    const migrations = createMigrationRunner({
+        pool,
+        lockTimeoutSeconds: 0,
+        migrationsDirectory: path.join(__dirname, "..", "src", "routes", "api", "migrations"),
+        log: {info: function() {}}
+    });
+
+    try {
+        await query(
+            pool,
+            `
+                DROP TABLE IF EXISTS AccountActionTokens;
+                DROP TABLE IF EXISTS AccountActionAttempts;
+                DROP TABLE IF EXISTS Members;
+                DROP TABLE IF EXISTS MigrationRuns;
+                DROP TABLE IF EXISTS Migrations;
+                CREATE TABLE Members (
+                    Id INT NOT NULL,
+                    Username VARCHAR(64) NOT NULL,
+                    PRIMARY KEY (Id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                INSERT INTO Members (Id, Username) VALUES (1, 'ExistingMember');
+                CREATE TABLE Migrations (
+                    Id INT NOT NULL,
+                    Name VARCHAR(255) NOT NULL,
+                    RunOn DATE NOT NULL,
+                    PRIMARY KEY (Id)
+                ) ENGINE=InnoDB;
+                INSERT INTO Migrations (Id, Name, RunOn) VALUES
+                    (1, 'legacy', CURDATE()), (2, 'legacy', CURDATE()),
+                    (3, 'legacy', CURDATE()), (4, 'legacy', CURDATE()),
+                    (5, 'legacy', CURDATE()), (6, 'legacy', CURDATE()),
+                    (7, 'legacy', CURDATE());
+            `
+        );
+
+        await migrations.up();
+
+        const columns = await query(
+            pool,
+            `
+                SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, CHARACTER_SET_NAME
+                FROM information_schema.columns
+                WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME = 'Members'
+                    AND COLUMN_NAME IN (
+                        'Email', 'NormalizedEmail', 'EmailVerifiedOn',
+                        'PendingEmail', 'PendingNormalizedEmail', 'StorageNamespace'
+                    )
+                ORDER BY COLUMN_NAME
+            `
+        );
+        assert.deepEqual(columns, [
+            {COLUMN_NAME: "Email", COLUMN_TYPE: "varchar(254)", IS_NULLABLE: "YES", CHARACTER_SET_NAME: "utf8mb4"},
+            {COLUMN_NAME: "EmailVerifiedOn", COLUMN_TYPE: "datetime", IS_NULLABLE: "YES", CHARACTER_SET_NAME: null},
+            {COLUMN_NAME: "NormalizedEmail", COLUMN_TYPE: "varchar(254)", IS_NULLABLE: "YES", CHARACTER_SET_NAME: "utf8mb4"},
+            {COLUMN_NAME: "PendingEmail", COLUMN_TYPE: "varchar(254)", IS_NULLABLE: "YES", CHARACTER_SET_NAME: "utf8mb4"},
+            {COLUMN_NAME: "PendingNormalizedEmail", COLUMN_TYPE: "varchar(254)", IS_NULLABLE: "YES", CHARACTER_SET_NAME: "utf8mb4"},
+            {COLUMN_NAME: "StorageNamespace", COLUMN_TYPE: "char(32)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: "ascii"}
+        ]);
+        const indexes = await query(
+            pool,
+            `
+                SELECT INDEX_NAME, NON_UNIQUE, COLUMN_NAME
+                FROM information_schema.statistics
+                WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME = 'Members'
+                    AND INDEX_NAME IN (
+                        'UX_Members_NormalizedEmail',
+                        'UX_Members_PendingNormalizedEmail',
+                        'UX_Members_StorageNamespace'
+                    )
+                ORDER BY INDEX_NAME
+            `
+        );
+        assert.deepEqual(indexes, [
+            {INDEX_NAME: "UX_Members_NormalizedEmail", NON_UNIQUE: 0, COLUMN_NAME: "NormalizedEmail"},
+            {INDEX_NAME: "UX_Members_PendingNormalizedEmail", NON_UNIQUE: 0, COLUMN_NAME: "PendingNormalizedEmail"},
+            {INDEX_NAME: "UX_Members_StorageNamespace", NON_UNIQUE: 0, COLUMN_NAME: "StorageNamespace"}
+        ]);
+        assert.deepEqual(
+            await query(
+                pool,
+                `
+                    SELECT TABLE_NAME
+                    FROM information_schema.tables
+                    WHERE TABLE_SCHEMA = DATABASE()
+                        AND TABLE_NAME IN ('AccountActionTokens', 'AccountActionAttempts')
+                    ORDER BY TABLE_NAME
+                `
+            ),
+            [{TABLE_NAME: "AccountActionAttempts"}, {TABLE_NAME: "AccountActionTokens"}]
+        );
+        assert.deepEqual(
+            await query(pool, "SELECT COUNT(*) AS NullStorageNamespaces FROM Members WHERE StorageNamespace IS NULL"),
+            [{NullStorageNamespaces: 0}]
+        );
+
+        await query(
+            pool,
+            "DELETE FROM MigrationRuns WHERE MigrationId = 8; DELETE FROM Migrations WHERE Id = 8"
+        );
+        await migrations.up();
+        assert.deepEqual(await query(pool, "SELECT Id FROM Migrations WHERE Id = 8"), [{Id: 8}]);
+    }
+    finally {
+        await end(pool);
+    }
+});
