@@ -180,11 +180,12 @@ test("email migration reaches its verified schema state and can recover on a sec
                 DROP TABLE IF EXISTS MigrationRuns;
                 DROP TABLE IF EXISTS Migrations;
                 CREATE TABLE Members (
-                    Id INT NOT NULL,
+                    Id INT NOT NULL AUTO_INCREMENT,
                     Username VARCHAR(64) NOT NULL,
+                    Password VARCHAR(255) NOT NULL,
                     PRIMARY KEY (Id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-                INSERT INTO Members (Id, Username) VALUES (1, 'ExistingMember');
+                INSERT INTO Members (Username, Password) VALUES ('ExistingMember', 'legacy-hash');
                 CREATE TABLE Migrations (
                     Id INT NOT NULL,
                     Name VARCHAR(255) NOT NULL,
@@ -221,7 +222,7 @@ test("email migration reaches its verified schema state and can recover on a sec
             {COLUMN_NAME: "NormalizedEmail", COLUMN_TYPE: "varchar(254)", IS_NULLABLE: "YES", CHARACTER_SET_NAME: "utf8mb4"},
             {COLUMN_NAME: "PendingEmail", COLUMN_TYPE: "varchar(254)", IS_NULLABLE: "YES", CHARACTER_SET_NAME: "utf8mb4"},
             {COLUMN_NAME: "PendingNormalizedEmail", COLUMN_TYPE: "varchar(254)", IS_NULLABLE: "YES", CHARACTER_SET_NAME: "utf8mb4"},
-            {COLUMN_NAME: "StorageNamespace", COLUMN_TYPE: "char(32)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: "ascii"}
+            {COLUMN_NAME: "StorageNamespace", COLUMN_TYPE: "char(32)", IS_NULLABLE: "YES", CHARACTER_SET_NAME: "ascii"}
         ]);
         const indexes = await query(
             pool,
@@ -259,6 +260,15 @@ test("email migration reaches its verified schema state and can recover on a sec
         assert.deepEqual(
             await query(pool, "SELECT COUNT(*) AS NullStorageNamespaces FROM Members WHERE StorageNamespace IS NULL"),
             [{NullStorageNamespaces: 0}]
+        );
+
+        await query(pool,
+            "INSERT INTO Members (Username, Password) VALUES ('RollbackMember', 'legacy-hash')");
+        assert.deepEqual(
+            await query(pool,
+                "SELECT StorageNamespace FROM Members WHERE Username = 'RollbackMember'"),
+            [{StorageNamespace: null}],
+            "the migrated schema retains the v3.0 registration insert contract"
         );
 
         await query(

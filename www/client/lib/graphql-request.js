@@ -12,11 +12,15 @@ export function redirectToUnauthorizedPage() {
 }
 
 function normalizeGraphQLError(error) {
-    return {
+    const normalized = {
         message: typeof error?.message === "string" && error.message
             ? error.message
             : "The request could not be completed."
     };
+    const code = error?.code ?? error?.extensions?.code;
+    if (typeof code === "number" || typeof code === "string")
+        normalized.code = code;
+    return normalized;
 }
 
 export async function graphqlRequest({query, variables, signal}) {
@@ -49,7 +53,8 @@ export async function graphqlRequest({query, variables, signal}) {
         throw new GraphQLRequestError("The server returned an invalid response.");
     if (Array.isArray(body.errors) && body.errors.length > 0) {
         if (body.errors.some(function(error) {
-            return error?.code === 401 || error?.code === 403;
+            const code = error?.code ?? error?.extensions?.code;
+            return code === 401 || code === 403;
         })) {
             redirectToUnauthorizedPage();
             throw new GraphQLRequestError("Authorization required.");

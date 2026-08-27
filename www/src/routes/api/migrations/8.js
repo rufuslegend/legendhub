@@ -28,7 +28,7 @@ const MEMBER_COLUMNS = [
         name: "StorageNamespace",
         definition: "CHAR(32) CHARACTER SET ascii NULL",
         type: "char(32)",
-        nullable: "NO",
+        nullable: "YES",
         characterSet: "ascii"
     }
 ];
@@ -91,14 +91,6 @@ exports.up = async function({query}) {
 
     await populateStorageNamespaces(query);
 
-    const storageNamespace = await readMemberColumn(query, "StorageNamespace");
-    if (storageNamespace && storageNamespace.IS_NULLABLE !== "NO") {
-        await query(
-            "require Members.StorageNamespace",
-            "ALTER TABLE Members MODIFY COLUMN StorageNamespace CHAR(32) CHARACTER SET ascii NOT NULL"
-        );
-    }
-
     for (const index of MEMBER_INDEXES) {
         if (!await memberIndexExists(query, index.name)) {
             await query(
@@ -137,12 +129,7 @@ exports.verify = async function({query}) {
             return false;
     }
 
-    const nullStorageNamespaces = await query(
-        "verify Members.StorageNamespace values",
-        "SELECT COUNT(*) AS NullStorageNamespaces FROM Members WHERE StorageNamespace IS NULL"
-    );
-    return nullStorageNamespaces.length === 1 &&
-        Number(nullStorageNamespaces[0].NullStorageNamespaces) === 0;
+    return true;
 };
 
 async function populateStorageNamespaces(query) {

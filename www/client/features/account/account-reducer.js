@@ -32,7 +32,8 @@ export function createInitialAccountState(notificationSettings, suppliedEmailSta
             canUseAccountStorage: Boolean(emailStatus.canUseAccountStorage),
             password: "",
             error: null,
-            announcement: null
+            announcement: null,
+            resendCooldownSeconds: 0
         }
     };
 }
@@ -241,8 +242,10 @@ export function accountReducer(state, action) {
                 }
             };
         case "email/resend-requested":
-            if (state.emailEditor.status === "resending")
+            if (state.emailEditor.status === "resending" ||
+                state.emailEditor.resendCooldownSeconds > 0) {
                 return state;
+            }
             return {
                 ...state,
                 emailEditor: {
@@ -261,7 +264,33 @@ export function accountReducer(state, action) {
                     status: "viewing",
                     password: "",
                     error: null,
-                    announcement: "verification-sent"
+                    announcement: "verification-sent",
+                    resendCooldownSeconds: 60
+                }
+            };
+        case "email/resend-rate-limited":
+            return {
+                ...state,
+                emailEditor: {
+                    ...state.emailEditor,
+                    status: "viewing",
+                    password: "",
+                    error: null,
+                    announcement: "resend-rate-limited",
+                    resendCooldownSeconds: 60
+                }
+            };
+        case "email/resend-cooldown-tick":
+            if (state.emailEditor.resendCooldownSeconds <= 0)
+                return state;
+            return {
+                ...state,
+                emailEditor: {
+                    ...state.emailEditor,
+                    resendCooldownSeconds: Math.max(
+                        0,
+                        state.emailEditor.resendCooldownSeconds - 1
+                    )
                 }
             };
         case "email/resend-failed":

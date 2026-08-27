@@ -122,7 +122,10 @@ test("password recovery GraphQL mutations delegate Boolean outcomes", async func
     assert.equal(String(resetField.args.token.type), "String!");
     assert.equal(String(resetField.args.newPassword.type), "String!");
 
-    const request = {headers: {"x-forwarded-for": "192.0.2.44"}};
+    const request = {
+        ip: "192.0.2.44",
+        headers: {"x-forwarded-for": "203.0.113.99"}
+    };
     assert.equal(await requestField.resolve(null, {
         identity: "player@example.com"
     }, request), true);
@@ -137,6 +140,25 @@ test("password recovery GraphQL mutations delegate Boolean outcomes", async func
         token: "selector-validator",
         newPassword: "replacement-password"
     }]]);
+});
+
+// Catches client-controlled forwarding headers bypassing the Express trust
+// boundary while retaining a direct-socket fallback for non-Express callers.
+test("request IP hashing uses trusted Express IP and ignores forwarding headers", function() {
+    const auth = loadAuthApi(mysqlWithMembers([]), {
+        register: async function() { return {registered: true}; }
+    });
+    const hash = value => crypto.createHash("sha1").update(value).digest("hex");
+
+    assert.equal(auth.utils.getIPFromRequest({
+        ip: "192.0.2.44",
+        headers: {"x-forwarded-for": "203.0.113.99"},
+        socket: {remoteAddress: "127.0.0.1"}
+    }), hash("192.0.2.44"));
+    assert.equal(auth.utils.getIPFromRequest({
+        headers: {"x-forwarded-for": "203.0.113.99"},
+        socket: {remoteAddress: "198.51.100.17"}
+    }), hash("198.51.100.17"));
 });
 
 function mysqlWithMembers(members) {
@@ -172,13 +194,14 @@ function mysqlWithMembers(members) {
     return database;
 }
 
-function mysqlWithAuthToken() {
+function mysqlWithAuthToken({storageNamespace = "member-73"} = {}) {
     const token = "existingselector-existingvalidator";
     const expires = new Date("2030-01-01T00:00:00.000Z");
     const hashedValidator = crypto.createHash("sha256")
         .update("existingvalidator")
         .digest("hex");
     const authTokenWrites = [];
+    const storageNamespaceWrites = [];
     let active = true;
 
     const transactionEvents = [];
@@ -186,6 +209,7 @@ function mysqlWithAuthToken() {
         token,
         expires,
         authTokenWrites,
+        storageNamespaceWrites,
         transactionEvents,
         query(sql, values, callback) {
             if (sql.includes("FROM AuthTokens AT")) {
@@ -196,7 +220,7 @@ function mysqlWithAuthToken() {
                     Email: "old@example.com",
                     EmailVerifiedOn: expires,
                     PendingEmail: null,
-                    StorageNamespace: "member-73",
+                    StorageNamespace: storageNamespace,
                     HashedValidator: hashedValidator,
                     Expires: expires,
                     StayLoggedIn: true,
@@ -206,6 +230,17 @@ function mysqlWithAuthToken() {
             }
             if (sql.startsWith("UPDATE Members SET LastLoginDate")) {
                 callback(null, {affectedRows: 1});
+                return;
+            }
+            if (sql.startsWith("UPDATE Members SET StorageNamespace")) {
+                storageNamespaceWrites.push({sql, values});
+                if (storageNamespace === null)
+                    storageNamespace = values[0];
+                callback(null, {affectedRows: 1});
+                return;
+            }
+            if (sql.startsWith("SELECT StorageNamespace FROM Members")) {
+                callback(null, [{StorageNamespace: storageNamespace}]);
                 return;
             }
             if (sql.startsWith("INSERT INTO AuthTokens")) {
@@ -227,6 +262,32 @@ function mysqlWithAuthToken() {
     addTransactionSupport(database);
     return database;
 }
+
+// Catches rollback-created members retaining a null account-storage identity,
+// or a concurrent authentication overwriting a namespace assigned first.
+test("session authentication lazily assigns a rollback-created storage namespace atomically", async function() {
+    const mysql = mysqlWithAuthToken({storageNamespace: null});
+    const auth = loadAuthApi(mysql, {register: async () => ({registered: true})});
+
+    const result = await auth.utils.authToken(
+        mysql.token,
+        "request-ip-hash",
+        false,
+        false
+    );
+
+    assert.match(result.storageNamespace, /^[0-9a-f]{32}$/);
+    assert.equal(mysql.storageNamespaceWrites.length, 1);
+    assert.match(mysql.storageNamespaceWrites[0].sql,
+        /StorageNamespace\s*=\s*COALESCE\(StorageNamespace,\s*\?\)/i);
+    assert.deepEqual(mysql.storageNamespaceWrites[0].values, [
+        result.storageNamespace,
+        73
+    ]);
+    const assignment = mysql.authTokenWrites.length === 0 &&
+        mysql.transactionEvents.length === 0;
+    assert.equal(assignment, true, "lazy assignment neither rotates the session nor opens renewal");
+});
 
 function addTransactionSupport(database) {
     database.getConnection = function(callback) {
@@ -680,34 +741,20 @@ test("notification mutation preserves every boolean field", async function() {
 });
 
 test("password mutation distinguishes invalid and successful passwords", async function() {
-    const passwords = require("../src/routes/api/php-password");
-    const existingHash = passwords.hash("current-password");
-    const updates = [];
-    const authResult = {
-        memberId: 19,
-        token: "renewed-token",
-        expires: null
-    };
+    const calls = [];
     const account = loadAccountApi({
         query: function(sql, values, callback) {
-            if (sql.startsWith("SELECT Password")) {
-                callback(null, [{Password: existingHash}]);
-                return;
-            }
-
-            if (sql.startsWith("UPDATE Members SET Password")) {
-                updates.push(values);
-                callback(null, {affectedRows: 1});
-                return;
-            }
-
             assert.fail(`Unexpected database query: ${sql}`);
         }
     }, {
         types: {tokenRenewalType: require("graphql").GraphQLString},
         utils: {
-            authMutation: async function() {
-                return authResult;
+            changePassword: async function(...values) {
+                calls.push(values);
+                return {
+                    success: values[2] === "current-password",
+                    tokenRenewal: {token: values[1], expires: null}
+                };
             }
         }
     });
@@ -726,15 +773,16 @@ test("password mutation distinguishes invalid and successful passwords", async f
 
     assert.deepEqual(invalid, {
         success: false,
-        tokenRenewal: {token: authResult.token, expires: authResult.expires}
+        tokenRenewal: {token: "account-token", expires: null}
     });
-    assert.equal(updates.length, 1);
-    assert.equal(updates[0][1], authResult.memberId);
-    assert.equal(passwords.verify("new-password", updates[0][0]), true);
     assert.deepEqual(successful, {
         success: true,
-        tokenRenewal: {token: authResult.token, expires: authResult.expires}
+        tokenRenewal: {token: "account-token", expires: null}
     });
+    assert.deepEqual(calls, [
+        [{}, "account-token", "incorrect-password", "new-password"],
+        [{}, "account-token", "current-password", "new-password"]
+    ]);
 });
 
 // Catches login resolving before the session insert and transaction commit,
@@ -896,7 +944,7 @@ test("login accepts a verified normalized email but rejects pending email", asyn
     assert.equal(identityQueries.every(({sql}) =>
         sql.includes("EmailVerifiedOn IS NOT NULL") && !sql.includes("PendingNormalizedEmail")), true);
     assert.deepEqual(identityQueries.map(({values}) => values), [
-        ["PLAYER@EXAMPLE.COM", "player@example.com", "PLAYER@EXAMPLE.COM"],
+        [" PLAYER@EXAMPLE.COM ", "player@example.com", " PLAYER@EXAMPLE.COM "],
         ["pending@example.com", "pending@example.com", "pending@example.com"]
     ]);
 });
@@ -955,7 +1003,7 @@ test("username login remains valid for a grandfathered member without email", as
     const password = "correct-password";
     const mysql = mysqlWithMembers([{
         Id: 8,
-        Username: "LegacyPlayer",
+        Username: " LegacyPlayer",
         NormalizedEmail: null,
         EmailVerifiedOn: null,
         Password: passwords.hash(password),
@@ -964,10 +1012,10 @@ test("username login remains valid for a grandfathered member without email", as
     const auth = loadAuthApi(mysql, {register: async () => ({registered: true})});
 
     assert.ok(await auth.utils.authLogin(
-        " LegacyPlayer ", password, false, "ip-hash"));
+        " LegacyPlayer", password, false, "ip-hash"));
     const lookup = mysql.queries.find(({sql}) => sql.includes("FROM Members"));
     assert.match(lookup.sql, /WHERE Username = \?/);
-    assert.deepEqual(lookup.values, ["LegacyPlayer"]);
+    assert.deepEqual(lookup.values, [" LegacyPlayer"]);
 });
 
 // Catches routing every @ identity exclusively to normalized email, which

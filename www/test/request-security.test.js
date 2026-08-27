@@ -92,8 +92,8 @@ test("normalizeReturnUrl keeps local paths and rejects external redirect forms",
     }
 });
 
-test("requireSameOrigin accepts same-site origin evidence and rejects missing or foreign sources", function() {
-    function invoke(origin, referer) {
+test("requireSameOrigin accepts same-origin browser evidence and rejects missing or foreign sources", function() {
+    function invoke(origin, referer, fetchSite) {
         let nextCalled = false;
         let status;
         const req = {
@@ -102,6 +102,7 @@ test("requireSameOrigin accepts same-site origin evidence and rejects missing or
                 if (name === "host") return "legendhub.example:7443";
                 if (name === "origin") return origin;
                 if (name === "referer") return referer;
+                if (name === "sec-fetch-site") return fetchSite;
                 return undefined;
             }
         };
@@ -123,6 +124,14 @@ test("requireSameOrigin accepts same-site origin evidence and rejects missing or
         nextCalled: true,
         status: undefined
     });
+    assert.deepEqual(invoke("null", undefined, "same-origin"), {
+        nextCalled: true,
+        status: undefined
+    });
+    assert.deepEqual(invoke(undefined, undefined, "same-origin"), {
+        nextCalled: true,
+        status: undefined
+    });
     assert.deepEqual(invoke("https://attacker.invalid"), {
         nextCalled: false,
         status: 403
@@ -140,6 +149,14 @@ test("requireSameOrigin accepts same-site origin evidence and rejects missing or
         status: 403
     });
     assert.deepEqual(invoke("not a URL"), {
+        nextCalled: false,
+        status: 403
+    });
+    assert.deepEqual(invoke("https://attacker.invalid", undefined, "same-origin"), {
+        nextCalled: false,
+        status: 403
+    });
+    assert.deepEqual(invoke("null", undefined, "cross-site"), {
         nextCalled: false,
         status: 403
     });

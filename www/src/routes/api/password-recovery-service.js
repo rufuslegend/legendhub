@@ -45,11 +45,12 @@ const SELECT_RESET_TOKEN = `
     JOIN Members M ON M.Id = T.MemberId
     WHERE T.Selector = ? AND T.Purpose = 'password-reset'
     FOR UPDATE`;
-const UPDATE_PASSWORD = "UPDATE Members SET Password = ? WHERE Id = ?";
+const UPDATE_PASSWORD = "UPDATE Members SET Password = ?, PendingEmail = NULL, " +
+    "PendingNormalizedEmail = NULL WHERE Id = ?";
 const DELETE_MEMBER_SESSIONS = "DELETE FROM AuthTokens WHERE MemberId = ?";
-const CONSUME_RESET_TOKEN = `
+const CONSUME_MEMBER_ACTION_TOKENS = `
     UPDATE AccountActionTokens SET ConsumedOn = ?
-    WHERE Id = ? AND ConsumedOn IS NULL`;
+    WHERE MemberId = ? AND ConsumedOn IS NULL`;
 
 class InvalidResetTokenError extends Error {}
 
@@ -81,9 +82,9 @@ function createPasswordRecoveryService({
         try {
             await withTransaction(pool, async function(connection) {
                 const members = await query(connection, SELECT_RECOVERY_MEMBER, [
-                    normalizedIdentity.display,
+                    normalizedIdentity.raw,
                     normalizedIdentity.normalized,
-                    normalizedIdentity.display
+                    normalizedIdentity.raw
                 ]);
                 const member = members[0];
                 if (!member || !member.Email || !member.EmailVerifiedOn)
@@ -154,11 +155,11 @@ function createPasswordRecoveryService({
                     throw new Error("Member password update failed");
 
                 await query(connection, DELETE_MEMBER_SESSIONS, [storedToken.MemberId]);
-                const consumption = await query(connection, CONSUME_RESET_TOKEN, [
+                const consumption = await query(connection, CONSUME_MEMBER_ACTION_TOKENS, [
                     now,
-                    storedToken.Id
+                    storedToken.MemberId
                 ]);
-                if (Number(consumption.affectedRows) !== 1)
+                if (Number(consumption.affectedRows) < 1)
                     throw new InvalidResetTokenError();
 
                 return {notice: {
@@ -187,12 +188,12 @@ function createPasswordRecoveryService({
 }
 
 function normalizeRecoveryIdentity(identity) {
-    const display = typeof identity === "string" ? identity.trim() : "";
-    if (!display || Buffer.byteLength(display, "utf8") > 254 ||
-        /[\u0000-\u001f\u007f]/.test(display)) {
+    const raw = typeof identity === "string" ? identity : "";
+    if (!raw || Buffer.byteLength(raw, "utf8") > 254 ||
+        /[\u0000-\u001f\u007f]/.test(raw)) {
         throw new BadRequestError("Enter a username or email address.");
     }
-    return {display, normalized: display.toLowerCase()};
+    return {raw, normalized: raw.trim().toLowerCase()};
 }
 
 function validateNewPassword(password) {

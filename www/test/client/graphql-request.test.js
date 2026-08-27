@@ -130,14 +130,20 @@ test("GraphQL request normalizes GraphQL and unexpected response errors", async 
     const {graphqlRequest, GraphQLRequestError} = await loadModule();
 
     globalThis.fetch = async function() {
-        return response({errors: [{message: "The saved setting is invalid."}]});
+        return response({errors: [{
+            message: "The saved setting is invalid.",
+            code: 429
+        }]});
     };
     await assert.rejects(
         graphqlRequest({query: "query { settings }"}),
         function(error) {
             assert.ok(error instanceof GraphQLRequestError);
             assert.equal(error.message, "The saved setting is invalid.");
-            assert.deepEqual(error.errors, [{message: "The saved setting is invalid."}]);
+            assert.deepEqual(error.errors, [{
+                message: "The saved setting is invalid.",
+                code: 429
+            }]);
             return true;
         }
     );

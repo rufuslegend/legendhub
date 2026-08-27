@@ -10,6 +10,22 @@ const EMAIL_PROMPT_COOKIE_OPTIONS = Object.freeze({
     sameSite: "lax"
 });
 
+function suppressActionTokenReferrers(res) {
+    res.set("Referrer-Policy", "no-referrer");
+}
+
+function renderPostTransitionAuthentication(req, res, {clearSession = false} = {}) {
+    if (clearSession)
+        res.clearCookie("loginToken", {path: "/"});
+
+    delete res.locals.user;
+    delete res.locals.permissions;
+    if (res.locals.cookies)
+        delete res.locals.cookies.loginToken;
+    if (req.cookies && req.cookies !== res.locals.cookies)
+        delete req.cookies.loginToken;
+}
+
 module.exports = function createAccountActionsRouter(options = {}) {
     const router = express.Router();
     const accountEmailService = options.accountEmailService ||
@@ -29,6 +45,7 @@ module.exports = function createAccountActionsRouter(options = {}) {
     });
 
     router.get("/verify-email.html", function(req, res) {
+        suppressActionTokenReferrers(res);
         const token = typeof req.query?.token === "string" ? req.query.token : "";
         return res.render("account-actions/verify-email", {
             title: "Verify Email",
@@ -37,8 +54,11 @@ module.exports = function createAccountActionsRouter(options = {}) {
     });
 
     router.post("/verify-email.html", requireSameOrigin, async function(req, res, next) {
+        suppressActionTokenReferrers(res);
         try {
             const result = await accountEmailService.verifyEmailToken(req.body?.token);
+            if (result.success)
+                renderPostTransitionAuthentication(req, res);
             return res.render("account-actions/action-result", {
                 title: result.success ? "Email Verified" : "Verification Unavailable",
                 vm: result
@@ -75,6 +95,7 @@ module.exports = function createAccountActionsRouter(options = {}) {
     });
 
     router.get("/reset-password.html", function(req, res) {
+        suppressActionTokenReferrers(res);
         const token = typeof req.query?.token === "string" ? req.query.token : "";
         return res.render("account-actions/reset-password", {
             title: "Reset Password",
@@ -83,6 +104,7 @@ module.exports = function createAccountActionsRouter(options = {}) {
     });
 
     router.post("/reset-password.html", requireSameOrigin, async function(req, res) {
+        suppressActionTokenReferrers(res);
         const token = typeof req.body?.token === "string" ? req.body.token : "";
         const newPassword = typeof req.body?.newPassword === "string"
             ? req.body.newPassword
@@ -99,6 +121,7 @@ module.exports = function createAccountActionsRouter(options = {}) {
 
         try {
             await passwordRecoveryService.resetPassword({token, newPassword});
+            renderPostTransitionAuthentication(req, res, {clearSession: true});
             return res.render("account-actions/reset-password", {
                 title: "Password Changed",
                 vm: {

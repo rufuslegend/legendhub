@@ -2,7 +2,6 @@ let mysql = require("./mysql-connection");
 let gql = require("graphql");
 let apiUtils = require("./utils");
 let auth = require("./auth")
-let phpPass = require("./php-password");
 let {createAccountEmailService} = require("./account-email-service");
 let {createAccountRateLimiter} = require("./account-rate-limit");
 let {createMailer, readMailConfig} = require("../../mail");
@@ -104,39 +103,12 @@ let updateNotificationSettings = function(
 };
 
 let updatePassword = function(req, authToken, currentPassword, newPassword) {
-    return new Promise(function(resolve, reject) {
-        auth.utils.authMutation(req, authToken, false).then(
-            response => {
-                mysql.query("SELECT Password FROM Members WHERE Id = ?",
-                    [response.memberId],
-                    function(error, results, fields) {
-                        if (error) {
-                            return reject(new gql.GraphQLError(error.sqlMessage));
-                        }
-
-                        if (results.length > 0) {
-                            if (phpPass.verify(currentPassword, results[0].Password)) {
-                                mysql.query("UPDATE Members SET Password = ? WHERE Id = ?",
-                                    [phpPass.hash(newPassword), response.memberId],
-                                    function(error, results, fields) {
-                                        if (error) {
-                                            return reject(new gql.GraphQLError(error.sqlMessage));
-                                        }
-
-                                        return resolve({success: true, tokenRenewal: {token: response.token, expires: response.expires}});
-                                    });
-                            }
-                            else {
-                                return resolve({success: false, tokenRenewal: {token: response.token, expires: response.expires}});
-                            }
-                        }
-                        else {
-                            return resolve({success: false, tokenRenewal: {token: response.token, expires: response.expires}});
-                        }
-                    });
-            }
-        ).catch(error => reject(error));
-    });
+    return auth.utils.changePassword(
+        req,
+        authToken,
+        currentPassword,
+        newPassword
+    );
 };
 
 let getAccountEmailStatus = async function(req, authToken) {

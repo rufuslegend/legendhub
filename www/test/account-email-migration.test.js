@@ -11,6 +11,9 @@ function createSchemaContext() {
         memberColumns: function() {
             return [...memberColumns.keys()].sort();
         },
+        memberColumn: function(name) {
+            return memberColumns.get(name);
+        },
         memberIndexes: function() {
             return [...memberIndexes.keys()].sort();
         },
@@ -117,5 +120,7 @@ test("email migration creates every column, index, and action table", async func
         "UX_Members_StorageNamespace"
     ]);
     assert.deepEqual(context.tables(), ["AccountActionAttempts", "AccountActionTokens"]);
+    assert.equal(context.memberColumn("StorageNamespace").IS_NULLABLE, "YES",
+        "v3.0 registration must be able to omit StorageNamespace after rollback");
     assert.equal(await migration.verify(context), true);
 });

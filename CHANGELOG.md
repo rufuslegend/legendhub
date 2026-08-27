@@ -16,6 +16,12 @@ with version 2.6.0.
 - Sign-in now accepts either a username or a verified email address.
 - Added secure account email changes and verification resends. A verified address stays active until its replacement is verified, and the previous address receives a security notice after the change.
 
+### Fixed
+
+- Kept older exact usernames usable for sign-in and recovery while preventing a new email address from shadowing another player's username.
+- Hardened verification and password-reset transitions so copied action links, concurrent password changes, and older pending actions cannot retain unintended account access.
+- Added an accessible 60-second countdown after successful or rate-limited verification resends, and kept verification/reset result navigation in sync with the current sign-in state.
+
 ## [3.0.0] - 2026-08-26
 
 ### Changed

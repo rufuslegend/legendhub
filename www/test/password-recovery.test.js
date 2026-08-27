@@ -174,8 +174,13 @@ function createRecoveryDatabase(options = {}) {
             }
             if (sql.includes("UPDATE Members SET Password")) {
                 const member = members.find(candidate => candidate.Id === values[1]);
-                if (member)
+                if (member) {
                     member.Password = values[0];
+                    if (sql.includes("PendingEmail = NULL")) {
+                        member.PendingEmail = null;
+                        member.PendingNormalizedEmail = null;
+                    }
+                }
                 events.push("update-password");
                 callback(null, {affectedRows: member ? 1 : 0});
                 return;
@@ -190,13 +195,26 @@ function createRecoveryDatabase(options = {}) {
                 return;
             }
             if (sql.includes("UPDATE AccountActionTokens") &&
-                sql.includes("ConsumedOn") && sql.includes("Id = ?")) {
+                sql.includes("ConsumedOn") && sql.includes("WHERE Id = ?")) {
                 const token = actionTokens.find(candidate => candidate.Id === values[1]);
                 const usable = token && token.ConsumedOn === null;
                 if (usable)
                     token.ConsumedOn = values[0];
                 events.push("consume-reset-token");
                 callback(null, {affectedRows: usable ? 1 : 0});
+                return;
+            }
+            if (sql.includes("UPDATE AccountActionTokens") &&
+                !sql.includes("Purpose = ?")) {
+                let affectedRows = 0;
+                for (const token of actionTokens) {
+                    if (token.MemberId === values[1] && token.ConsumedOn === null) {
+                        token.ConsumedOn = values[0];
+                        affectedRows += 1;
+                    }
+                }
+                events.push("consume-member-action-tokens");
+                callback(null, {affectedRows});
                 return;
             }
             assert.fail(`Unexpected database query: ${sql}`);
@@ -358,14 +376,18 @@ function createConcurrentSecurityDatabase() {
             callback(null, {affectedRows: authTokens.length});
             return;
         }
-        if (sql.includes("UPDATE AccountActionTokens") && sql.includes("Id = ?")) {
+        if (sql.includes("UPDATE AccountActionTokens") &&
+            (sql.includes("Id = ?") || sql.includes("MemberId = ?"))) {
             connection.changes.consumeAction = true;
             callback(null, {affectedRows: actionToken.ConsumedOn ? 0 : 1});
             return;
         }
         if (sql.includes("FROM Members") && sql.includes("WHERE Id = ?")) {
             const readMemberId = () => callback(null,
-                values[0] === member.Id && !member.Banned ? [{Id: member.Id}] : []);
+                values[0] === member.Id && !member.Banned ? [{
+                    Id: member.Id,
+                    Password: member.Password
+                }] : []);
             if (sql.includes("FOR UPDATE"))
                 acquireMember(connection, readMemberId);
             else
@@ -540,7 +562,7 @@ test("recovery response is identical for missing and verified accounts", async f
 test("recovery uses exact username first and never matches pending or unverified email", async function() {
     const database = createRecoveryDatabase({members: [{
         Id: 73,
-        Username: "legacy@example.com",
+        Username: " legacy@example.com",
         Password: passwords.hash("old-password"),
         Email: "legacy-owner@example.net",
         NormalizedEmail: "legacy-owner@example.net",
@@ -572,7 +594,7 @@ test("recovery uses exact username first and never matches pending or unverified
     const {service, sent} = createService(database);
 
     assert.deepEqual(await service.requestRecovery({
-        identity: "legacy@example.com", ipHash: "a"
+        identity: " legacy@example.com", ipHash: "a"
     }), {accepted: true});
     assert.deepEqual(await service.requestRecovery({
         identity: "pending@example.com", ipHash: "b"
@@ -746,6 +768,164 @@ function concurrentRecoveryService(database) {
     });
 }
 
+function createPasswordChangeDatabase() {
+    const member = {
+        Id: 73,
+        Username: "Player",
+        Password: passwords.hash("old-password"),
+        Email: "player@example.com",
+        EmailVerifiedOn: NOW,
+        PendingEmail: null,
+        StorageNamespace: "member-73",
+        Banned: 0
+    };
+    const authTokens = [{
+        Id: 91,
+        MemberId: member.Id,
+        Selector: "existingselector",
+        HashedValidator: crypto.createHash("sha256")
+            .update("existingvalidator").digest("hex"),
+        Expires: new Date("2030-01-01T00:00:00.000Z"),
+        StayLoggedIn: true
+    }];
+    const actionTokens = [{
+        Id: 41,
+        MemberId: member.Id,
+        Purpose: "password-reset",
+        ConsumedOn: null
+    }, {
+        Id: 42,
+        MemberId: member.Id,
+        Purpose: "verify-email",
+        ConsumedOn: null
+    }];
+    const events = [];
+    let snapshot;
+
+    function authRow(token) {
+        return {
+            ...token,
+            Username: member.Username,
+            Email: member.Email,
+            EmailVerifiedOn: member.EmailVerifiedOn,
+            PendingEmail: member.PendingEmail,
+            StorageNamespace: member.StorageNamespace,
+            Banned: member.Banned
+        };
+    }
+
+    function execute(sql, values, callback) {
+        if (sql.includes("SELECT AT.MemberId")) {
+            const token = authTokens.find(candidate => candidate.Selector === values[0]);
+            events.push("discover-session");
+            callback(null, token ? [{MemberId: token.MemberId}] : []);
+            return;
+        }
+        if (sql.includes("FROM Members") && sql.includes("WHERE Id = ?") &&
+            sql.includes("FOR UPDATE")) {
+            events.push("lock-member");
+            callback(null, values[0] === member.Id ? [{
+                Id: member.Id,
+                Password: member.Password
+            }] : []);
+            return;
+        }
+        if (sql.includes("FROM AuthTokens AT")) {
+            const token = authTokens.find(candidate => candidate.Selector === values[0]);
+            events.push("lock-source-session");
+            callback(null, token ? [authRow(token)] : []);
+            return;
+        }
+        if (sql.includes("UPDATE Members SET Password")) {
+            member.Password = values[0];
+            events.push("update-password");
+            callback(null, {affectedRows: 1});
+            return;
+        }
+        if (sql.includes("UPDATE AccountActionTokens")) {
+            for (const token of actionTokens) {
+                if (token.MemberId === values[0] && token.Purpose === "password-reset" &&
+                    token.ConsumedOn === null) {
+                    token.ConsumedOn = NOW;
+                }
+            }
+            events.push("consume-reset-tokens");
+            callback(null, {affectedRows: 1});
+            return;
+        }
+        assert.fail(`Unexpected password-change query: ${sql}`);
+    }
+
+    const pool = {
+        query: execute,
+        getConnection(callback) {
+            callback(null, {
+                query: execute,
+                beginTransaction(done) {
+                    snapshot = {
+                        password: member.Password,
+                        consumedOn: actionTokens.map(token => token.ConsumedOn)
+                    };
+                    events.push("begin");
+                    done(null);
+                },
+                commit(done) {
+                    events.push("commit");
+                    done(null);
+                },
+                rollback(done) {
+                    member.Password = snapshot.password;
+                    actionTokens.forEach((token, index) => {
+                        token.ConsumedOn = snapshot.consumedOn[index];
+                    });
+                    events.push("rollback");
+                    done(null);
+                },
+                release() { events.push("release"); }
+            });
+        }
+    };
+
+    return {pool, member, authTokens, actionTokens, events};
+}
+
+// Catches ordinary password changes pre-rotating the source session, updating
+// outside a member-row transaction, or leaving reset links usable.
+test("ordinary password change keeps its source session and revokes reset tokens atomically", async function() {
+    const database = createPasswordChangeDatabase();
+    const auth = loadAuthApi(database.pool);
+
+    const result = await auth.utils.changePassword(
+        {ip: "change-ip", headers: {}},
+        "existingselector-existingvalidator",
+        "old-password",
+        "replacement-password"
+    );
+
+    assert.deepEqual(result, {
+        success: true,
+        tokenRenewal: {
+            token: "existingselector-existingvalidator",
+            expires: new Date("2030-01-01T00:00:00.000Z")
+        }
+    });
+    assert.equal(passwords.verify("replacement-password", database.member.Password), true);
+    assert.equal(database.authTokens.length, 1, "the current session remains usable");
+    assert.equal(database.actionTokens[0].ConsumedOn !== null, true);
+    assert.equal(database.actionTokens[1].ConsumedOn, null,
+        "ordinary change revokes reset tokens without consuming email verification");
+    assert.deepEqual(database.events, [
+        "begin",
+        "discover-session",
+        "lock-member",
+        "lock-source-session",
+        "update-password",
+        "consume-reset-tokens",
+        "commit",
+        "release"
+    ]);
+});
+
 // Catches an old-password login reading before reset commits and inserting a
 // new session after reset's member-wide deletion.
 test("reset member lock prevents concurrent old-password login from leaving a session", async function() {
@@ -772,6 +952,40 @@ test("reset member lock prevents concurrent old-password login from leaving a se
 
     assert.equal(outcome.status, "rejected");
     assert.equal(outcome.error.message, "Invalid username or password.");
+    assert.deepEqual(database.authTokens, []);
+    assert.equal(database.events.includes("member-wait-2"), true);
+    assert.equal(database.events.indexOf("commit-1") <
+        database.events.indexOf("member-lock-after-wait-2"), true);
+});
+
+// Catches an old-password-authorized account mutation waiting behind reset,
+// then overwriting the newly reset password after the reset commits.
+test("reset member lock prevents a concurrent ordinary password change from overwriting reset", async function() {
+    const database = createConcurrentSecurityDatabase();
+    const recovery = concurrentRecoveryService(database);
+    const auth = loadAuthApi(database.pool);
+    const reset = recovery.resetPassword({
+        token: RAW_TOKEN,
+        newPassword: "replacement-password"
+    });
+    await database.resetUpdateReached;
+
+    const change = auth.utils.changePassword(
+        {ip: "change-ip", headers: {}},
+        "existingselector-existingvalidator",
+        "old-password",
+        "attacker-chosen-password"
+    ).then(
+        result => ({status: "fulfilled", result}),
+        error => ({status: "rejected", error})
+    );
+    await new Promise(resolve => setImmediate(resolve));
+    database.releaseReset();
+    assert.deepEqual(await reset, {success: true});
+    const outcome = await change;
+
+    assert.equal(outcome.status, "rejected");
+    assert.equal(outcome.error.extensions.code, 401);
     assert.deepEqual(database.authTokens, []);
     assert.equal(database.events.includes("member-wait-2"), true);
     assert.equal(database.events.indexOf("commit-1") <
@@ -824,7 +1038,19 @@ test("reset consumes the token and invalidates all sessions atomically", async f
         CreatedOn: NOW,
         ExpiresOn: new Date("2026-08-26T13:00:00.000Z"),
         ConsumedOn: null
+    }, {
+        Id: 42,
+        MemberId: 73,
+        Purpose: "change-email",
+        Selector: "080808080808",
+        HashedValidator: "d".repeat(64),
+        RequestIPHash: IP_HASH,
+        CreatedOn: NOW,
+        ExpiresOn: new Date("2026-08-27T13:00:00.000Z"),
+        ConsumedOn: null
     }]});
+    database.members[0].PendingEmail = "attacker@example.com";
+    database.members[0].PendingNormalizedEmail = "attacker@example.com";
     const {service, sent} = createService(database);
 
     assert.deepEqual(await service.resetPassword({
@@ -835,13 +1061,18 @@ test("reset consumes the token and invalidates all sessions atomically", async f
     assert.equal(passwords.verify("replacement-password", database.members[0].Password), true);
     assert.equal(passwords.verify("old-password", database.members[0].Password), false);
     assert.deepEqual(database.authTokens, [{Id: 83, MemberId: 99}]);
-    assert.equal(database.actionTokens[0].ConsumedOn.getTime(), NOW.getTime());
+    assert.equal(database.actionTokens.every(token =>
+        token.ConsumedOn?.getTime() === NOW.getTime()), true);
+    assert.equal(database.members[0].PendingEmail, null);
+    assert.equal(database.members[0].PendingNormalizedEmail, null);
     assert.equal(database.queries.some(({sql}) =>
         sql.includes("INSERT INTO AuthTokens")), false);
     assert.equal(database.events.indexOf("begin") < database.events.indexOf("update-password"), true);
     assert.equal(database.events.indexOf("update-password") < database.events.indexOf("delete-sessions"), true);
-    assert.equal(database.events.indexOf("delete-sessions") < database.events.indexOf("consume-reset-token"), true);
-    assert.equal(database.events.indexOf("consume-reset-token") < database.events.indexOf("commit"), true);
+    assert.equal(database.events.indexOf("delete-sessions") <
+        database.events.indexOf("consume-member-action-tokens"), true);
+    assert.equal(database.events.indexOf("consume-member-action-tokens") <
+        database.events.indexOf("commit"), true);
     assert.equal(database.events.indexOf("commit") < database.events.indexOf("send-password-changed"), true);
     assert.deepEqual(sent, [{
         kind: "changed",

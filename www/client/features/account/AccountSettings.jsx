@@ -30,6 +30,12 @@ const emailErrors = {
     network: "Email settings could not be saved. Try again."
 };
 
+function isRateLimitError(error) {
+    return Number(error?.code) === 429 || error?.errors?.some(function(entry) {
+        return Number(entry?.code) === 429;
+    });
+}
+
 function useEditorFocus(status, error) {
     const triggerRef = useRef(null);
     const firstFieldRef = useRef(null);
@@ -61,8 +67,18 @@ function EmailEditor({editor, dispatch}) {
     const saving = editor.status === "saving";
     const resending = editor.status === "resending";
     const busy = saving || resending;
+    const coolingDown = editor.resendCooldownSeconds > 0;
     const canResend = Boolean(editor.pendingEmail || (editor.email && !editor.verified));
     const focus = useEditorFocus(editor.status, editor.error);
+
+    useEffect(function() {
+        if (!coolingDown)
+            return undefined;
+        const timeout = setTimeout(function() {
+            dispatch({type: "email/resend-cooldown-tick"});
+        }, 1000);
+        return function() { clearTimeout(timeout); };
+    }, [coolingDown, editor.resendCooldownSeconds, dispatch]);
 
     async function save(event) {
         event.preventDefault();
@@ -83,7 +99,7 @@ function EmailEditor({editor, dispatch}) {
     }
 
     async function resend() {
-        if (resending)
+        if (resending || coolingDown)
             return;
 
         dispatch({type: "email/resend-requested"});
@@ -91,8 +107,12 @@ function EmailEditor({editor, dispatch}) {
             await resendVerification();
             dispatch({type: "email/resend-succeeded"});
         }
-        catch (_error) {
-            dispatch({type: "email/resend-failed"});
+        catch (error) {
+            dispatch({
+                type: isRateLimitError(error)
+                    ? "email/resend-rate-limited"
+                    : "email/resend-failed"
+            });
         }
     }
 
@@ -134,11 +154,17 @@ function EmailEditor({editor, dispatch}) {
                                         className="btn btn-outline-primary btn-block"
                                         aria-label={resending
                                             ? "Resending email verification"
-                                            : "Resend email verification"}
-                                        disabled={busy}
+                                            : coolingDown
+                                                ? `Resend email verification in ${editor.resendCooldownSeconds} seconds`
+                                                : "Resend email verification"}
+                                        disabled={busy || coolingDown}
                                         onClick={resend}
                                     >
-                                        {resending ? "Resending…" : "Resend verification"}
+                                        {resending
+                                            ? "Resending…"
+                                            : coolingDown
+                                                ? `Resend in ${editor.resendCooldownSeconds}s`
+                                                : "Resend verification"}
                                     </button>
                                 </div>
                             )}
@@ -239,6 +265,18 @@ function EmailEditor({editor, dispatch}) {
                         {editor.pendingEmail
                             ? "Verification email sent. The pending address remains inactive until verified."
                             : "Verification email sent. Your current address remains unverified until you use the link."}
+                    </p>
+                )}
+                {coolingDown && (
+                    <p
+                        className="text-info mt-2"
+                        role="status"
+                        aria-live="polite"
+                        aria-atomic="true"
+                    >
+                        {editor.announcement === "resend-rate-limited" &&
+                            "The resend limit was reached. "}
+                        You can resend verification in {editor.resendCooldownSeconds} seconds.
                     </p>
                 )}
             </div>

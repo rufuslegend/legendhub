@@ -42,8 +42,8 @@ test("renewing an auth token does not write credentials to the console", async f
                 callback(null, [{MemberId: 73}]);
                 return;
             }
-            if (sql.includes("SELECT Id FROM Members")) {
-                callback(null, [{Id: 73}]);
+            if (sql.includes("SELECT Id, Password FROM Members")) {
+                callback(null, [{Id: 73, Password: "unused-for-renewal"}]);
                 return;
             }
             if (sql.includes("SELECT AT.Id")) {

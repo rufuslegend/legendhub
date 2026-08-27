@@ -14,6 +14,7 @@ const RAW_TOKEN = "070707070707-070707070707070707070707070707070707070707070707
 function createRegistrationDatabase({
     duplicateEmail = false,
     duplicateUsername = false,
+    legacyUsernameCollision = false,
     bannedIP = false,
     releaseLockFails = false
 } = {}) {
@@ -55,7 +56,11 @@ function createRegistrationDatabase({
                 return;
             }
             if (sql.includes("FROM Members") && sql.includes("NormalizedEmail")) {
-                callback(null, duplicateEmail ? [{Id: 99}] : []);
+                const collidesWithLegacyUsername = legacyUsernameCollision &&
+                    sql.includes("Username = ?");
+                callback(null, duplicateEmail || collidesWithLegacyUsername
+                    ? [{Id: 99}]
+                    : []);
                 return;
             }
             if (sql.includes("FROM BannedIPs")) {
@@ -146,7 +151,8 @@ test("registration transaction stores an unverified normalized email and hashed 
         sql.includes("FROM Members") && sql.includes("PendingNormalizedEmail"));
     assert.match(duplicateCheck.sql, /FOR UPDATE/i);
     assert.deepEqual(duplicateCheck.values, [
-        "player+work@example.com", "player+work@example.com"
+        "player+work@example.com", "player+work@example.com",
+        "player+work@example.com"
     ]);
 
     const memberInsert = database.queries.find(({sql}) => sql.includes("INSERT INTO Members"));
@@ -251,6 +257,29 @@ test("registration transaction rejects an email already active or pending", asyn
     ]);
 });
 
+// Catches a verified email claim shadowing another member's exact legacy
+// username in the shared login and recovery identity namespace.
+test("registration rejects an email matching another member's legacy username", async function() {
+    const database = createRegistrationDatabase({legacyUsernameCollision: true});
+    const {service, deliveries} = createService(database);
+
+    await assert.rejects(service.register({
+        username: "OtherPlayer",
+        email: " Legacy@Example.COM ",
+        passwordHash: "stored-password-hash",
+        recaptchaVerified: true,
+        ipHash: IP_HASH
+    }), error => error.extensions.code === 409);
+
+    const claim = database.queries.find(({sql}) =>
+        sql.includes("PendingNormalizedEmail"));
+    assert.match(claim.sql, /Username\s*=\s*\?/i);
+    assert.deepEqual(claim.values, [
+        "legacy@example.com", "legacy@example.com", "legacy@example.com"
+    ]);
+    assert.equal(deliveries.length, 0);
+});
+
 // Catches the service migration dropping the pre-3.1 duplicate-username or
 // banned-IP registration protections.
 test("registration preserves banned-IP and duplicate-username rejection inside the transaction", async function() {
@@ -351,7 +380,7 @@ test("a failed named-lock release destroys the pooled connection", async functio
     assert.equal(database.events.includes("send-verification"), true);
 });
 
-function createEmailFlowDatabase() {
+function createEmailFlowDatabase({legacyUsernameCollision = false} = {}) {
     const member = {
         Id: 73,
         Username: "Player",
@@ -384,10 +413,21 @@ function createEmailFlowDatabase() {
         CreatedOn: new Date("2026-08-24T10:00:00.000Z"),
         ExpiresOn: new Date("2026-08-25T10:00:00.000Z"),
         ConsumedOn: new Date("2026-08-24T11:00:00.000Z")
+    }, {
+        Id: 6,
+        MemberId: member.Id,
+        Purpose: "password-reset",
+        Selector: "030303030303",
+        HashedValidator: "c".repeat(64),
+        PendingEmail: null,
+        PendingNormalizedEmail: null,
+        CreatedOn: new Date("2026-08-26T10:00:00.000Z"),
+        ExpiresOn: new Date("2026-08-26T13:00:00.000Z"),
+        ConsumedOn: null
     }];
     const events = [];
     const queries = [];
-    let nextTokenId = 6;
+    let nextTokenId = 7;
     let snapshot;
 
     const connection = {
@@ -433,7 +473,9 @@ function createEmailFlowDatabase() {
             }
             if (sql.includes("FROM Members") && sql.includes("PendingNormalizedEmail") &&
                 sql.includes("Id <>")) {
-                callback(null, []);
+                const collidesWithLegacyUsername = legacyUsernameCollision &&
+                    sql.includes("Username = ?");
+                callback(null, collidesWithLegacyUsername ? [{Id: 99}] : []);
                 return;
             }
             if (sql.includes("UPDATE Members") && sql.includes("PendingEmail = ?")) {
@@ -517,10 +559,22 @@ function createEmailFlowDatabase() {
             }
             if (sql.includes("UPDATE AccountActionTokens") && sql.includes("Purpose IN")) {
                 for (const token of tokens) {
+                    if (token.MemberId === values[1] && token.ConsumedOn === null &&
+                        ["verify-email", "change-email"].includes(token.Purpose)) {
+                        token.ConsumedOn = values[0];
+                    }
+                }
+                events.push("consume-sibling-tokens");
+                callback(null, {affectedRows: 1});
+                return;
+            }
+            if (sql.includes("UPDATE AccountActionTokens") &&
+                !sql.includes("Purpose = ?") && !sql.includes("Purpose IN")) {
+                for (const token of tokens) {
                     if (token.MemberId === values[1] && token.ConsumedOn === null)
                         token.ConsumedOn = values[0];
                 }
-                events.push("consume-sibling-tokens");
+                events.push("consume-member-action-tokens");
                 callback(null, {affectedRows: 1});
                 return;
             }
@@ -622,7 +676,8 @@ test("email change keeps the verified address active until token verification", 
     assert.equal(database.member.PendingEmail, null);
     assert.equal(database.member.PendingNormalizedEmail, null);
     assert.deepEqual(database.member.EmailVerifiedOn, NOW);
-    assert.equal(database.tokens.every(token => token.ConsumedOn !== null), true);
+    assert.equal(database.tokens.every(token => token.ConsumedOn !== null), true,
+        "email promotion consumes the member's password-reset token too");
     assert.deepEqual(deliveries.at(-1), {
         kind: "email-change-notice",
         to: "old@example.com",
@@ -635,7 +690,7 @@ test("email change keeps the verified address active until token verification", 
         "cleanup-action-tokens",
         "lock-member",
         "promote-pending-email",
-        "consume-sibling-tokens",
+        "consume-member-action-tokens",
         "commit",
         "release-connection",
         "send-email-change-notice"
@@ -665,6 +720,70 @@ test("email change rejects an invalid current password before claiming the addre
     assert.equal(database.tokens.some(token => token.Selector === "090909090909"), false);
     assert.equal(deliveries.length, 0);
     assert.equal(database.events.includes("rollback"), true);
+});
+
+test("email change rejects an address matching another member's legacy username", async function() {
+    const database = createEmailFlowDatabase({legacyUsernameCollision: true});
+    const {service, deliveries} = createEmailFlowService(database);
+
+    await assert.rejects(service.requestEmailChange({
+        auth: {
+            memberId: database.member.Id,
+            username: database.member.Username,
+            email: database.member.Email,
+            emailVerified: true,
+            pendingEmail: null
+        },
+        currentPassword: "secret",
+        email: "Legacy@Example.com",
+        ipHash: IP_HASH
+    }), error => error.extensions.code === 409);
+
+    const claim = database.queries.find(({sql}) => sql.includes("Id <>"));
+    assert.match(claim.sql, /Username\s*=\s*\?/i);
+    assert.deepEqual(claim.values, [
+        "legacy@example.com", "legacy@example.com", "legacy@example.com",
+        database.member.Id
+    ]);
+    assert.equal(database.member.PendingEmail, null);
+    assert.equal(deliveries.length, 0);
+});
+
+test("resend withholds a legacy-username-colliding pending claim", async function() {
+    const database = createEmailFlowDatabase({legacyUsernameCollision: true});
+    database.member.PendingEmail = "legacy@example.com";
+    database.member.PendingNormalizedEmail = "legacy@example.com";
+    const {service, deliveries} = createEmailFlowService(database);
+    const tokenCount = database.tokens.length;
+
+    assert.deepEqual(await service.resendVerification({
+        auth: {
+            memberId: database.member.Id,
+            username: database.member.Username
+        },
+        ipHash: IP_HASH
+    }), {accepted: true});
+
+    assert.equal(database.tokens.length, tokenCount);
+    assert.equal(deliveries.length, 0);
+});
+
+test("verification rejects a pending claim that collides with a legacy username", async function() {
+    const database = createEmailFlowDatabase({legacyUsernameCollision: true});
+    database.member.PendingEmail = "stale@example.com";
+    database.member.PendingNormalizedEmail = "stale@example.com";
+    database.tokens[0].HashedValidator = crypto.createHash("sha256")
+        .update(RAW_TOKEN.split("-")[1]).digest("hex");
+    database.tokens[0].Selector = RAW_TOKEN.split("-")[0];
+    const {service, deliveries} = createEmailFlowService(database);
+
+    assert.deepEqual(await service.verifyEmailToken(RAW_TOKEN), {
+        success: false,
+        message: "This verification link is invalid or has expired."
+    });
+    assert.equal(database.member.Email, "old@example.com");
+    assert.equal(database.member.PendingEmail, "stale@example.com");
+    assert.equal(deliveries.length, 0);
 });
 
 // Catches validator equality shortcuts, purpose confusion, token replay, and

@@ -216,6 +216,12 @@ test("email prompt dismissal resets on login and email settings announce both re
     });
     await expect(activeAddressStatus).toBeVisible();
     await expect(activeAddressStatus).not.toContainText("new address remains pending");
+    await expect(page.getByRole("status").filter({
+        hasText: /You can resend verification in \d+ seconds\./
+    })).toBeVisible();
+    await expect(page.getByRole("button", {
+        name: /Resend email verification in \d+ seconds/
+    })).toBeDisabled();
 
     await page.getByRole("button", {name: "Change email address"}).click();
     const emailInput = page.getByRole("textbox", {name: "Email address", exact: true});
@@ -227,6 +233,40 @@ test("email prompt dismissal resets on login and email settings announce both re
     await expect(page.getByRole("status").filter({
         hasText: "The pending address remains inactive until verified."
     })).toBeVisible();
+    await expectNoAxeViolations(page, '[data-react-root="account-settings"]');
+});
+
+test("rate-limited resend starts an accessible cooldown instead of a generic error", async function({page}) {
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const body = route.request().postDataJSON();
+        if (!body.query.includes("ResendVerification"))
+            return route.abort();
+        return route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify({
+                data: {resendVerification: null},
+                errors: [{
+                    message: "Try again later.",
+                    path: ["resendVerification"],
+                    code: 429
+                }]
+            })
+        });
+    });
+
+    await page.goto(`${baseUrl}/account/`);
+    await page.getByRole("button", {name: "Resend email verification"}).click();
+
+    const cooldown = page.getByRole("status").filter({
+        hasText: /The resend limit was reached\. You can resend verification in \d+ seconds\./
+    });
+    await expect(cooldown).toBeVisible();
+    await expect(page.getByRole("button", {
+        name: /Resend email verification in \d+ seconds/
+    })).toBeDisabled();
+    await expect(page.getByRole("alert").filter({
+        hasText: "Email settings could not be saved"
+    })).toHaveCount(0);
     await expectNoAxeViolations(page, '[data-react-root="account-settings"]');
 });
 

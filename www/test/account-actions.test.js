@@ -14,8 +14,17 @@ function routeLayer(router, method, path) {
 
 function responseDouble() {
     const result = {status: null, rendered: null};
+    const headers = new Map();
+    const clearedCookies = [];
     return {
         result,
+        headers,
+        clearedCookies,
+        locals: {cookies: {}},
+        set(name, value) {
+            headers.set(name.toLowerCase(), value);
+            return this;
+        },
         sendStatus(status) {
             result.status = status;
             return this;
@@ -23,9 +32,65 @@ function responseDouble() {
         render(view, locals) {
             result.rendered = {view, locals};
             return this;
+        },
+        clearCookie(name, options) {
+            clearedCookies.push({name, options});
+            return this;
         }
     };
 }
+
+// Catches token-bearing action pages inheriting the site's same-origin
+// referrer policy and disclosing the raw GET URL to a later navigation.
+test("token action pages suppress referrers", function() {
+    const router = createAccountActionsRouter({
+        accountEmailService: {},
+        passwordRecoveryService: {},
+        getIPFromRequest: function() { return "request-ip-hash"; }
+    });
+
+    for (const path of ["/verify-email.html", "/reset-password.html"]) {
+        const response = responseDouble();
+        routeLayer(router, "get", path).route.stack[0].handle({
+            query: {token: "selector-raw-validator"}
+        }, response);
+        assert.equal(response.headers.get("referrer-policy"), "no-referrer", path);
+    }
+});
+
+test("token action results keep referrers suppressed", async function() {
+    const router = createAccountActionsRouter({
+        accountEmailService: {
+            async verifyEmailToken() {
+                return {success: true, message: "verified"};
+            }
+        },
+        passwordRecoveryService: {
+            async resetPassword() { return {success: true}; }
+        },
+        getIPFromRequest: function() { return "request-ip-hash"; }
+    });
+    const requests = {
+        "/verify-email.html": {token: "selector-raw-validator"},
+        "/reset-password.html": {
+            token: "selector-raw-validator",
+            newPassword: "replacement-password",
+            confirmPassword: "replacement-password"
+        }
+    };
+
+    for (const path of Object.keys(requests)) {
+        const response = responseDouble();
+        await runHandlers(routeLayer(router, "post", path), {
+            protocol: "https",
+            body: requests[path],
+            get(name) {
+                return {host: "legendhub.org", origin: "https://legendhub.org"}[name];
+            }
+        }, response);
+        assert.equal(response.headers.get("referrer-policy"), "no-referrer", path);
+    }
+});
 
 function runHandlers(layer, request, response) {
     let index = 0;
@@ -93,9 +158,10 @@ test("POST verification rejects cross-site requests before token consumption", f
     assert.equal(consumed, 0);
 });
 
-// Catches consuming successfully but failing to render the service's generic
-// result, or passing the token anywhere other than the service boundary.
-test("same-origin POST consumes once and renders the action result", async function() {
+// Catches consuming successfully but rendering the pre-verification account
+// prompt/navigation. The valid browser session remains available to rebuild
+// fresh locals on the next request.
+test("same-origin verification renders a deliberate post-transition auth state", async function() {
     const consumed = [];
     const router = createAccountActionsRouter({
         accountEmailService: {
@@ -110,6 +176,14 @@ test("same-origin POST consumes once and renders the action result", async funct
     });
     const layer = routeLayer(router, "post", "/verify-email.html");
     const response = responseDouble();
+    response.locals.user = {
+        memberId: 7,
+        username: "Player",
+        emailVerified: false,
+        pendingEmail: "new@example.com"
+    };
+    response.locals.permissions = {account: true};
+    response.locals.cookies.loginToken = "still-valid-session";
     const request = {
         protocol: "https",
         body: {token: "selector-validator"},
@@ -130,6 +204,11 @@ test("same-origin POST consumes once and renders the action result", async funct
     });
 
     assert.deepEqual(consumed, ["selector-validator"]);
+    assert.equal(Object.hasOwn(response.locals, "user"), false);
+    assert.equal(Object.hasOwn(response.locals, "permissions"), false);
+    assert.equal(Object.hasOwn(response.locals.cookies, "loginToken"), false);
+    assert.deepEqual(response.clearedCookies, [],
+        "email verification does not invalidate the browser session");
     assert.deepEqual(response.result.rendered, {
         view: "account-actions/action-result",
         locals: {
@@ -161,11 +240,13 @@ test("request logging omits the token-bearing verification endpoint", function()
 
     try {
         delete require.cache[createAppPath];
-        require(createAppPath)({
+        const app = require(createAppPath)({
             accountEmailService: {verifyEmailToken: async function() {}},
             passwordRecoveryService: {},
             logError: function() {}
         });
+        assert.equal(app.get("trust proxy"), 1,
+            "only the directly connected reverse proxy may supply the client IP");
     }
     finally {
         Module._load = originalLoad;
@@ -312,6 +393,7 @@ test("same-origin reset delegates once and requires a fresh sign-in", async func
     });
     const request = {
         protocol: "https",
+        cookies: {loginToken: "now-invalid-session"},
         body: {
             token: "selector-validator",
             newPassword: "replacement-password",
@@ -322,6 +404,9 @@ test("same-origin reset delegates once and requires a fresh sign-in", async func
         }
     };
     const response = responseDouble();
+    response.locals.cookies = request.cookies;
+    response.locals.user = {memberId: 7, username: "Player"};
+    response.locals.permissions = {account: true};
 
     await runHandlers(routeLayer(router, "post", "/reset-password.html"), request, response);
 
@@ -329,6 +414,13 @@ test("same-origin reset delegates once and requires a fresh sign-in", async func
         token: "selector-validator",
         newPassword: "replacement-password"
     }]);
+    assert.deepEqual(response.clearedCookies, [{
+        name: "loginToken",
+        options: {path: "/"}
+    }]);
+    assert.equal(Object.hasOwn(request.cookies, "loginToken"), false);
+    assert.equal(Object.hasOwn(response.locals, "user"), false);
+    assert.equal(Object.hasOwn(response.locals, "permissions"), false);
     assert.deepEqual(response.result.rendered, {
         view: "account-actions/reset-password",
         locals: {
@@ -340,5 +432,4 @@ test("same-origin reset delegates once and requires a fresh sign-in", async func
             }
         }
     });
-    assert.equal(Object.hasOwn(response.result, "cookie"), false);
 });

@@ -20,11 +20,12 @@ const RELEASE_EMAIL_LOCK =
     "SELECT RELEASE_LOCK(SHA2(?, 256)) AS Released";
 const SELECT_EMAIL_CLAIM = `
     SELECT Id FROM Members
-    WHERE NormalizedEmail = ? OR PendingNormalizedEmail = ?
+    WHERE NormalizedEmail = ? OR PendingNormalizedEmail = ? OR Username = ?
     FOR UPDATE`;
 const SELECT_OTHER_EMAIL_CLAIM = `
     SELECT Id FROM Members
-    WHERE (NormalizedEmail = ? OR PendingNormalizedEmail = ?) AND Id <> ?
+    WHERE (NormalizedEmail = ? OR PendingNormalizedEmail = ? OR Username = ?)
+        AND Id <> ?
     FOR UPDATE`;
 const SELECT_BANNED_IP =
     "SELECT Id FROM BannedIPs WHERE Pattern = ? FOR UPDATE";
@@ -72,6 +73,10 @@ const INVALIDATE_EMAIL_TOKENS = `
     WHERE MemberId = ?
         AND Purpose IN ('verify-email', 'change-email')
         AND ConsumedOn IS NULL`;
+const CONSUME_MEMBER_ACTION_TOKENS = `
+    UPDATE AccountActionTokens
+    SET ConsumedOn = ?
+    WHERE MemberId = ? AND ConsumedOn IS NULL`;
 const SELECT_VERIFICATION_TOKEN = `
     SELECT Id, MemberId, Purpose, HashedValidator, PendingEmail,
         PendingNormalizedEmail, ExpiresOn, ConsumedOn
@@ -149,6 +154,7 @@ function createAccountEmailService({
             await withNormalizedEmailLock(pool, address.normalized, async function(transactionPool) {
                 await withTransaction(transactionPool, async function(connection) {
                     const existing = await query(connection, SELECT_EMAIL_CLAIM, [
+                        address.normalized,
                         address.normalized,
                         address.normalized
                     ]);
@@ -236,6 +242,7 @@ function createAccountEmailService({
                         throw new InvalidCurrentPasswordError();
 
                     const existing = await query(connection, SELECT_OTHER_EMAIL_CLAIM, [
+                        address.normalized,
                         address.normalized,
                         address.normalized,
                         auth.memberId
@@ -331,6 +338,17 @@ function createAccountEmailService({
                     return;
                 }
 
+                const existing = await query(connection, SELECT_OTHER_EMAIL_CLAIM, [
+                    delivery.address.normalized,
+                    delivery.address.normalized,
+                    delivery.address.normalized,
+                    member.Id
+                ]);
+                if (existing.length > 0) {
+                    delivery = undefined;
+                    return;
+                }
+
                 await rateLimiter.recordAndCheck({
                     purpose: delivery.purpose,
                     identity: delivery.address.normalized,
@@ -418,6 +436,14 @@ function createAccountEmailService({
                         return {result: {...INVALID_VERIFICATION_RESULT}};
                     }
 
+                    if (await hasOtherIdentityClaim(
+                        connection,
+                        storedToken.PendingNormalizedEmail,
+                        member.Id
+                    )) {
+                        return {result: {...INVALID_VERIFICATION_RESULT}};
+                    }
+
                     await query(connection, PROMOTE_PENDING_EMAIL, [
                         storedToken.PendingEmail,
                         storedToken.PendingNormalizedEmail,
@@ -435,13 +461,20 @@ function createAccountEmailService({
                 else if (storedToken.Purpose === "verify-email") {
                     if (!member.Email || member.PendingEmail)
                         return {result: {...INVALID_VERIFICATION_RESULT}};
+                    if (await hasOtherIdentityClaim(
+                        connection,
+                        member.NormalizedEmail,
+                        member.Id
+                    )) {
+                        return {result: {...INVALID_VERIFICATION_RESULT}};
+                    }
                     await query(connection, VERIFY_ACTIVE_EMAIL, [now, member.Id]);
                 }
                 else {
                     return {result: {...INVALID_VERIFICATION_RESULT}};
                 }
 
-                await query(connection, INVALIDATE_EMAIL_TOKENS, [now, member.Id]);
+                await query(connection, CONSUME_MEMBER_ACTION_TOKENS, [now, member.Id]);
                 return {
                     result: {
                         success: true,
@@ -464,6 +497,16 @@ function createAccountEmailService({
             }
         }
         return outcome.result;
+    }
+
+    async function hasOtherIdentityClaim(connection, normalizedEmail, memberId) {
+        const existing = await query(connection, SELECT_OTHER_EMAIL_CLAIM, [
+            normalizedEmail,
+            normalizedEmail,
+            normalizedEmail,
+            memberId
+        ]);
+        return existing.length > 0;
     }
 
     async function cleanupActionTokens(connection, now) {

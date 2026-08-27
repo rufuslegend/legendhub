@@ -37,7 +37,11 @@ let passwordRecoveryService = createPasswordRecoveryService({
 });
 
 let getIPFromRequest = function(request) {
-    let ip = (request.headers['x-forwarded-for'] || "").split(",")[0];
+    const ip = typeof request?.ip === "string" && request.ip
+        ? request.ip
+        : (typeof request?.socket?.remoteAddress === "string"
+            ? request.socket.remoteAddress
+            : "");
     return crypto.createHash("sha1").update(ip).digest("hex");
 }
 
@@ -50,21 +54,22 @@ let authLogin = async function(identity, password, stayLoggedIn, ip) {
     if (typeof password !== "string")
         throw new gql.GraphQLError("Invalid username or password.");
 
-    const trimmedIdentity = typeof identity === "string" ? identity.trim() : "";
-    const emailIdentity = trimmedIdentity.includes("@");
+    const rawIdentity = typeof identity === "string" ? identity : "";
+    const normalizedEmailIdentity = rawIdentity.trim().toLowerCase();
+    const emailIdentity = normalizedEmailIdentity.includes("@");
     const lookup = emailIdentity
-        ? `SELECT Id, Password, Banned FROM Members
+        ? `SELECT Id, Password, StorageNamespace, Banned FROM Members
             WHERE Username = ?
                 OR (NormalizedEmail = ? AND EmailVerifiedOn IS NOT NULL)
             ORDER BY CASE WHEN Username = ? THEN 0 ELSE 1 END
             LIMIT 1
             FOR UPDATE`
-        : `SELECT Id, Password, Banned FROM Members
+        : `SELECT Id, Password, StorageNamespace, Banned FROM Members
             WHERE Username = ?
             FOR UPDATE`;
     const lookupValues = emailIdentity
-        ? [trimmedIdentity, trimmedIdentity.toLowerCase(), trimmedIdentity]
-        : [trimmedIdentity];
+        ? [rawIdentity, normalizedEmailIdentity, rawIdentity]
+        : [rawIdentity];
 
     try {
         return await withTransaction(mysql, async function(connection) {
@@ -73,6 +78,8 @@ let authLogin = async function(identity, password, stayLoggedIn, ip) {
                 !result.Banned && phpPass.verify(password, result.Password));
             if (!member)
                 throw new InvalidLoginError();
+
+            await ensureStorageNamespace(connection, member);
 
             await query(connection,
                 "UPDATE Members SET LastLoginDate = NOW(), LastLoginIP = ? WHERE Id = ?",
@@ -119,7 +126,16 @@ const DISCOVER_AUTH_TOKEN_MEMBER = `
     WHERE M.Banned = 0 AND AT.Expires > NOW() AND AT.Selector = ?
     LIMIT 1`;
 const LOCK_AUTH_MEMBER = `
-    SELECT Id FROM Members WHERE Id = ? AND Banned = 0 FOR UPDATE`;
+    SELECT Id, Password FROM Members WHERE Id = ? AND Banned = 0 FOR UPDATE`;
+const UPDATE_MEMBER_PASSWORD = "UPDATE Members SET Password = ? WHERE Id = ?";
+const INVALIDATE_MEMBER_RESET_TOKENS = `
+    UPDATE AccountActionTokens
+    SET ConsumedOn = NOW()
+    WHERE MemberId = ? AND Purpose = 'password-reset' AND ConsumedOn IS NULL`;
+const ASSIGN_STORAGE_NAMESPACE = `UPDATE Members SET StorageNamespace =
+    COALESCE(StorageNamespace, ?) WHERE Id = ?`;
+const SELECT_STORAGE_NAMESPACE =
+    "SELECT StorageNamespace FROM Members WHERE Id = ?";
 
 let authToken = async function(token, ip, renew, shouldGetPermissions) {
     if (renew === undefined)
@@ -177,6 +193,8 @@ async function authenticateToken(executor, token, tokenInfo, ip, renew) {
     if (!storedToken)
         throw new InvalidSessionTokenError();
 
+    const storageNamespace = await ensureStorageNamespace(executor, storedToken);
+
     if (renew) {
         await query(executor,
             "UPDATE Members SET LastLoginDate = NOW(), LastLoginIP = ? WHERE Id = ?",
@@ -196,7 +214,7 @@ async function authenticateToken(executor, token, tokenInfo, ip, renew) {
         email: storedToken.Email,
         emailVerified: Boolean(storedToken.EmailVerifiedOn),
         pendingEmail: storedToken.PendingEmail,
-        storageNamespace: storedToken.StorageNamespace,
+        storageNamespace,
         ip
     };
 
@@ -235,8 +253,90 @@ async function authenticateToken(executor, token, tokenInfo, ip, renew) {
     return response;
 }
 
+async function ensureStorageNamespace(executor, member) {
+    if (member.StorageNamespace !== null)
+        return member.StorageNamespace;
+
+    const candidate = crypto.randomBytes(16).toString("hex");
+    const memberId = member.MemberId ?? member.Id;
+    await query(executor, ASSIGN_STORAGE_NAMESPACE, [candidate, memberId]);
+    const rows = await query(executor, SELECT_STORAGE_NAMESPACE, [
+        memberId
+    ]);
+    const assigned = rows[0]?.StorageNamespace;
+    if (typeof assigned !== "string" || !/^[0-9a-f]{32}$/.test(assigned))
+        throw new InvalidSessionTokenError();
+    return assigned;
+}
+
 let authMutation = function(req, token, shouldGetPermissions) {
     return authApi(req, token, shouldGetPermissions, true);
+};
+
+let changePassword = async function(req, token, currentPassword, newPassword) {
+    const ip = getIPFromRequest(req);
+    if (apiUtils.isIPBlocked(ip))
+        throw new apiUtils.TooManyRequestsError("Too many attempts. Try again later.");
+    if (typeof token !== "string" || typeof currentPassword !== "string" ||
+        typeof newPassword !== "string") {
+        throw new apiUtils.UnauthorizedError("Invalid token");
+    }
+
+    const tokenInfo = token.split("-");
+    if (tokenInfo.length !== 2)
+        throw new apiUtils.UnauthorizedError("Invalid token");
+
+    try {
+        return await withTransaction(mysql, async function(connection) {
+            const discovered = await query(connection, DISCOVER_AUTH_TOKEN_MEMBER, [
+                tokenInfo[0]
+            ]);
+            if (!discovered[0])
+                throw new InvalidSessionTokenError();
+
+            const members = await query(connection, LOCK_AUTH_MEMBER, [
+                discovered[0].MemberId
+            ]);
+            const member = members[0];
+            if (!member)
+                throw new InvalidSessionTokenError();
+
+            const sessions = await query(connection, `${SELECT_AUTH_TOKEN}\nFOR UPDATE`, [
+                tokenInfo[0]
+            ]);
+            const tokenHash = crypto.createHash("sha256")
+                .update(tokenInfo[1]).digest("hex");
+            const sourceSession = sessions.find(session =>
+                session.MemberId === member.Id &&
+                session.HashedValidator === tokenHash);
+            if (!sourceSession)
+                throw new InvalidSessionTokenError();
+
+            const tokenRenewal = {
+                token,
+                expires: sourceSession.StayLoggedIn ? sourceSession.Expires : null
+            };
+            if (!phpPass.verify(currentPassword, member.Password))
+                return {success: false, tokenRenewal};
+
+            const updated = await query(connection, UPDATE_MEMBER_PASSWORD, [
+                phpPass.hash(newPassword),
+                member.Id
+            ]);
+            if (Number(updated.affectedRows) !== 1)
+                throw new Error("Member password update failed");
+
+            await query(connection, INVALIDATE_MEMBER_RESET_TOKENS, [member.Id]);
+            return {success: true, tokenRenewal};
+        });
+    }
+    catch (error) {
+        if (error instanceof InvalidSessionTokenError)
+            throw new apiUtils.UnauthorizedError("Invalid token");
+        if (error?.extensions?.code)
+            throw error;
+        throw new gql.GraphQLError("Password update failed.");
+    }
 };
 
 let authQuery = function(req, token, shouldGetPermissions) {
@@ -440,5 +540,14 @@ let mFields = {
 
 module.exports.mutationFields = mFields;
 module.exports.types = { tokenRenewalType, idMutationResponseType };
-module.exports.utils = { getIPFromRequest, authLogin, authToken, authQuery, authMutation, logout, getPermissions };
+module.exports.utils = {
+    getIPFromRequest,
+    authLogin,
+    authToken,
+    authQuery,
+    authMutation,
+    changePassword,
+    logout,
+    getPermissions
+};
 module.exports.passwordRecoveryService = passwordRecoveryService;

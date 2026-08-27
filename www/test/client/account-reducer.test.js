@@ -56,7 +56,8 @@ test("initial state loads every route-provided notification setting", async func
             canUseAccountStorage: true,
             password: "",
             error: null,
-            announcement: null
+            announcement: null,
+            resendCooldownSeconds: 0
         }
     });
 });
@@ -231,7 +232,8 @@ test("email editor clears the password after success and returns to viewing", as
         canUseAccountStorage: true,
         password: "",
         error: null,
-        announcement: "verification-sent"
+        announcement: "verification-sent",
+        resendCooldownSeconds: 0
     });
 });
 
@@ -258,9 +260,10 @@ test("email editor clears the password after every failed request", async functi
     }
 });
 
-// Catches resend double-submit state getting stuck or failing to expose a
-// live-region announcement after the request finishes.
-test("email resend moves through pending, success, and network error states", async function() {
+// Catches resend double-submit state getting stuck, success/rate-limit
+// responses leaving immediate repeats enabled, or the countdown failing to
+// unlock after sixty client-side ticks.
+test("email resend applies a sixty-second success and rate-limit cooldown", async function() {
     const {accountReducer, createInitialAccountState} = await loadReducer();
     let state = createInitialAccountState(notificationSettings, {
         ...emailStatus,
@@ -280,7 +283,31 @@ test("email resend moves through pending, success, and network error states", as
     assert.equal(state.emailEditor.status, "viewing");
     assert.equal(state.emailEditor.error, null);
     assert.equal(state.emailEditor.announcement, "verification-sent");
+    assert.equal(state.emailEditor.resendCooldownSeconds, 60);
     assert.equal(state.emailEditor.password, "");
+
+    const coolingDown = state;
+    assert.equal(accountReducer(state, {type: "email/resend-requested"}), coolingDown,
+        "a cooldown must suppress an immediate resend");
+    state = accountReducer(state, {type: "email/resend-cooldown-tick"});
+    assert.equal(state.emailEditor.resendCooldownSeconds, 59);
+
+    state = createInitialAccountState(notificationSettings, {
+        ...emailStatus,
+        pendingEmail: "new@example.com"
+    });
+    state = accountReducer(state, {type: "email/resend-requested"});
+    state = accountReducer(state, {type: "email/resend-rate-limited"});
+    assert.equal(state.emailEditor.status, "viewing");
+    assert.equal(state.emailEditor.error, null);
+    assert.equal(state.emailEditor.announcement, "resend-rate-limited");
+    assert.equal(state.emailEditor.resendCooldownSeconds, 60);
+
+    for (let remaining = 59; remaining >= 0; remaining -= 1)
+        state = accountReducer(state, {type: "email/resend-cooldown-tick"});
+    assert.equal(state.emailEditor.resendCooldownSeconds, 0);
+    state = accountReducer(state, {type: "email/resend-requested"});
+    assert.equal(state.emailEditor.status, "resending");
 });
 
 // Catches the browser adapter dropping the current password, failing to use
