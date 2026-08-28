@@ -20,6 +20,26 @@ const accountProfile = {
     revision: 4,
     updatedOn: "2026-08-26T12:00:00.000Z"
 };
+const scoutProfilePayload = "6*Scout~Original~0X0X0X0X0X0X000000___0000000000000000000f__________________________________*";
+const importedAccountProfiles = [
+    accountProfile,
+    {
+        id: "imported-hero-id",
+        name: "Hero",
+        payload: currentHeroExport,
+        payloadVersion: 6,
+        revision: 1,
+        updatedOn: "2026-08-26T12:05:00.000Z"
+    },
+    {
+        id: "imported-scout-id",
+        name: "Scout",
+        payload: scoutProfilePayload,
+        payloadVersion: 6,
+        revision: 1,
+        updatedOn: "2026-08-26T12:05:00.000Z"
+    }
+];
 const accountPreferences = "{\"itemsPerPage\":99,\"builderColumns\":[\"Rent\"],\"sentinel\":\"private-account-preference\"}";
 const itemFragment = "fragment ItemAll on Item { id name slot strength strengthCap hit dam hp ma mv ac rent weight uniqueWear isLimited twoHanded fauxObject isLight alignRestriction weaponStat }";
 const itemStatInfo = [
@@ -324,6 +344,153 @@ test("Builder startup normalizes verified item metadata failures before account 
     expect(metadataAttempts).toBe(2);
     expect(accountAttempts).toBe(1);
     expect(await page.evaluate(() => localStorage.getItem("cln"))).toBe(encodedLists);
+});
+
+// Catches migration uploading before explicit consent, minting a fresh batch
+// key on retry, acknowledging a failure, leaking private errors, or activating
+// anything other than the strict account state returned by the atomic import.
+test("local Builder data migration is explicit, retry-safe, private, and reports every result", async function({context, page}) {
+    await context.addCookies([{name: "loginToken", value: "migration-builder-account", url: baseUrl}]);
+    const idempotencyKeys = [];
+    let importAttempts = 0;
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (request.query.includes("GetBuilderAccountState")) {
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({
+                data: {getBuilderAccountState: accountBuilderState()}
+            })});
+        }
+        if (!request.query.includes("ImportBuilderProfiles"))
+            return route.fallback();
+        importAttempts += 1;
+        idempotencyKeys.push(request.variables.idempotencyKey);
+        expect(request.variables.profiles.map(profile => profile.name)).toEqual(["Hero", "Scout"]);
+        const preferences = JSON.parse(request.variables.preferences);
+        expect(Object.keys(preferences).sort()).toEqual([
+            "builderColumns", "itemColumns", "itemsPerPage", "selectedProfileId",
+            "selectedVariant", "version"
+        ]);
+        const {authToken, ...migrationVariables} = request.variables;
+        expect(authToken).toBe("migration-builder-account");
+        expect(JSON.stringify(migrationVariables)).not.toContain("migration-builder-account");
+        if (importAttempts === 1) {
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({
+                errors: [{message: "database rejected 6*private-builder-payload"}]
+            })});
+        }
+        return route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify({data: {
+                importBuilderProfiles: {
+                    result: JSON.stringify({
+                        copied: ["Scout"],
+                        renamed: [{from: "Hero", to: "Hero Local"}],
+                        deduplicated: ["Same"],
+                        rejected: [{
+                            name: "Broken",
+                            reason: "decoder rejected 6*private-builder-payload"
+                        }],
+                        preferencesImported: true
+                    }),
+                    state: accountBuilderState(importedAccountProfiles)
+                }
+            }})
+        });
+    });
+
+    await page.goto(`${baseUrl}/builder/`);
+    const offer = page.getByRole("region", {name: "Local Builder data"});
+    await expect(offer).toContainText("Hero");
+    await expect(offer).toContainText("Scout");
+    expect(importAttempts).toBe(0);
+    expect(await page.evaluate(() => localStorage.getItem(
+        "legendhub-builder-import:0123456789abcdef0123456789abcdef"
+    ))).toBeNull();
+
+    const trigger = offer.getByRole("button", {name: "Review local Builder data"});
+    await trigger.focus();
+    await trigger.click();
+    const dialog = page.getByRole("dialog", {name: "Copy local Builder data"});
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", {name: "Copy all to my account"})).toBeFocused();
+    await expect(dialog.getByLabel("Keep my account preferences")).toBeChecked();
+    await dialog.getByLabel("Use this browser's preferences").check();
+    await dialog.getByRole("button", {name: "Copy all to my account"}).click();
+
+    const alert = dialog.getByRole("alert");
+    await expect(alert).toContainText("Local Builder data could not be copied. Try again.");
+    await expect(alert).not.toContainText("private-builder-payload");
+    expect(await page.evaluate(() => localStorage.getItem(
+        "legendhub-builder-import:0123456789abcdef0123456789abcdef"
+    ))).toBeNull();
+
+    await dialog.getByRole("button", {name: "Copy all to my account"}).click();
+    expect(idempotencyKeys).toHaveLength(2);
+    expect(idempotencyKeys[1]).toBe(idempotencyKeys[0]);
+    await expect(dialog.locator("#builder-migration-result")).toBeFocused();
+    await expect(dialog.getByRole("heading", {name: "Copied"})).toBeVisible();
+    await expect(dialog.getByText("Scout", {exact: true})).toBeVisible();
+    await expect(dialog.getByText("Hero → Hero Local", {exact: true})).toBeVisible();
+    await expect(dialog.getByText("Same", {exact: true})).toBeVisible();
+    await expect(dialog.getByText("Broken — Could not be copied.", {exact: true})).toBeVisible();
+    await expect(dialog).not.toContainText("private-builder-payload");
+    await expect(page.getByLabel("Character", {exact: true})).toContainText("Guest");
+    await expect(page.getByLabel("Character", {exact: true})).toContainText("Hero");
+    await expect(page.getByLabel("Character", {exact: true})).toContainText("Scout");
+    expect(await page.evaluate(() => ({
+        acknowledgement: localStorage.getItem(
+            "legendhub-builder-import:0123456789abcdef0123456789abcdef"
+        ),
+        anonymousLists: localStorage.getItem("cln")
+    }))).toEqual({
+        acknowledgement: expect.stringMatching(/^[a-f0-9]{64}$/),
+        anonymousLists: encodedLists
+    });
+
+    await dialog.getByRole("button", {name: "Close results"}).click();
+    await expect(offer.getByRole("button", {name: "View copy results"})).toBeFocused();
+});
+
+// Catches dismissal modifying browser data, calling the import mutation, or
+// failing to acknowledge the exact local fingerprint for the next login.
+test("local Builder data migration dismissal retains browser source and restores focus", async function({context, page}) {
+    await context.addCookies([{name: "loginToken", value: "dismiss-migration-account", url: baseUrl}]);
+    let importAttempts = 0;
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (request.query.includes("GetBuilderAccountState")) {
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({
+                data: {getBuilderAccountState: {...accountBuilderState(), preferences: "{}"}}
+            })});
+        }
+        if (request.query.includes("ImportBuilderProfiles"))
+            importAttempts += 1;
+        return route.fallback();
+    });
+
+    await page.goto(`${baseUrl}/builder/`);
+    const offer = page.getByRole("region", {name: "Local Builder data"});
+    const trigger = offer.getByRole("button", {name: "Review local Builder data"});
+    await trigger.click();
+    const dialog = page.getByRole("dialog", {name: "Copy local Builder data"});
+    await expect(dialog.getByLabel("Use this browser's preferences")).toBeChecked();
+    await dialog.getByRole("button", {name: "Not now"}).click();
+
+    expect(importAttempts).toBe(0);
+    await expect(offer.getByRole("button", {name: "Review local Builder data"})).toBeFocused();
+    expect(await page.evaluate(() => ({
+        acknowledgement: localStorage.getItem(
+            "legendhub-builder-import:0123456789abcdef0123456789abcdef"
+        ),
+        anonymousLists: localStorage.getItem("cln")
+    }))).toEqual({
+        acknowledgement: expect.stringMatching(/^[a-f0-9]{64}$/),
+        anonymousLists: encodedLists
+    });
+
+    await page.reload();
+    await expect(page.getByRole("region", {name: "Local Builder data"})).toHaveCount(0);
+    expect(importAttempts).toBe(0);
 });
 
 test.beforeEach(async function({context, page}) {

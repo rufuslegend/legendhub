@@ -189,6 +189,17 @@ export function createInitialBuilderState() {
         accountState: null,
         syncStatus: "browser",
         syncMessage: "",
+        migration: {
+            status: "idle",
+            open: false,
+            snapshot: null,
+            fingerprint: null,
+            profiles: [],
+            preferencesChoice: "account",
+            request: null,
+            result: null,
+            error: ""
+        },
         exceptionEncountered: false,
         clientSideDataSize: 0
     };
@@ -220,6 +231,80 @@ export function builderReducer(state, action) {
                 selectedList: allLists[0]?.variants[0] || null
             };
         }
+        case "migration/offered":
+            return {
+                ...state,
+                migration: {
+                    status: "offered",
+                    open: false,
+                    snapshot: action.snapshot,
+                    fingerprint: action.fingerprint,
+                    profiles: action.profiles.slice(),
+                    preferencesChoice: action.preferencesChoice,
+                    request: null,
+                    result: null,
+                    error: ""
+                }
+            };
+        case "migration/opened":
+            return {...state, migration: {...state.migration, open: true}};
+        case "migration/preferences-changed":
+            return {
+                ...state,
+                migration: {
+                    ...state.migration,
+                    status: "offered",
+                    preferencesChoice: action.value,
+                    request: null,
+                    result: null,
+                    error: ""
+                }
+            };
+        case "migration/requested":
+            return {
+                ...state,
+                migration: {
+                    ...state.migration,
+                    status: "pending",
+                    open: true,
+                    request: action.request || state.migration.request,
+                    error: ""
+                }
+            };
+        case "migration/succeeded":
+            return {
+                ...state,
+                migration: {
+                    ...state.migration,
+                    status: "succeeded",
+                    open: true,
+                    request: null,
+                    result: action.result,
+                    error: ""
+                }
+            };
+        case "migration/failed":
+            return {
+                ...state,
+                migration: {
+                    ...state.migration,
+                    status: "error",
+                    open: true,
+                    error: action.error
+                }
+            };
+        case "migration/dismissed":
+            return {
+                ...state,
+                migration: {
+                    ...state.migration,
+                    status: "dismissed",
+                    open: false,
+                    error: ""
+                }
+            };
+        case "migration/closed":
+            return {...state, migration: {...state.migration, open: false}};
         case "account/profile-saved": {
             const allLists = state.allLists.slice();
             const metadata = accountMetadata(action.profile);

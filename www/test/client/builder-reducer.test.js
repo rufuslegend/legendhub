@@ -50,9 +50,97 @@ test("builder initial state owns list, equipment, search, dialog, and request st
         accountState: null,
         syncStatus: "browser",
         syncMessage: "",
+        migration: {
+            status: "idle",
+            open: false,
+            snapshot: null,
+            fingerprint: null,
+            profiles: [],
+            preferencesChoice: "account",
+            request: null,
+            result: null,
+            error: ""
+        },
         exceptionEncountered: false,
         clientSideDataSize: 0
     });
+});
+
+// Catches migration retries minting a second batch key, failures acknowledging
+// data, or result actions losing the dialog's accessible state.
+test("migration reducer reuses one atomic request through failure and retry", async function() {
+    const {builderReducer, createInitialBuilderState} = await loadReducer();
+    const snapshot = {encodedLists: "6*local*"};
+    const request = {idempotencyKey: "one-batch-key", profiles: [{name: "Hero"}]};
+    let state = builderReducer(createInitialBuilderState(), {
+        type: "migration/offered",
+        snapshot,
+        fingerprint: "abc123",
+        profiles: ["Hero"],
+        preferencesChoice: "browser"
+    });
+    assert.deepEqual(state.migration, {
+        status: "offered", open: false, snapshot, fingerprint: "abc123",
+        profiles: ["Hero"], preferencesChoice: "browser", request: null,
+        result: null, error: ""
+    });
+
+    state = builderReducer(state, {type: "migration/opened"});
+    state = builderReducer(state, {type: "migration/requested", request});
+    assert.equal(state.migration.status, "pending");
+    assert.equal(state.migration.open, true);
+    assert.equal(state.migration.request, request);
+
+    state = builderReducer(state, {
+        type: "migration/failed",
+        error: "Local Builder data could not be copied. Try again."
+    });
+    assert.equal(state.migration.status, "error");
+    assert.equal(state.migration.request, request);
+    assert.equal(state.migration.fingerprint, "abc123");
+
+    state = builderReducer(state, {type: "migration/requested"});
+    assert.equal(state.migration.request, request);
+    state = builderReducer(state, {
+        type: "migration/succeeded",
+        result: {copied: ["Hero"]}
+    });
+    assert.equal(state.migration.status, "succeeded");
+    assert.deepEqual(state.migration.result, {copied: ["Hero"]});
+    assert.equal(state.migration.request, null);
+});
+
+// Catches preference edits retrying a stale request and dismissal mutating the
+// retained anonymous snapshot or active account profiles.
+test("migration preference change starts a new attempt and dismissal preserves both sources", async function() {
+    const {builderReducer, createDefaultVariant, createInitialBuilderState} = await loadReducer();
+    const accountProfile = {
+        name: "Account Hero", variants: [createDefaultVariant("Original")],
+        account: {id: "account-id", revision: 1}
+    };
+    const snapshot = {encodedLists: "6*local*"};
+    let state = builderReducer(createInitialBuilderState(), {
+        type: "source/loaded", mode: "account", profiles: [accountProfile],
+        accountState: {storageGeneration: 1}, anonymousSnapshot: snapshot
+    });
+    state = builderReducer(state, {
+        type: "migration/offered", snapshot, fingerprint: "abc123",
+        profiles: ["Local Hero"], preferencesChoice: "account"
+    });
+    state = builderReducer(state, {
+        type: "migration/requested", request: {idempotencyKey: "old-key"}
+    });
+    state = builderReducer(state, {type: "migration/preferences-changed", value: "browser"});
+    assert.equal(state.migration.preferencesChoice, "browser");
+    assert.equal(state.migration.request, null);
+
+    const activeProfiles = state.allLists;
+    state = builderReducer(state, {type: "migration/dismissed"});
+    assert.equal(state.migration.status, "dismissed");
+    assert.equal(state.migration.open, false);
+    assert.equal(state.migration.fingerprint, "abc123");
+    assert.equal(state.migration.snapshot, snapshot);
+    assert.equal(state.allLists, activeProfiles);
 });
 
 // Catches source activation dropping the stable server identity that later

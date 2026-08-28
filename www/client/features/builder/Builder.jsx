@@ -7,13 +7,15 @@ import EquipmentPanel from "./EquipmentPanel.jsx";
 import StatsPanel from "./StatsPanel.jsx";
 import ImportExportDialog, {BuilderModal} from "./ImportExportDialog.jsx";
 import BuilderListsDialog from "./BuilderListsDialog.jsx";
+import BuilderMigrationDialog, {BuilderMigrationOffer} from "./BuilderMigrationDialog.jsx";
 import {deriveItemRestrictions, deriveRuneCharmStats} from "./builder-derivations.js";
 import {decodeBuilderEntries, decodeBuilderLists, encodeBuilderLists, encodeBuilderVariant} from "./builder-encoding.js";
+import {buildImportRequest, defaultMigrationPreferencesChoice, fingerprintAnonymousData, migrationAcknowledgementKey, normalizeMigrationResult, shouldOfferMigration} from "./builder-migration.js";
 import {applyBuilderPersistencePlan, applySelectedColumns, calculateStorageSize, createBuilderPersistencePlan, formatStorageSize, readBuilderPersistence} from "./builder-persistence.js";
 import {builderReducer, createDefaultVariant, createInitialBuilderState, selectStatRestrictions, selectStatTotal} from "./builder-reducer.js";
 import {RUNE_CHARM_ID} from "./item-constants.js";
 import {createItemsBySlotQuery, createItemsInIdsQuery, hydrateBuilderVariant} from "./builder-api.js";
-import {loadBuilderAccountState} from "./builder-account-api.js";
+import {importAccountProfiles, loadBuilderAccountState} from "./builder-account-api.js";
 import {BUILDER_ACCOUNT_LOAD_ERROR, loadBuilderSource} from "./builder-source.js";
 import {validateBuilderListName} from "./builder-list-validation.js";
 
@@ -59,6 +61,32 @@ export default function Builder({
                     decode: decodeBuilderLists
                 });
                 if (cancelled) return;
+                let migrationOffer = null;
+                if (source.mode === "account" && accountContext.authenticated === true &&
+                    accountContext.emailVerified === true && accountContext.canUseAccountStorage === true &&
+                    typeof accountContext.storageNamespace === "string" && accountContext.storageNamespace) {
+                    try {
+                        const fingerprint = await fingerprintAnonymousData(source.anonymousSnapshot, globalThis.crypto);
+                        const acknowledgedFingerprint = localStorage.getItem(
+                            migrationAcknowledgementKey(accountContext.storageNamespace)
+                        );
+                        if (shouldOfferMigration({
+                            snapshot: source.anonymousSnapshot,
+                            fingerprint,
+                            acknowledgedFingerprint
+                        })) {
+                            migrationOffer = {
+                                snapshot: source.anonymousSnapshot,
+                                fingerprint,
+                                profiles: decodeBuilderLists(source.anonymousSnapshot.encodedLists).map(profile => profile.name),
+                                preferencesChoice: defaultMigrationPreferencesChoice(source.preferences)
+                            };
+                        }
+                    }
+                    catch {
+                        // Invalid or unavailable browser-local data is never uploaded.
+                    }
+                }
                 const preferences = source.preferences || {};
                 let lists = source.profiles;
                 if (!lists.length) {
@@ -82,6 +110,8 @@ export default function Builder({
                         ? cookies()[`sc-${lists[listIndex].name}`] || preferences.columns
                         : null;
                     dispatch({type: "source/loaded", mode: source.mode, profiles: lists, accountState: source.accountState});
+                    if (migrationOffer)
+                        dispatch({type: "migration/offered", ...migrationOffer});
                     dispatch({type: "ui/patch", value: {allLists: lists, selectedListIndex: listIndex, selectedListVariantIndex: variantIndex, selectedList: lists[listIndex].variants[variantIndex], statInfo: applySelectedColumns(columns, data.getItemStatInfo), defaultStatInfo: data.getItemStatInfo, itemFragment: data.getItemFragment, itemsPerPage: source.mode === "anonymous" ? preferences.itemsPerPage : state.itemsPerPage, initialized: true, requestStatus: "error", requestError: "Saved builder data could not be hydrated. Retry to restore item details."}});
                     return;
                 }
@@ -98,6 +128,8 @@ export default function Builder({
                     : null;
                 const statInfo = applySelectedColumns(columns, data.getItemStatInfo);
                 dispatch({type: "source/loaded", mode: source.mode, profiles: lists, accountState: source.accountState});
+                if (migrationOffer)
+                    dispatch({type: "migration/offered", ...migrationOffer});
                 dispatch({type: "ui/patch", value: {allLists: lists, selectedListIndex: listIndex, selectedListVariantIndex: variantIndex, selectedList: lists[listIndex].variants[variantIndex], statInfo, defaultStatInfo: data.getItemStatInfo, itemFragment: data.getItemFragment, itemsPerPage: source.mode === "anonymous" ? preferences.itemsPerPage : state.itemsPerPage, initialized: true}});
                 dispatch({type: "request/succeeded"});
                 hydrated.current = true;
@@ -138,6 +170,68 @@ export default function Builder({
             dispatch({type: "ui/patch", value: {statInfo: applySelectedColumns(cookieValues[`sc-${characterName}`] || cookieValues.sc2, state.defaultStatInfo)}});
         }
         dispatch(value);
+    }
+    function acknowledgeMigration() {
+        if (!state.migration.fingerprint || typeof accountContext.storageNamespace !== "string" || !accountContext.storageNamespace)
+            return;
+        localStorage.setItem(
+            migrationAcknowledgementKey(accountContext.storageNamespace),
+            state.migration.fingerprint
+        );
+    }
+    function closeMigration() {
+        if (state.migration.status === "pending")
+            return;
+        if (state.migration.status === "succeeded") {
+            dispatch({type: "migration/closed"});
+            return;
+        }
+        acknowledgeMigration();
+        dispatch({type: "migration/dismissed"});
+    }
+    async function copyMigration() {
+        let request = state.migration.request;
+        try {
+            if (!request) {
+                request = buildImportRequest({
+                    snapshot: state.migration.snapshot,
+                    preferencesChoice: state.migration.preferencesChoice,
+                    storageGeneration: state.accountState.storageGeneration
+                });
+            }
+            dispatch({type: "migration/requested", request});
+            const response = await importAccountProfiles({
+                ...request,
+                preferences: request.preferences === null
+                    ? null
+                    : JSON.stringify(request.preferences)
+            });
+            const result = normalizeMigrationResult(response.result);
+            const importedSource = await loadBuilderSource({
+                accountContext,
+                loadAccount: async function() { return response.state; },
+                readAnonymous: function() { return state.migration.snapshot; },
+                decode: decodeBuilderLists
+            });
+            const profiles = await hydrateLists(importedSource.profiles, state.itemFragment);
+            dispatch({
+                type: "source/loaded",
+                mode: "account",
+                profiles,
+                accountState: importedSource.accountState
+            });
+            localStorage.setItem(
+                migrationAcknowledgementKey(accountContext.storageNamespace),
+                state.migration.fingerprint
+            );
+            dispatch({type: "migration/succeeded", result});
+        }
+        catch {
+            dispatch({
+                type: "migration/failed",
+                error: "Local Builder data could not be copied. Try again."
+            });
+        }
     }
     const close = useCallback(function() { dispatch({type: "ui/patch", value: {currentDialog: null, currentItem: null, isRuneCrafting: false}}); }, []);
     const closeConfirmation = useCallback(function() { dispatch({type: "dialog/close"}); }, []);
@@ -232,5 +326,5 @@ export default function Builder({
     const requestAlert = state.requestError && <p role="alert" className="text-danger">{state.requestError} <button type="button" className="btn btn-link p-0" onClick={() => window.location.reload()}>Retry</button></p>;
     if (state.requestStatus === "pending" && !state.initialized) return <main className="container-fluid"><p role="status">Loading Builder…</p></main>;
     if (!selected) return <main className="container-fluid">{requestAlert}</main>;
-    return <main className="container-fluid"><div className="row"><CharacterPanel state={state} columnsOpen={state.currentDialog === "columns"} columnsTriggerRef={columnsTriggerRef} onAction={action} onDialog={openDialog} /><StatsPanel state={state} onAction={action} /></div>{requestAlert}<EquipmentPanel state={state} totals={totals} restrictions={restrictions} statRestrictions={statRestrictions} onAction={action} onToggleLocks={requestToggleLocks} onOpen={openItem} onPick={pickItem} onClose={close} />{state.currentDialog === "export" && <ImportExportDialog mode="export" value={exportValue()} onClose={close} />}{state.currentDialog === "import" && <ImportExportDialog mode="import" value={state.importModel || {input: "", lists: [], message: "", loading: false}} onChange={importChange} onClose={close} onSubmit={submitImport} />}{state.currentDialog === "columns" && <ColumnsDialog categories={itemStatCategories} open onClose={close} onReset={resetColumns} onToggle={toggleColumn} selectedColumns={state.statInfo.filter(stat => stat.showColumn).map(stat => stat.short)} triggerRef={columnsTriggerRef} />}{state.currentDialog && !["columns", "import", "export"].includes(state.currentDialog) && <BuilderListsDialog dialog={state.currentDialog} state={state} onClose={close} onSubmit={listsDialog} />}{state.confirmMessage && <BuilderModal label={`Confirm ${state.confirmMessage.includes("unlock") ? "unlock" : "lock"} all items`} onClose={closeConfirmation}><div className="modal-body"><p>{state.confirmMessage}</p><button className="btn btn-primary" type="button" onClick={confirmAction}>Yes</button></div></BuilderModal>}</main>;
+    return <main className="container-fluid"><div className="row"><CharacterPanel state={state} columnsOpen={state.currentDialog === "columns"} columnsTriggerRef={columnsTriggerRef} onAction={action} onDialog={openDialog} /><StatsPanel state={state} onAction={action} /></div>{requestAlert}<BuilderMigrationOffer migration={state.migration} onOpen={() => dispatch({type: "migration/opened"})} /><EquipmentPanel state={state} totals={totals} restrictions={restrictions} statRestrictions={statRestrictions} onAction={action} onToggleLocks={requestToggleLocks} onOpen={openItem} onPick={pickItem} onClose={close} />{state.currentDialog === "export" && <ImportExportDialog mode="export" value={exportValue()} onClose={close} />}{state.currentDialog === "import" && <ImportExportDialog mode="import" value={state.importModel || {input: "", lists: [], message: "", loading: false}} onChange={importChange} onClose={close} onSubmit={submitImport} />}{state.currentDialog === "columns" && <ColumnsDialog categories={itemStatCategories} open onClose={close} onReset={resetColumns} onToggle={toggleColumn} selectedColumns={state.statInfo.filter(stat => stat.showColumn).map(stat => stat.short)} triggerRef={columnsTriggerRef} />}{state.currentDialog && !["columns", "import", "export"].includes(state.currentDialog) && <BuilderListsDialog dialog={state.currentDialog} state={state} onClose={close} onSubmit={listsDialog} />}{state.confirmMessage && <BuilderModal label={`Confirm ${state.confirmMessage.includes("unlock") ? "unlock" : "lock"} all items`} onClose={closeConfirmation}><div className="modal-body"><p>{state.confirmMessage}</p><button className="btn btn-primary" type="button" onClick={confirmAction}>Yes</button></div></BuilderModal>}<BuilderMigrationDialog migration={state.migration} onClose={closeMigration} onCopy={copyMigration} onPreferenceChange={value => dispatch({type: "migration/preferences-changed", value})} /></main>;
 }
