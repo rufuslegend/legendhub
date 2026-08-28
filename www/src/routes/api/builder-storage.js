@@ -4,10 +4,68 @@ const gql = require("graphql");
 const {GraphQLDateTime} = require("graphql-scalars");
 const auth = require("./auth");
 const mysql = require("./mysql-connection");
+const {validateBuilderProfile} = require("./builder-payload");
 const {createBuilderStorageService} = require("./builder-storage-service");
-const {BadRequestError} = require("./utils");
+const {
+    BadRequestError,
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    PayloadTooLargeError,
+    TooManyRequestsError,
+    UnauthorizedError
+} = require("./utils");
 
-const SAFE_ERROR_CODES = new Set([400, 401, 403, 404, 409, 413, 429]);
+const SAFE_APPLICATION_ERRORS = new Map([
+    [BadRequestError, {code: 400, messages: new Set([
+        "Bad request.",
+        "Invalid storage request.",
+        "A valid storage generation is required.",
+        "A valid profile revision is required.",
+        "A valid import idempotency key is required.",
+        "Builder import profiles must be an array.",
+        "The Builder profile is invalid.",
+        "A profile ID is required.",
+        "A preference payload is required.",
+        "The preference payload is invalid.",
+        "A valid preference replacement choice is required.",
+        "An imported preference payload is required.",
+        "A character name may contain only letters, digits, and spaces.",
+        "A variant name may contain only letters, digits, and spaces.",
+        "A profile must contain exactly one character.",
+        "The encoded character name does not match.",
+        "A validated Builder profile is required."
+    ])}],
+    [UnauthorizedError, {code: 401, messages: new Set([
+        "Unauthorized.",
+        "Invalid token"
+    ])}],
+    [ForbiddenError, {code: 403, messages: new Set([
+        "Forbidden.",
+        "A verified account is required."
+    ])}],
+    [NotFoundError, {code: 404, messages: new Set([
+        "Not found.",
+        "Profile not found."
+    ])}],
+    [ConflictError, {code: 409, messages: new Set([
+        "Conflict.",
+        "Account storage changed. Reload before saving.",
+        "An active profile already uses that name.",
+        "Profile changed before it could be saved.",
+        "Profile changed before it could be deleted.",
+        "Account storage changed before deletion completed."
+    ])}],
+    [PayloadTooLargeError, {code: 413, messages: new Set([
+        "Payload too large.",
+        "Builder account storage is limited to 10 MB."
+    ])}],
+    [TooManyRequestsError, {code: 429, messages: new Set([
+        "Too many requests.",
+        "Too many attempts. Try again later.",
+        "Try again later."
+    ])}]
+]);
 const storageService = createBuilderStorageService({pool: mysql});
 let codecPromise;
 
@@ -79,14 +137,28 @@ function importResult(result) {
     };
 }
 
+function publicApplicationError(error) {
+    for (const [ErrorType, contract] of SAFE_APPLICATION_ERRORS) {
+        if (error instanceof ErrorType &&
+            error.extensions?.code === contract.code &&
+            contract.messages.has(error.message)) {
+            return new gql.GraphQLError(error.message, {
+                extensions: {code: contract.code}
+            });
+        }
+    }
+    return null;
+}
+
 async function authenticatedRequest({authenticate, req, authToken, operation}) {
     try {
         const authenticated = await authenticate(req, authToken, {renew: false});
         return await operation(authenticated);
     }
     catch (error) {
-        if (SAFE_ERROR_CODES.has(error?.extensions?.code))
-            throw error;
+        const publicError = publicApplicationError(error);
+        if (publicError)
+            throw publicError;
         throw new gql.GraphQLError("The request could not be completed.");
     }
 }
@@ -182,6 +254,7 @@ const authTokenArgument = {
 function createBuilderStorageFields({
     authenticate = auth.utils.authenticate,
     loadCodec: codecLoader = loadCodec,
+    validateProfile = validateBuilderProfile,
     storageService: service = storageService
 } = {}) {
     const queryFields = {
@@ -210,9 +283,19 @@ function createBuilderStorageFields({
                     operation: async authenticated => {
                         const snapshot = await service.exportAll(authenticated);
                         const codec = await codecLoader();
-                        const lists = snapshot.profiles.flatMap(profile =>
-                            codec.decodeBuilderLists(profile.payload)
-                        );
+                        const lists = [];
+                        for (const profile of snapshot.profiles) {
+                            try {
+                                const validated = await validateProfile({
+                                    name: profile.name,
+                                    payload: profile.payload
+                                });
+                                lists.push(validated.decoded);
+                            }
+                            catch {
+                                throw new Error("Stored Builder profile validation failed.");
+                            }
+                        }
                         return codec.encodeBuilderLists(lists);
                     }
                 });

@@ -142,6 +142,18 @@ class UnauthorizedError extends gql.GraphQLError {
     }
 }
 
+class ForbiddenError extends gql.GraphQLError {
+    constructor(message) {
+        if (!message)
+            message = "Forbidden.";
+        super(message, {
+            extensions: {
+                code: 403
+            }
+        });
+    }
+}
+
 class BadRequestError extends gql.GraphQLError {
     constructor(message) {
         if (!message)
@@ -181,6 +193,7 @@ class PayloadTooLargeError extends gql.GraphQLError {
 module.exports.NotFoundError = NotFoundError;
 module.exports.TooManyRequestsError = TooManyRequestsError;
 module.exports.UnauthorizedError = UnauthorizedError;
+module.exports.ForbiddenError = ForbiddenError;
 module.exports.BadRequestError = BadRequestError;
 module.exports.ConflictError = ConflictError;
 module.exports.PayloadTooLargeError = PayloadTooLargeError;

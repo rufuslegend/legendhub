@@ -15,6 +15,13 @@ function validateCharacterName(name) {
         throw new BadRequestError("A character name may contain only letters, digits, and spaces.");
 }
 
+function validateVariantNames(variants) {
+    if (!Array.isArray(variants) || variants.length === 0 || variants.some(variant =>
+        typeof variant?.name !== "string" || !characterName.test(variant.name))) {
+        throw new BadRequestError("A variant name may contain only letters, digits, and spaces.");
+    }
+}
+
 async function validateBuilderProfile({name, payload}) {
     validateCharacterName(name);
     const codec = await loadCodec();
@@ -23,6 +30,7 @@ async function validateBuilderProfile({name, payload}) {
         throw new BadRequestError("A profile must contain exactly one character.");
     if (!characterName.test(lists[0].name) || lists[0].name !== name)
         throw new BadRequestError("The encoded character name does not match.");
+    validateVariantNames(lists[0].variants);
     const canonical = codec.encodeBuilderLists(lists);
     return {
         name,

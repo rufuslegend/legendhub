@@ -101,3 +101,23 @@ test("server validator limits character names to ASCII letters digits and spaces
         );
     }
 });
+
+// Catches any variant bypassing the server's literal-space name rule, which
+// would let JSON escaping expand an otherwise quota-sized stored payload past
+// the route-scoped request limit.
+test("server validator applies the literal-space name rule to every variant", async function() {
+    const valid = multiVariantHero.replace("Tank", "Tank Build");
+    assert.deepEqual(
+        (await validateBuilderProfile({name: "Hero", payload: valid}))
+            .decoded.variants.map(variant => variant.name),
+        ["Tank Build", "Caster"]
+    );
+
+    for (const whitespace of ["\t", "\n"]) {
+        const invalid = multiVariantHero.replace("Caster", `Caster${whitespace}Private`);
+        await assert.rejects(
+            validateBuilderProfile({name: "Hero", payload: invalid}),
+            /variant name/
+        );
+    }
+});

@@ -6,6 +6,16 @@ const test = require("node:test");
 const gql = require("graphql");
 
 const {
+    BadRequestError,
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    PayloadTooLargeError,
+    TooManyRequestsError,
+    UnauthorizedError
+} = require("../src/routes/api/utils");
+
+const {
     createBuilderStorageFields,
     mutationFields,
     queryFields
@@ -324,11 +334,6 @@ test("export sanitizes unexpected stored payload failures", async function() {
     const privatePayload = "private-account-builder-payload";
     const fields = createBuilderStorageFields({
         authenticate: async () => AUTH,
-        loadCodec: async () => ({
-            decodeBuilderLists() {
-                throw new Error(`invalid ${privatePayload}`);
-            }
-        }),
         storageService: {
             async exportAll() {
                 return state({profiles: [profile({payload: privatePayload})]});
@@ -342,11 +347,49 @@ test("export sanitizes unexpected stored payload failures", async function() {
         !error.message.includes(privatePayload));
 });
 
+// Catches export trusting the row payload instead of re-applying the canonical
+// one-character/name-matching server contract used for writes.
+test("export rejects mismatched and multi-character stored rows generically", async function() {
+    const corruptRows = [
+        profile({name: "Private Mismatched Row"}),
+        profile({payload: HERO + SCOUT.slice(2)})
+    ];
+
+    for (const corruptRow of corruptRows) {
+        const fields = createBuilderStorageFields({
+            authenticate: async () => AUTH,
+            storageService: {
+                async exportAll() {
+                    return state({profiles: [corruptRow]});
+                }
+            }
+        });
+
+        await assert.rejects(fields.queryFields.exportBuilderData.resolve(
+            null, {authToken: "selector-validator"}, {ip: "request"}
+        ), error => error.message === "The request could not be completed." &&
+            error.extensions.code === undefined &&
+            !error.message.includes(corruptRow.name) &&
+            !error.message.includes(corruptRow.payload));
+    }
+});
+
 // Catches the resolver replacing intentional client-actionable statuses or
 // reflecting unexpected SQL/payload messages.
-test("storage resolvers preserve safe status errors and sanitize unexpected failures", async function() {
-    for (const code of [400, 409, 413, 429]) {
-        const expected = new gql.GraphQLError(`safe ${code}`, {extensions: {code}});
+test("storage resolvers preserve known safe application errors without private metadata", async function() {
+    assert.equal(typeof ForbiddenError, "function");
+    const expectedErrors = [
+        new BadRequestError("The Builder profile is invalid."),
+        new UnauthorizedError("Invalid token"),
+        new ForbiddenError("A verified account is required."),
+        new NotFoundError("Profile not found."),
+        new ConflictError("Profile changed before it could be saved."),
+        new PayloadTooLargeError("Builder account storage is limited to 10 MB."),
+        new TooManyRequestsError("Try again later.")
+    ];
+    for (const expected of expectedErrors) {
+        expected.extensions.privateDriverMetadata = "must-not-cross-boundary";
+        expected.cause = new Error("private application cause");
         const fields = createBuilderStorageFields({
             authenticate: async () => AUTH,
             storageService: {async createProfile() { throw expected; }}
@@ -354,24 +397,74 @@ test("storage resolvers preserve safe status errors and sanitize unexpected fail
         await assert.rejects(fields.mutationFields.createBuilderProfile.resolve(null, {
             authToken: "selector-validator", name: "Hero", payload: HERO,
             storageGeneration: 2
-        }, {ip: "request"}), error => error === expected);
+        }, {ip: "request"}), error => error !== expected &&
+            error.message === expected.message &&
+            error.extensions.code === expected.extensions.code &&
+            Object.keys(error.extensions).length === 1 &&
+            error.cause === undefined);
     }
+});
 
-    const privateDiagnostic = "private SQL near Builder payload";
-    const fields = createBuilderStorageFields({
-        authenticate: async () => AUTH,
-        storageService: {
-            async createProfile() {
-                throw new Error(privateDiagnostic);
-            }
-        }
+// Catches arbitrary token, SQL, or codec errors laundering private diagnostics
+// through an allowlisted numeric code.
+test("coded token SQL and codec failures are always generic", async function() {
+    const privateDiagnostic = "private-selector private SQL private codec payload";
+    const codedError = code => new gql.GraphQLError(privateDiagnostic, {
+        extensions: {code, privateDriverMetadata: privateDiagnostic},
+        originalError: new Error(privateDiagnostic)
     });
-    await assert.rejects(fields.mutationFields.createBuilderProfile.resolve(null, {
+    const privateTypedTokenError = new UnauthorizedError(privateDiagnostic);
+    privateTypedTokenError.extensions.privateDriverMetadata = privateDiagnostic;
+    const untypedSafeMessageError = new gql.GraphQLError("Invalid token", {
+        extensions: {code: 401, privateDriverMetadata: privateDiagnostic},
+        originalError: new Error(privateDiagnostic)
+    });
+    const privateDriverError = Object.assign(new Error(privateDiagnostic), {
+        cause: new Error(privateDiagnostic),
+        extensions: {code: 409, privateDriverMetadata: privateDiagnostic}
+    });
+    const mutationArgs = {
         authToken: "selector-validator", name: "Hero", payload: HERO,
         storageGeneration: 2
-    }, {ip: "request"}), error =>
-        error.message === "The request could not be completed." &&
-        !error.message.includes(privateDiagnostic));
+    };
+    const attempts = [
+        [createBuilderStorageFields({
+            authenticate: async () => { throw codedError(401); },
+            storageService: {}
+        }).mutationFields.createBuilderProfile, mutationArgs],
+        [createBuilderStorageFields({
+            authenticate: async () => { throw untypedSafeMessageError; },
+            storageService: {}
+        }).mutationFields.createBuilderProfile, mutationArgs],
+        [createBuilderStorageFields({
+            authenticate: async () => { throw privateTypedTokenError; },
+            storageService: {}
+        }).mutationFields.createBuilderProfile, mutationArgs],
+        [createBuilderStorageFields({
+            authenticate: async () => AUTH,
+            storageService: {
+                async createProfile() { throw privateDriverError; }
+            }
+        }).mutationFields.createBuilderProfile, mutationArgs],
+        [createBuilderStorageFields({
+            authenticate: async () => AUTH,
+            loadCodec: async () => ({
+                encodeBuilderLists() { throw codedError(400); }
+            }),
+            storageService: {
+                async exportAll() { return state({profiles: [profile()]}); }
+            }
+        }).queryFields.exportBuilderData, {authToken: "selector-validator"}]
+    ];
+
+    for (const [operation, args] of attempts) {
+        await assert.rejects(operation.resolve(null, args, {ip: "request"}), error =>
+            error.message === "The request could not be completed." &&
+            error.extensions.code === undefined &&
+            error.originalError === undefined &&
+            error.cause === undefined &&
+            !error.message.includes(privateDiagnostic));
+    }
 });
 
 // Catches invalid JSON being forwarded to the service or echoing the submitted

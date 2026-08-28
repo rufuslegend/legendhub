@@ -282,7 +282,7 @@ test("API error types retain their public status codes", function() {
 
 // Catches widening the global parsers instead of only the GraphQL route, or
 // allowing body-parser diagnostics/submitted Builder data into a 413 response.
-test("Builder API accepts a 10 MB envelope while larger API and ordinary form bodies stay limited", async function(t) {
+test("Builder API accepts a canonical quota-sized profile while larger API and ordinary form bodies stay limited", async function(t) {
     const loggedErrors = [];
     const baseUrl = await listenForTest(t, loadAppForBodyLimitTest({
         logError: error => loggedErrors.push(error)
@@ -293,36 +293,60 @@ test("Builder API accepts a 10 MB envelope while larger API and ordinary form bo
         }
     }`;
 
+    const compactFields = "0U0U0U0U0U0U000000___00000000000000000" + "_".repeat(35);
+    function canonicalProfileWithBytes(byteLength) {
+        const prefix = "6*Hero~";
+        const suffix = `~${compactFields}*`;
+        const variantBytes = byteLength - Buffer.byteLength(prefix + suffix, "utf8");
+        assert.ok(variantBytes > 0);
+        const payload = prefix + "A".repeat(variantBytes) + suffix;
+        assert.equal(Buffer.byteLength(payload, "utf8"), byteLength);
+        return payload;
+    }
+
+    const quotaBytes = 10 * 1024 * 1024;
+    const acceptedPayload = canonicalProfileWithBytes(quotaBytes);
+    const {validateBuilderProfile} = require("../src/routes/api/builder-payload");
+    const validated = await validateBuilderProfile({name: "Hero", payload: acceptedPayload});
+    assert.equal(validated.payload, acceptedPayload);
+    assert.equal(validated.byteLength, quotaBytes);
+    const acceptedEnvelope = JSON.stringify({
+        query,
+        variables: {
+            authToken: "invalid",
+            name: "Hero",
+            payload: acceptedPayload,
+            storageGeneration: 1
+        }
+    });
+    assert.ok(Buffer.byteLength(acceptedEnvelope, "utf8") < 11 * 1024 * 1024);
+
     const accepted = await fetch(`${baseUrl}/api`, {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-            query,
-            variables: {
-                authToken: "invalid",
-                name: "Hero",
-                payload: "x".repeat(10 * 1024 * 1024),
-                storageGeneration: 1
-            }
-        })
+        body: acceptedEnvelope
     });
     const acceptedBody = await accepted.json();
     assert.equal(accepted.status, 200);
     assert.equal(acceptedBody.errors[0].code, 401);
 
-    const privateMarker = "private-oversized-builder-payload";
+    const privateMarker = "PrivateOversizedBuilderPayload";
+    const oversizedPayload = canonicalProfileWithBytes(12 * 1024 * 1024)
+        .replace("6*Hero~", `6*Hero~${privateMarker}`);
+    const oversizedEnvelope = JSON.stringify({
+        query,
+        variables: {
+            authToken: "invalid",
+            name: "Hero",
+            payload: oversizedPayload,
+            storageGeneration: 1
+        }
+    });
+    assert.ok(Buffer.byteLength(oversizedEnvelope, "utf8") > 11 * 1024 * 1024);
     const oversized = await fetch(`${baseUrl}/api`, {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-            query,
-            variables: {
-                authToken: "invalid",
-                name: "Hero",
-                payload: privateMarker + "x".repeat(12 * 1024 * 1024),
-                storageGeneration: 1
-            }
-        })
+        body: oversizedEnvelope
     });
     const oversizedText = await oversized.text();
     assert.equal(oversized.status, 413);

@@ -13,6 +13,7 @@ const {validatePreferences} = require("./builder-preferences");
 const {
     BadRequestError,
     ConflictError,
+    ForbiddenError,
     NotFoundError,
     PayloadTooLargeError
 } = require("./utils");
@@ -21,9 +22,7 @@ const QUOTA_BYTES = 10_485_760;
 const IDEMPOTENCY_KEY = /^[\x21-\x7e]{1,64}$/;
 
 function forbidden() {
-    return new gql.GraphQLError("A verified account is required.", {
-        extensions: {code: 403}
-    });
+    return new ForbiddenError("A verified account is required.");
 }
 
 function requireVerifiedMember(auth) {
