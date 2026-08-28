@@ -132,7 +132,10 @@ test("Builder markup embeds only the eligible account context and no identity da
             authenticated: true,
             emailVerified: true,
             canUseAccountStorage: true,
-            storageNamespace: "00112233445566778899aabbccddeeff"
+            storageNamespace: "00112233445566778899aabbccddeeff",
+            email: "nested-private@example.test",
+            loginToken: "nested-private-login-token",
+            payload: "nested-private-builder-payload"
         },
         email: "private@example.test",
         loginToken: "private-login-token",
@@ -146,7 +149,10 @@ test("Builder markup embeds only the eligible account context and no identity da
         canUseAccountStorage: true,
         storageNamespace: "00112233445566778899aabbccddeeff"
     });
-    for (const privateValue of ["private@example.test", "private-login-token", "private-builder-payload"])
+    for (const privateValue of [
+        "private@example.test", "private-login-token", "private-builder-payload",
+        "nested-private@example.test", "nested-private-login-token", "nested-private-builder-payload"
+    ])
         assert.equal(html.includes(privateValue), false);
 });
 

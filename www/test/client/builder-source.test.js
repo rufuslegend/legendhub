@@ -62,3 +62,55 @@ test("anonymous source never calls the account API", async function() {
     assert.equal(result.anonymousSnapshot, anonymousSnapshot);
     assert.equal(result.accountState, null);
 });
+
+// Catches corrupted account rows being partially activated, or decoder details
+// and payload text escaping into the player-visible startup failure.
+test("verified source fails closed when any account profile cannot decode to one valid profile", async function(t) {
+    const {loadBuilderSource} = await loadSource();
+    const cases = [
+        ["decoder throws", () => { throw new Error("6*private-corrupt-payload"); }],
+        ["decoder returns no profiles", () => []],
+        ["decoder returns multiple profiles", () => [{name: "Hero", variants: []}, {name: "Other", variants: []}]],
+        ["decoder returns a malformed profile", () => [{}]],
+        ["decoder returns an empty character or malformed variant", () => [{
+            name: "", variants: [{name: ""}]
+        }]]
+    ];
+
+    for (const [label, decode] of cases) {
+        await t.test(label, async function() {
+            await assert.rejects(loadBuilderSource({
+                accountContext: {canUseAccountStorage: true},
+                loadAccount: async () => accountState,
+                readAnonymous: () => anonymousSnapshot,
+                decode
+            }), function(error) {
+                assert.equal(error.message, "Builder account data could not be loaded.");
+                assert.equal(error.message.includes("private-corrupt-payload"), false);
+                return true;
+            });
+        });
+    }
+});
+
+// Catches malformed server preferences being exposed as parser diagnostics or
+// silently replaced with browser-local preferences in verified account mode.
+test("verified source rejects malformed account preferences without anonymous fallback", async function(t) {
+    const {loadBuilderSource} = await loadSource();
+    const cases = ["{", "null", "[]", "\"dark\"", "42"];
+
+    for (const preferences of cases) {
+        await t.test(preferences, async function() {
+            await assert.rejects(loadBuilderSource({
+                accountContext: {canUseAccountStorage: true},
+                loadAccount: async () => ({...accountState, preferences}),
+                readAnonymous: () => anonymousSnapshot,
+                decode: () => decodedAccountProfiles
+            }), function(error) {
+                assert.equal(error.message, "Builder account data could not be loaded.");
+                assert.equal(error.message.includes(preferences), false);
+                return true;
+            });
+        });
+    }
+});

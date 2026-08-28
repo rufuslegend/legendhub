@@ -14,7 +14,14 @@
     <script type="application/json" data-react-props="builder"><%- serializeJsonForHtml({
         itemStatCategories: vm.itemStatCategories,
         selectedColumns: vm.selectedColumns,
-        accountContext: vm.accountContext
+        accountContext: {
+            authenticated: Boolean(vm.accountContext?.authenticated),
+            emailVerified: Boolean(vm.accountContext?.emailVerified),
+            canUseAccountStorage: Boolean(vm.accountContext?.canUseAccountStorage),
+            storageNamespace: typeof vm.accountContext?.storageNamespace === "string"
+                ? vm.accountContext.storageNamespace
+                : null
+        }
     }) %></script>
     <%-include("../shared/footer")-%>
     <%-include("../shared/scripts")-%>
