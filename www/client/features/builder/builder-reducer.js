@@ -62,6 +62,35 @@ function accountStateWithUsage(state, action) {
     return {...state.accountState, ...usage};
 }
 
+function actionIdentity(action, phase) {
+    const identity = action[phase] || {};
+    return {
+        id: identity.id ?? action[`${phase}Id`],
+        name: identity.name ?? action[`${phase}Name`]
+    };
+}
+
+function savedProfileIndex(allLists, action, metadata) {
+    const current = actionIdentity(action, "current");
+    const previous = actionIdentity(action, "previous");
+    for (const id of [current.id, previous.id, metadata?.id]) {
+        if (typeof id !== "string")
+            continue;
+        const index = allLists.findIndex(character => character.account?.id === id);
+        if (index >= 0)
+            return index;
+    }
+    for (const name of [current.name, previous.name]) {
+        if (typeof name !== "string")
+            continue;
+        const index = allLists.findIndex(character =>
+            character.account?.id === null && character.name === name);
+        if (index >= 0)
+            return index;
+    }
+    return -1;
+}
+
 function selectedCharacterKey(state) {
     const character = state.allLists[state.selectedListIndex];
     if (!character)
@@ -194,34 +223,13 @@ export function builderReducer(state, action) {
         case "account/profile-saved": {
             const allLists = state.allLists.slice();
             const metadata = accountMetadata(action.profile);
-            const profileId = action.previousId ?? metadata?.id;
-            let index = typeof profileId === "string"
-                ? allLists.findIndex(character => character.account?.id === profileId)
-                : -1;
-            if (index < 0) {
-                const previousName = action.previousName || action.profile?.name;
-                index = allLists.findIndex(character =>
-                    character.account?.id === null && character.name === previousName);
-            }
-            if (index < 0)
+            const index = savedProfileIndex(allLists, action, metadata);
+            if (index < 0 || !metadata)
                 return state;
-            const current = allLists[index];
-            const profile = action.profile?.variants
-                ? {...action.profile, account: metadata || current.account}
-                : {
-                    ...current,
-                    ...(action.profile?.name ? {name: action.profile.name} : {}),
-                    account: metadata || current.account
-                };
-            const wasSelected = index === state.selectedListIndex;
-            allLists[index] = profile;
-            const next = selectAfterAccountMutation(
-                state,
-                allLists,
-                wasSelected ? (profile.account?.id || `name:${profile.name}`) : selectedCharacterKey(state)
-            );
+            allLists[index] = {...allLists[index], account: metadata};
             return {
-                ...next,
+                ...state,
+                allLists,
                 accountState: accountStateWithUsage(state, action),
                 syncStatus: "saved",
                 syncMessage: ""

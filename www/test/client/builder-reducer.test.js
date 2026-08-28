@@ -155,6 +155,7 @@ test("account result and status actions update canonical profile state", async f
     });
     state = builderReducer(state, {type: "sync/status", status: "saving", message: "Saving…"});
     assert.deepEqual([state.syncStatus, state.syncMessage], ["saving", "Saving…"]);
+    state = builderReducer(state, {type: "character/rename", name: "Renamed"});
 
     state = builderReducer(state, {
         type: "account/profile-saved", previousId: "profile-id",
@@ -202,6 +203,103 @@ test("account result and status actions update canonical profile state", async f
     assert.deepEqual([state.syncStatus, state.syncMessage], [
         "generation-changed", "Account storage changed. Export before reloading."
     ]);
+});
+
+// Catches an older completed update replacing edits made after that request
+// began. A successful save owns only account metadata, never character content.
+test("account save response merges metadata without reverting newer local edits", async function() {
+    const {builderReducer, createDefaultVariant, createInitialBuilderState} = await loadReducer();
+    const original = createDefaultVariant("Original");
+    let state = builderReducer(createInitialBuilderState(), {
+        type: "source/loaded",
+        mode: "account",
+        profiles: [{
+            name: "Hero",
+            variants: [original],
+            account: {id: "profile-id", revision: 4, updatedOn: "2026-08-26T12:00:00.000Z"}
+        }],
+        accountState: {storageGeneration: 2, usedBytes: 32, quotaBytes: 1000}
+    });
+
+    state = builderReducer(state, {type: "character/rename", name: "Newest Name"});
+    state = builderReducer(state, {
+        type: "variant/add", listIndex: 0, variant: createDefaultVariant("Newest Variant")
+    });
+    state = builderReducer(state, {
+        type: "stat/change", section: "baseStats", stat: "strength", value: 44
+    });
+    const selectedBeforeSave = state.selectedList;
+    const staleVariant = createDefaultVariant("Original");
+    staleVariant.baseStats.strength = 1;
+
+    state = builderReducer(state, {
+        type: "account/profile-saved",
+        previous: {id: "profile-id", name: "Hero"},
+        current: {id: "profile-id", name: "Newest Name"},
+        profile: {
+            name: "Older Name",
+            variants: [staleVariant],
+            account: {id: "profile-id", revision: 5, updatedOn: "2026-08-26T12:01:00.000Z"}
+        },
+        storageGeneration: 2,
+        usedBytes: 36,
+        quotaBytes: 1000
+    });
+
+    assert.equal(state.allLists[0].name, "Newest Name");
+    assert.deepEqual(state.allLists[0].variants.map(variant => variant.name), [
+        "Original", "Newest Variant"
+    ]);
+    assert.equal(state.allLists[0].variants[1].baseStats.strength, 44);
+    assert.equal(state.allLists[0].account.revision, 5);
+    assert.equal(state.selectedList, selectedBeforeSave);
+    assert.equal(state.selectedListVariantIndex, 1);
+});
+
+// Catches a first create response missing the unsaved row after another rename,
+// or attaching the new server ID to a different unsaved character.
+test("account create response attaches metadata to the current renamed unsaved row", async function() {
+    const {builderReducer, createDefaultVariant, createInitialBuilderState} = await loadReducer();
+    let state = builderReducer(createInitialBuilderState(), {
+        type: "source/loaded",
+        mode: "account",
+        profiles: [],
+        accountState: {storageGeneration: 1, usedBytes: 0, quotaBytes: 1000}
+    });
+    state = builderReducer(state, {type: "character/rename", name: "First Name"});
+    state = builderReducer(state, {type: "character/rename", name: "Latest Name"});
+    state = builderReducer(state, {
+        type: "stat/change", section: "baseStats", stat: "mind", value: 33
+    });
+    state = builderReducer(state, {
+        type: "character/add", name: "Other Unsaved", variant: createDefaultVariant("Original")
+    });
+    const selectedBeforeSave = state.selectedList;
+
+    state = builderReducer(state, {
+        type: "account/profile-saved",
+        previous: {id: null, name: "First Name"},
+        current: {id: null, name: "Latest Name"},
+        profile: {
+            id: "created-profile-id",
+            name: "First Name",
+            revision: 1,
+            updatedOn: "2026-08-26T12:01:00.000Z"
+        },
+        storageGeneration: 1,
+        usedBytes: 24,
+        quotaBytes: 1000
+    });
+
+    const created = state.allLists.find(character => character.name === "Latest Name");
+    const other = state.allLists.find(character => character.name === "Other Unsaved");
+    assert.deepEqual(created.account, {
+        id: "created-profile-id", revision: 1, updatedOn: "2026-08-26T12:01:00.000Z"
+    });
+    assert.equal(created.variants[0].baseStats.mind, 33);
+    assert.deepEqual(other.account, {id: null, revision: 0});
+    assert.equal(state.selectedList, selectedBeforeSave);
+    assert.equal(state.allLists[state.selectedListIndex].name, "Other Unsaved");
 });
 
 // Catches the React page's transient UI state leaking into a second owner instead of the Builder reducer.

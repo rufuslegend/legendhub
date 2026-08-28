@@ -283,6 +283,49 @@ test("Builder startup keeps verified account failures isolated behind Retry", as
     expect(await page.evaluate(() => localStorage.getItem("cln"))).toBe(encodedLists);
 });
 
+// Catches a verified startup prerequisite bypassing the stable account error,
+// leaking GraphQL/driver text, or activating/writing the anonymous snapshot.
+test("Builder startup normalizes verified item metadata failures before account loading", async function({context, page}) {
+    await context.addCookies([{name: "loginToken", value: "metadata-builder-account", url: baseUrl}]);
+    let metadataAttempts = 0;
+    let accountAttempts = 0;
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (request.query.includes("getItemStatInfo")) {
+            metadataAttempts += 1;
+            if (metadataAttempts === 1) {
+                return route.fulfill({contentType: "application/json", body: JSON.stringify({
+                    errors: [{message: "private item metadata driver cause"}]
+                })});
+            }
+            return route.fallback();
+        }
+        if (request.query.includes("GetBuilderAccountState")) {
+            accountAttempts += 1;
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({
+                data: {getBuilderAccountState: accountBuilderState()}
+            })});
+        }
+        return route.fallback();
+    });
+
+    await page.goto(`${baseUrl}/builder/`);
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText("Builder account data could not be loaded.");
+    await expect(alert).not.toContainText("private item metadata driver cause");
+    await expect(page.getByLabel("Character", {exact: true})).toHaveCount(0);
+    expect(accountAttempts).toBe(0);
+    expect(await page.evaluate(() => ({
+        lists: localStorage.getItem("cln"), selected: localStorage.getItem("scl")
+    }))).toEqual({lists: encodedLists, selected: "Hero!Tank"});
+
+    await alert.getByRole("button", {name: "Retry", exact: true}).click();
+    await expect(page.getByLabel("Character", {exact: true})).toContainText("Guest");
+    expect(metadataAttempts).toBe(2);
+    expect(accountAttempts).toBe(1);
+    expect(await page.evaluate(() => localStorage.getItem("cln"))).toBe(encodedLists);
+});
+
 test.beforeEach(async function({context, page}) {
     await context.grantPermissions(["clipboard-read", "clipboard-write"], {origin: baseUrl});
     await context.addCookies([{name: "cookie-consent", value: "true", url: baseUrl}]);

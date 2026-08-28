@@ -1,8 +1,8 @@
-const ACCOUNT_LOAD_ERROR = "Builder account data could not be loaded.";
+export const BUILDER_ACCOUNT_LOAD_ERROR = "Builder account data could not be loaded.";
 const SUPPORTED_PAYLOAD_VERSIONS = new Set([1, 2, 3, 4, 5, 6]);
 
 function accountLoadError() {
-    return new Error(ACCOUNT_LOAD_ERROR);
+    return new Error(BUILDER_ACCOUNT_LOAD_ERROR);
 }
 
 function isProfile(value) {

@@ -14,7 +14,7 @@ import {builderReducer, createDefaultVariant, createInitialBuilderState, selectS
 import {RUNE_CHARM_ID} from "./item-constants.js";
 import {createItemsBySlotQuery, createItemsInIdsQuery, hydrateBuilderVariant} from "./builder-api.js";
 import {loadBuilderAccountState} from "./builder-account-api.js";
-import {loadBuilderSource} from "./builder-source.js";
+import {BUILDER_ACCOUNT_LOAD_ERROR, loadBuilderSource} from "./builder-source.js";
 import {validateBuilderListName} from "./builder-list-validation.js";
 
 function cookies() { return Object.fromEntries(document.cookie.split("; ").filter(Boolean).map(value => value.split("=").map(decodeURIComponent))); }
@@ -109,7 +109,7 @@ export default function Builder({
                         storageMode: "account",
                         initialized: true,
                         requestStatus: "error",
-                        requestError: error.message || "Builder account data could not be loaded.",
+                        requestError: BUILDER_ACCOUNT_LOAD_ERROR,
                         exceptionEncountered: true
                     }});
                     return;
