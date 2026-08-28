@@ -19,6 +19,8 @@ import {importAccountProfiles, loadBuilderAccountState} from "./builder-account-
 import {BUILDER_ACCOUNT_LOAD_ERROR, loadBuilderSource} from "./builder-source.js";
 import {validateBuilderListName} from "./builder-list-validation.js";
 
+const BUILDER_HYDRATION_ERROR = "Saved builder data could not be hydrated. Retry to restore item details.";
+
 function cookies() { return Object.fromEntries(document.cookie.split("; ").filter(Boolean).map(value => value.split("=").map(decodeURIComponent))); }
 function cookieStore() { return {get: name => cookies()[name], put(name, value, options) { document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(value)}; path=${options.path}; SameSite=Lax; Secure; expires=${options.expires.toUTCString()}`; }, remove(name) { document.cookie = `${encodeURIComponent(name)}=; path=/; expires=${new Date(0).toUTCString()}`; }}; }
 
@@ -115,7 +117,7 @@ export default function Builder({
                     dispatch({type: "source/loaded", mode: source.mode, profiles: lists, accountState: source.accountState});
                     if (migrationOffer)
                         dispatch({type: "migration/offered", ...migrationOffer});
-                    dispatch({type: "ui/patch", value: {allLists: lists, selectedListIndex: listIndex, selectedListVariantIndex: variantIndex, selectedList: lists[listIndex].variants[variantIndex], statInfo: applySelectedColumns(columns, data.getItemStatInfo), defaultStatInfo: data.getItemStatInfo, itemFragment: data.getItemFragment, itemsPerPage: source.mode === "anonymous" ? preferences.itemsPerPage : state.itemsPerPage, initialized: true, requestStatus: "error", requestError: "Saved builder data could not be hydrated. Retry to restore item details."}});
+                    dispatch({type: "ui/patch", value: {allLists: lists, selectedListIndex: listIndex, selectedListVariantIndex: variantIndex, selectedList: lists[listIndex].variants[variantIndex], statInfo: applySelectedColumns(columns, data.getItemStatInfo), defaultStatInfo: data.getItemStatInfo, itemFragment: data.getItemFragment, itemsPerPage: source.mode === "anonymous" ? preferences.itemsPerPage : state.itemsPerPage, initialized: true, requestStatus: "error", requestError: BUILDER_HYDRATION_ERROR}});
                     return;
                 }
                 if (cancelled) return;
@@ -215,13 +217,29 @@ export default function Builder({
                 readAnonymous: function() { return state.migration.snapshot; },
                 decode: decodeBuilderLists
             });
-            const profiles = await hydrateLists(importedSource.profiles, state.itemFragment);
+            let profiles = importedSource.profiles;
+            let hydrationFailed = false;
+            try {
+                profiles = await hydrateLists(profiles, state.itemFragment);
+            }
+            catch {
+                hydrationFailed = true;
+            }
             dispatch({
                 type: "source/loaded",
                 mode: "account",
                 profiles,
                 accountState: importedSource.accountState
             });
+            if (hydrationFailed) {
+                dispatch({
+                    type: "ui/patch",
+                    value: {
+                        requestStatus: "error",
+                        requestError: BUILDER_HYDRATION_ERROR
+                    }
+                });
+            }
             const acknowledged = acknowledgeMigration();
             dispatch({
                 type: "migration/succeeded",

@@ -602,6 +602,87 @@ test("successful local Builder data migration survives acknowledgement storage f
     expect(importAttempts).toBe(1);
 });
 
+// Catches optional item-detail hydration converting an already committed
+// atomic import into a retryable migration failure or withholding its receipt.
+test("successful local Builder data migration survives item hydration failure", async function({context, page}) {
+    await context.addCookies([{name: "loginToken", value: "migration-hydration-failure", url: baseUrl}]);
+    let importAttempts = 0;
+    let hydrationAttempts = 0;
+    const privateHydrationDiagnostic = "private post-import hydration diagnostic";
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (request.query.includes("GetBuilderAccountState")) {
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({
+                data: {getBuilderAccountState: accountBuilderState()}
+            })});
+        }
+        if (request.query.includes("ImportBuilderProfiles")) {
+            importAttempts += 1;
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({data: {
+                importBuilderProfiles: {
+                    result: JSON.stringify({
+                        copied: ["Hero", "Scout"],
+                        renamed: [],
+                        deduplicated: [],
+                        rejected: [],
+                        preferencesImported: false
+                    }),
+                    state: accountBuilderState(importedAccountProfiles)
+                }
+            }})});
+        }
+        if (request.query.includes("getItemsInIds")) {
+            hydrationAttempts += 1;
+            if (hydrationAttempts === 1) {
+                return route.fulfill({contentType: "application/json", body: JSON.stringify({data: {
+                    getItemsInIds: hydratedItems.filter(item => request.variables.ids.includes(item.id))
+                }})});
+            }
+            return route.fulfill({
+                status: 503,
+                contentType: "application/json",
+                body: JSON.stringify({errors: [{message: privateHydrationDiagnostic}]})
+            });
+        }
+        return route.fallback();
+    });
+
+    await page.goto(`${baseUrl}/builder/`);
+    const offer = page.getByRole("region", {name: "Local Builder data"});
+    await offer.getByRole("button", {name: "Review local Builder data"}).click();
+    const dialog = page.getByRole("dialog", {name: "Copy local Builder data"});
+    await dialog.getByRole("button", {name: "Copy all to my account"}).click();
+
+    await expect(dialog.locator("#builder-migration-result")).toBeFocused();
+    await expect(dialog.getByText("Hero", {exact: true})).toBeVisible();
+    await expect(dialog.getByText("Scout", {exact: true})).toBeVisible();
+    await expect(dialog).not.toContainText("Local Builder data could not be copied");
+    await expect(dialog).not.toContainText(privateHydrationDiagnostic);
+    expect(importAttempts).toBe(1);
+    expect(hydrationAttempts).toBe(2);
+    expect(await page.evaluate(() => ({
+        acknowledgement: localStorage.getItem(
+            "legendhub-builder-import:0123456789abcdef0123456789abcdef"
+        ),
+        anonymousLists: localStorage.getItem("cln")
+    }))).toEqual({
+        acknowledgement: expect.stringMatching(/^[a-f0-9]{64}$/),
+        anonymousLists: encodedLists
+    });
+
+    await dialog.getByRole("button", {name: "Close results"}).click();
+    await expect(offer.getByRole("button", {name: "View copy results"})).toBeFocused();
+    await expect(page.getByLabel("Character", {exact: true})).toContainText("Guest");
+    await expect(page.getByLabel("Character", {exact: true})).toContainText("Hero");
+    await expect(page.getByLabel("Character", {exact: true})).toContainText("Scout");
+    const warning = page.getByRole("alert").filter({
+        hasText: "Saved builder data could not be hydrated. Retry to restore item details."
+    });
+    await expect(warning).toBeVisible();
+    await expect(warning).not.toContainText(privateHydrationDiagnostic);
+    expect(importAttempts).toBe(1);
+});
+
 // Catches the same best-effort acknowledgement boundary preventing Not now
 // from closing or changing the retained anonymous source.
 test("local Builder data dismissal closes when acknowledgement storage fails", async function({context, page}) {
