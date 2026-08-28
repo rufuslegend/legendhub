@@ -17,6 +17,7 @@ const accountState = {
         payloadVersion: 6, revision: 4, updatedOn: "2026-08-26T12:00:00.000Z"
     }],
     preferences: "{\"theme\":\"dark\"}", preferenceRevision: 3,
+    preferencesUpdatedOn: "2026-08-26T12:00:00.000Z",
     storageGeneration: 2, usedBytes: 32, quotaBytes: 10485760
 };
 
@@ -154,6 +155,11 @@ test("verified source rejects malformed account state envelopes before decoding"
         ["non-string preferences", {...accountState, preferences: {theme: "dark"}}],
         ["negative usage", {...accountState, usedBytes: -1}],
         ["negative quota", {...accountState, quotaBytes: -1}],
+        ["missing preferences updated time", accountStateWith(state => {
+            delete state.preferencesUpdatedOn;
+        })],
+        ["empty preferences updated time", {...accountState, preferencesUpdatedOn: ""}],
+        ["invalid preferences updated time", {...accountState, preferencesUpdatedOn: "not-a-date"}],
         ["zero preference revision", {...accountState, preferenceRevision: 0}],
         ["zero storage generation", {...accountState, storageGeneration: 0}]
     ];

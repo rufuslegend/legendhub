@@ -40,6 +40,7 @@ function isAccountState(value) {
     return Boolean(value) && typeof value === "object" && !Array.isArray(value) &&
         Array.isArray(value.profiles) && value.profiles.every(isAccountProfile) &&
         typeof value.preferences === "string" && isPositiveInteger(value.preferenceRevision) &&
+        isUpdatedOn(value.preferencesUpdatedOn) &&
         isPositiveInteger(value.storageGeneration) && isNonNegativeNumber(value.usedBytes) &&
         isNonNegativeNumber(value.quotaBytes);
 }
