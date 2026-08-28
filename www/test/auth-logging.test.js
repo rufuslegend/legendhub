@@ -197,3 +197,36 @@ test("password recovery failures expose generic errors and write no secrets", as
         privateValues.every(value => !error.message.includes(value)));
     assert.equal(writes.length, 0);
 });
+
+// Catches storage SQL/payload diagnostics or authenticated request material
+// being reflected publicly or written to process diagnostics by the API layer.
+test("Builder storage resolver failures expose and log no account secrets", async function(t) {
+    const {createBuilderStorageFields} = require("../src/routes/api/builder-storage");
+    const privateValues = [
+        "private-selector-private-validator",
+        "private Builder payload",
+        "private SQL diagnostic"
+    ];
+    const writes = [];
+    for (const method of ["log", "warn", "error"])
+        t.mock.method(console, method, (...values) => writes.push(values));
+
+    const fields = createBuilderStorageFields({
+        authenticate: async () => ({memberId: 73, emailVerified: true}),
+        storageService: {
+            async createProfile() {
+                throw new Error(privateValues.join(" "));
+            }
+        }
+    });
+
+    await assert.rejects(fields.mutationFields.createBuilderProfile.resolve(null, {
+        authToken: privateValues[0],
+        name: "Hero",
+        payload: privateValues[1],
+        storageGeneration: 1
+    }, {ip: "request-ip"}), error =>
+        error.message === "The request could not be completed." &&
+        privateValues.every(value => !error.message.includes(value)));
+    assert.equal(writes.length, 0);
+});

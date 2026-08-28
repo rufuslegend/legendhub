@@ -10,17 +10,21 @@ with version 2.6.0.
 - Added verified email addresses to accounts. New accounts now require an email address and receive a verification link before email-only features become available.
 - Added a dismissible email-verification reminder after each login for existing accounts without a verified address; all features available before 3.1 continue to work without one.
 - Added password recovery through a verified email address, with one-hour reset links that sign out every existing session after the password changes.
+- Added account-backed Builder storage for players with a verified email address. Characters are stored separately, can be used across devices, and share a 10 MB account limit.
+- Added cross-device Builder and site preferences for account storage, including themes, paging, visible columns, and the last selected character and variant.
 
 ### Changed
 
 - Sign-in now accepts either a username or a verified email address.
 - Added secure account email changes and verification resends. A verified address stays active until its replacement is verified, and the previous address receives a security notice after the change.
+- Copying Builder characters saved in a browser to an account now requires an explicit player action, keeps the browser copy intact, and safely reports copied, renamed, duplicate, or invalid characters.
 
 ### Fixed
 
 - Kept older exact usernames usable for sign-in and recovery while preventing a new email address from shadowing another player's username.
 - Hardened verification and password-reset transitions so copied action links, concurrent password changes, and older pending actions cannot retain unintended account access.
 - Added an accessible 60-second countdown after successful or rate-limited verification resends, and kept verification/reset result navigation in sync with the current sign-in state.
+- Preserved both versions of a Builder character when devices edit the same profile, saving the attempted edit as a clearly named conflict copy instead of overwriting either version.
 
 ## [3.0.0] - 2026-08-26
 

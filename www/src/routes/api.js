@@ -12,7 +12,8 @@ let importGraphs = [
     require("./api/categories.js"),
     require("./api/changelogs.js"),
     require("./api/notifications.js"),
-    require("./api/account.js")
+    require("./api/account.js"),
+    require("./api/builder-storage.js")
 ];
 
 var queryFields = {};
@@ -88,7 +89,7 @@ let graphqlHandler = createHandler({
     formatError: errorFormatFn
 });
 
-module.exports = function(req, res) {
+let apiRouter = function(req, res) {
     if (req.method === "GET" && !req.query.query && req.accepts("html")) {
         return res.type("html").send(ruruHTML({
             endpoint: "/api"
@@ -97,3 +98,6 @@ module.exports = function(req, res) {
 
     return graphqlHandler(req, res);
 };
+
+apiRouter.schema = schema;
+module.exports = apiRouter;

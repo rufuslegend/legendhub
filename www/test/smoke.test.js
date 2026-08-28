@@ -160,14 +160,14 @@ test("application HTTP smoke test", async function(t) {
         });
     });
 
-    await t.test("returns JSON for oversized API request bodies", async function() {
+    await t.test("returns JSON for request bodies over the API-only limit", async function() {
         const response = await fetch(`${baseUrl}/api`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                value: "x".repeat(110 * 1024)
+                value: "x".repeat(12 * 1024 * 1024)
             })
         });
 

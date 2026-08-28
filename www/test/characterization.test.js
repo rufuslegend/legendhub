@@ -1,7 +1,47 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const Module = require("node:module");
 const path = require("node:path");
 const test = require("node:test");
+
+function loadAppForBodyLimitTest(options = {}) {
+    const originalLoad = Module._load;
+    Module._load = function(request, parent, isMain) {
+        if (request === "sync-rpc")
+            return () => () => [];
+        return originalLoad.call(this, request, parent, isMain);
+    };
+
+    try {
+        return require("../src/create-app")({
+            ...options,
+            logging: false
+        });
+    }
+    finally {
+        Module._load = originalLoad;
+    }
+}
+
+async function listenForTest(t, app) {
+    const server = await new Promise(function(resolve) {
+        const listeningServer = app.listen(0, "127.0.0.1", function() {
+            resolve(listeningServer);
+        });
+    });
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    t.after(function() {
+        return new Promise(function(resolve, reject) {
+            server.close(function(error) {
+                if (error)
+                    reject(error);
+                else
+                    resolve();
+            });
+        });
+    });
+    return baseUrl;
+}
 
 async function renderHome(cookies = {}) {
     const ejs = require("ejs");
@@ -238,4 +278,67 @@ test("API error types retain their public status codes", function() {
     assert.equal(new NotFoundError().extensions.code, 404);
     assert.equal(new TooManyRequestsError().extensions.code, 429);
     assert.equal(new UnauthorizedError().extensions.code, 401);
+});
+
+// Catches widening the global parsers instead of only the GraphQL route, or
+// allowing body-parser diagnostics/submitted Builder data into a 413 response.
+test("Builder API accepts a 10 MB envelope while larger API and ordinary form bodies stay limited", async function(t) {
+    const loggedErrors = [];
+    const baseUrl = await listenForTest(t, loadAppForBodyLimitTest({
+        logError: error => loggedErrors.push(error)
+    }));
+    const query = `mutation Store($authToken: String!, $name: String!, $payload: String!, $storageGeneration: Int!) {
+        createBuilderProfile(authToken: $authToken, name: $name, payload: $payload, storageGeneration: $storageGeneration) {
+            status
+        }
+    }`;
+
+    const accepted = await fetch(`${baseUrl}/api`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            query,
+            variables: {
+                authToken: "invalid",
+                name: "Hero",
+                payload: "x".repeat(10 * 1024 * 1024),
+                storageGeneration: 1
+            }
+        })
+    });
+    const acceptedBody = await accepted.json();
+    assert.equal(accepted.status, 200);
+    assert.equal(acceptedBody.errors[0].code, 401);
+
+    const privateMarker = "private-oversized-builder-payload";
+    const oversized = await fetch(`${baseUrl}/api`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            query,
+            variables: {
+                authToken: "invalid",
+                name: "Hero",
+                payload: privateMarker + "x".repeat(12 * 1024 * 1024),
+                storageGeneration: 1
+            }
+        })
+    });
+    const oversizedText = await oversized.text();
+    assert.equal(oversized.status, 413);
+    assert.match(oversized.headers.get("content-type"), /^application\/json/);
+    assert.deepEqual(JSON.parse(oversizedText), {
+        errors: [{message: "Request body is too large.", code: 413}]
+    });
+    assert.equal(oversizedText.includes(privateMarker), false);
+
+    const form = await fetch(`${baseUrl}/login.html`, {
+        method: "POST",
+        headers: {"Content-Type": "application/x-www-form-urlencoded"},
+        body: `value=${"x".repeat(110 * 1024)}`
+    });
+    assert.equal(form.status, 413);
+    assert.match(form.headers.get("content-type"), /^text\/html/);
+    assert.match(await form.text(), /Request body is too large/);
+    assert.deepEqual(loggedErrors, []);
 });

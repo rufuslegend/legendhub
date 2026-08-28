@@ -63,6 +63,7 @@ module.exports = function createApp(options = {}) {
                     requestPath === "/reset-password.html";
             }
         }));
+    app.use("/api", express.json({limit: "11mb"}), apiRouter);
     app.use(express.json());
     app.use(express.urlencoded({ extended: false }));
     app.use(function(req, res, next) {
@@ -79,8 +80,6 @@ module.exports = function createApp(options = {}) {
     });
 
     app.use(express.static(path.join(__dirname, "public")));
-
-    app.use("/api", apiRouter);
 
     app.use(cookieParser());
     app.use(authRouter.initializeLocals);
