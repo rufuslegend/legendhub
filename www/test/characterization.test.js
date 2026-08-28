@@ -90,6 +90,22 @@ async function renderLogin(vm) {
     });
 }
 
+async function renderBuilder(vm) {
+    const ejs = require("ejs");
+    const {normalizeTheme, serializeJsonForHtml} = require("../src/view-helpers");
+    return ejs.renderFile(path.join(__dirname, "../src/views/builder/index.ejs"), {
+        cookies: {},
+        normalizeTheme,
+        serializeJsonForHtml,
+        showDiscordWidget: false,
+        title: "Builder",
+        url: {path: "/builder/"},
+        user: null,
+        version: "test",
+        vm
+    });
+}
+
 test("PHP-compatible password hashes can be created and verified", function() {
     const passwords = require("../src/routes/api/php-password");
     const hash = passwords.hash("correct horse battery staple");
@@ -105,6 +121,60 @@ test("EJS renders the home page and its shared includes", async function() {
     assert.match(html, /Welcome to LegendHUB!/);
     assert.match(html, /Builder/);
     assert.match(html, /Cookie Policy/);
+});
+
+// Catches Builder props inheriting the authenticated user object or route
+// details, which would expose an address or session credential in page source.
+test("Builder markup embeds only the eligible account context and no identity data", async function() {
+    const html = await renderBuilder({
+        itemStatCategories: [], selectedColumns: [],
+        accountContext: {
+            authenticated: true,
+            emailVerified: true,
+            canUseAccountStorage: true,
+            storageNamespace: "00112233445566778899aabbccddeeff"
+        },
+        email: "private@example.test",
+        loginToken: "private-login-token",
+        payload: "private-builder-payload"
+    });
+
+    const props = JSON.parse(html.match(/data-react-props="builder">([^<]+)<\/script>/)[1]);
+    assert.deepEqual(props.accountContext, {
+        authenticated: true,
+        emailVerified: true,
+        canUseAccountStorage: true,
+        storageNamespace: "00112233445566778899aabbccddeeff"
+    });
+    for (const privateValue of ["private@example.test", "private-login-token", "private-builder-payload"])
+        assert.equal(html.includes(privateValue), false);
+});
+
+// Catches a route trusting a stale storage eligibility flag for anonymous or
+// unverified sessions instead of deriving a safe public context from auth locals.
+test("Builder route exposes account storage only for verified authenticated users", function() {
+    const builderRoute = require("../src/routes/builder");
+
+    assert.deepEqual(builderRoute.createAccountContext(null), {
+        authenticated: false, emailVerified: false,
+        canUseAccountStorage: false, storageNamespace: null
+    });
+    assert.deepEqual(builderRoute.createAccountContext({
+        emailVerified: false, canUseAccountStorage: true,
+        storageNamespace: "unverified-namespace"
+    }), {
+        authenticated: true, emailVerified: false,
+        canUseAccountStorage: false, storageNamespace: null
+    });
+    assert.deepEqual(builderRoute.createAccountContext({
+        emailVerified: true, canUseAccountStorage: true,
+        storageNamespace: "00112233445566778899aabbccddeeff",
+        email: "private@example.test"
+    }), {
+        authenticated: true, emailVerified: true,
+        canUseAccountStorage: true,
+        storageNamespace: "00112233445566778899aabbccddeeff"
+    });
 });
 
 // Catches the login-time verification invitation disappearing for legacy

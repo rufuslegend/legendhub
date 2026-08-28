@@ -2,6 +2,18 @@ let express = require("express");
 let router = express.Router();
 let apiUtils = require("./api/utils");
 
+function createAccountContext(user) {
+    const authenticated = Boolean(user);
+    const emailVerified = Boolean(user?.emailVerified);
+    const canUseAccountStorage = Boolean(emailVerified && user?.canUseAccountStorage);
+    return {
+        authenticated,
+        emailVerified,
+        canUseAccountStorage,
+        storageNamespace: canUseAccountStorage ? user.storageNamespace || null : null
+    };
+}
+
 router.get(["/", "/index.html"], async function(req, res, next) {
     let query = `
     {
@@ -49,9 +61,11 @@ router.get(["/", "/index.html"], async function(req, res, next) {
 
     let vm = {
         itemStatCategories: data.getItemStatCategories,
-        selectedColumns: selectedColumns
+        selectedColumns: selectedColumns,
+        accountContext: createAccountContext(res.locals.user)
     };
     res.render("builder/index", {title: "Builder", vm});
 });
 
 module.exports = router;
+module.exports.createAccountContext = createAccountContext;

@@ -11,7 +11,11 @@
 <body>
     <%-include("../shared/header")-%>
     <div data-react-root="builder"></div>
-    <script type="application/json" data-react-props="builder"><%- serializeJsonForHtml(vm) %></script>
+    <script type="application/json" data-react-props="builder"><%- serializeJsonForHtml({
+        itemStatCategories: vm.itemStatCategories,
+        selectedColumns: vm.selectedColumns,
+        accountContext: vm.accountContext
+    }) %></script>
     <%-include("../shared/footer")-%>
     <%-include("../shared/scripts")-%>
     <script type="module" src="/build/builder.js?v=<%-locals.version%>"></script>
