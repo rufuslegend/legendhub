@@ -48,6 +48,7 @@ test("builder initial state owns list, equipment, search, dialog, and request st
         requestError: null,
         storageMode: null,
         accountState: null,
+        syncSourceVersion: 0,
         syncStatus: "browser",
         syncMessage: "",
         migration: {
@@ -65,6 +66,47 @@ test("builder initial state owns list, equipment, search, dialog, and request st
         exceptionEncountered: false,
         clientSideDataSize: 0
     });
+});
+
+// Catches ordinary queued/saved updates clearing a recovery notice before the
+// player has exported or reloaded, or source replacement retaining a stale one.
+test("sync recovery statuses persist until a fresh source is loaded", async function() {
+    const {builderReducer, createDefaultVariant, createInitialBuilderState} = await loadReducer();
+    const profile = {
+        name: "Hero",
+        variants: [createDefaultVariant("Original")],
+        account: {id: "profile-id", revision: 4}
+    };
+    let state = builderReducer(createInitialBuilderState(), {
+        type: "source/loaded", mode: "account", profiles: [profile],
+        accountState: {storageGeneration: 2}
+    });
+    assert.equal(state.syncSourceVersion, 1);
+
+    state = builderReducer(state, {
+        type: "sync/status", status: "conflict",
+        message: "Your edits were saved as a conflict copy."
+    });
+    state = builderReducer(state, {type: "sync/status", status: "saving", message: "Saving…"});
+    assert.deepEqual([state.syncStatus, state.syncMessage], [
+        "conflict", "Your edits were saved as a conflict copy."
+    ]);
+
+    state = builderReducer(state, {
+        type: "sync/status", status: "generation-changed",
+        message: "Export your unsaved data before reloading."
+    });
+    state = builderReducer(state, {type: "sync/status", status: "saved"});
+    assert.deepEqual([state.syncStatus, state.syncMessage], [
+        "generation-changed", "Export your unsaved data before reloading."
+    ]);
+
+    state = builderReducer(state, {
+        type: "source/loaded", mode: "account", profiles: [profile],
+        accountState: {storageGeneration: 3}
+    });
+    assert.equal(state.syncSourceVersion, 2);
+    assert.deepEqual([state.syncStatus, state.syncMessage], ["saved", ""]);
 });
 
 // Catches migration retries minting a second batch key, failures acknowledging
@@ -219,7 +261,7 @@ test("account character lifecycle retains saved identity and marks new profiles 
 // no editable in-memory profile for first-edit creation.
 test("empty account source creates only an in-memory unsaved Untitled profile", async function() {
     const {builderReducer, createInitialBuilderState} = await loadReducer();
-    const state = builderReducer(createInitialBuilderState(), {
+    let state = builderReducer(createInitialBuilderState(), {
         type: "source/loaded", mode: "account", profiles: [],
         accountState: {storageGeneration: 1, usedBytes: 0, quotaBytes: 10485760}
     });
@@ -230,6 +272,12 @@ test("empty account source creates only an in-memory unsaved Untitled profile", 
     assert.deepEqual(state.allLists[0].account, {id: null, revision: 0});
     assert.equal(state.selectedList, state.allLists[0].variants[0]);
     assert.equal(state.syncStatus, "saved");
+
+    state = builderReducer(state, {
+        type: "character/delete",
+        fallbackVariant: state.allLists[0].variants[0]
+    });
+    assert.equal(state.allLists[0].account.placeholder, true);
 });
 
 // Catches sync-result actions updating detached copies, losing usage/generation
@@ -294,6 +342,82 @@ test("account result and status actions update canonical profile state", async f
     assert.deepEqual([state.syncStatus, state.syncMessage], [
         "generation-changed", "Account storage changed. Export before reloading."
     ]);
+});
+
+// Catches a stale edit of a profile deleted in another browser discarding the
+// server-created conflict copy or selecting that copy over an existing profile.
+test("deleted-server conflicts remove the tombstone and preserve the conflict copy", async function() {
+    const {builderReducer, createDefaultVariant, createInitialBuilderState} = await loadReducer();
+    const hero = {
+        name: "Hero", variants: [createDefaultVariant("Original")],
+        account: {id: "hero-id", revision: 4}
+    };
+    const scout = {
+        name: "Scout", variants: [createDefaultVariant("Original")],
+        account: {id: "scout-id", revision: 2}
+    };
+    const conflict = {
+        name: "Hero Conflict", variants: [createDefaultVariant("Local")],
+        account: {id: "conflict-id", revision: 1}
+    };
+    let state = builderReducer(createInitialBuilderState(), {
+        type: "source/loaded", mode: "account", profiles: [hero, scout],
+        accountState: {storageGeneration: 2}
+    });
+    state = builderReducer(state, {
+        type: "account/profile-conflicted",
+        id: "hero-id",
+        profile: null,
+        conflictProfile: conflict,
+        message: "A conflict copy was saved."
+    });
+
+    assert.deepEqual(state.allLists.map(profile => profile.name), ["Hero Conflict", "Scout"]);
+    assert.equal(state.selectedList, state.allLists[1].variants[0]);
+    assert.equal(state.selectedList.name, "Original");
+    assert.equal(state.syncStatus, "conflict");
+});
+
+// Catches a conflict completion replacing edits made after that request began.
+// The returned conflict identity owns the newest in-memory work for a follow-up save.
+test("account conflict response preserves edits made while the request was in flight", async function() {
+    const {builderReducer, createDefaultVariant, createInitialBuilderState} = await loadReducer();
+    let state = builderReducer(createInitialBuilderState(), {
+        type: "source/loaded",
+        mode: "account",
+        profiles: [{
+            name: "Hero",
+            variants: [createDefaultVariant("Original")],
+            account: {id: "hero-id", revision: 4}
+        }],
+        accountState: {storageGeneration: 2}
+    });
+    state = builderReducer(state, {
+        type: "stat/change", section: "baseStats", stat: "strength", value: 77
+    });
+
+    const server = {
+        name: "Hero", variants: [createDefaultVariant("Server")],
+        account: {id: "hero-id", revision: 5}
+    };
+    const olderConflict = {
+        name: "Hero Conflict", variants: [createDefaultVariant("Earlier edit")],
+        account: {id: "conflict-id", revision: 1}
+    };
+    state = builderReducer(state, {
+        type: "account/profile-conflicted",
+        id: "hero-id",
+        profile: server,
+        conflictProfile: olderConflict,
+        preserveNewerEdits: true,
+        message: "A conflict copy was saved."
+    });
+
+    const conflict = state.allLists.find(profile => profile.account.id === "conflict-id");
+    assert.equal(conflict.name, "Hero Conflict");
+    assert.equal(conflict.variants[0].name, "Original");
+    assert.equal(conflict.variants[0].baseStats.strength, 77);
+    assert.equal(state.allLists.find(profile => profile.account.id === "hero-id").variants[0].name, "Server");
 });
 
 // Catches an older completed update replacing edits made after that request

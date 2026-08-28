@@ -8,6 +8,7 @@ import StatsPanel from "./StatsPanel.jsx";
 import ImportExportDialog, {BuilderModal} from "./ImportExportDialog.jsx";
 import BuilderListsDialog from "./BuilderListsDialog.jsx";
 import BuilderMigrationDialog, {BuilderMigrationOffer} from "./BuilderMigrationDialog.jsx";
+import BuilderSyncStatus from "./BuilderSyncStatus.jsx";
 import {deriveItemRestrictions, deriveRuneCharmStats} from "./builder-derivations.js";
 import {decodeBuilderEntries, decodeBuilderLists, encodeBuilderLists, encodeBuilderVariant} from "./builder-encoding.js";
 import {buildImportRequest, classifyAnonymousData, defaultMigrationPreferencesChoice, fingerprintAnonymousData, migrationAcknowledgementKey, normalizeMigrationResult, shouldOfferMigration, writeMigrationAcknowledgement} from "./builder-migration.js";
@@ -15,9 +16,10 @@ import {applyBuilderPersistencePlan, applySelectedColumns, calculateStorageSize,
 import {builderReducer, createDefaultVariant, createInitialBuilderState, selectStatRestrictions, selectStatTotal} from "./builder-reducer.js";
 import {RUNE_CHARM_ID} from "./item-constants.js";
 import {createItemsBySlotQuery, createItemsInIdsQuery, hydrateBuilderVariant} from "./builder-api.js";
-import {importAccountProfiles, loadBuilderAccountState} from "./builder-account-api.js";
+import {createAccountProfile, deleteAccountProfile, importAccountProfiles, loadBuilderAccountState, updateAccountProfile} from "./builder-account-api.js";
 import {BUILDER_ACCOUNT_LOAD_ERROR, loadBuilderSource} from "./builder-source.js";
 import {validateBuilderListName} from "./builder-list-validation.js";
+import {createBuilderSyncController} from "./builder-sync-controller.js";
 
 const BUILDER_HYDRATION_ERROR = "Saved builder data could not be hydrated. Retry to restore item details.";
 
@@ -29,6 +31,28 @@ async function hydrateLists(lists, fragment) {
     const ids = [...new Set(lists.flatMap(list => list.variants.flatMap(variant => variant.items.map(item => item.id).filter(id => id > 0))))];
     const data = ids.length ? await graphqlRequest({query: createItemsInIdsQuery(fragment), variables: {ids}}) : {getItemsInIds: []};
     return lists.map(list => ({...list, variants: list.variants.map(variant => hydrateBuilderVariant(variant, data.getItemsInIds))}));
+}
+
+function decodeAccountProfile(profile) {
+    if (!profile || typeof profile !== "object" || Array.isArray(profile) ||
+        typeof profile.id !== "string" || !profile.id ||
+        typeof profile.name !== "string" || !profile.name ||
+        typeof profile.payload !== "string" || !profile.payload ||
+        !Number.isInteger(profile.payloadVersion) || profile.payloadVersion < 1 || profile.payloadVersion > 6 ||
+        !Number.isInteger(profile.revision) || profile.revision < 1 ||
+        typeof profile.updatedOn !== "string" || !profile.updatedOn || Number.isNaN(Date.parse(profile.updatedOn)))
+        throw new Error("Builder account data could not be loaded.");
+    const decoded = decodeBuilderLists(profile.payload);
+    if (decoded.length !== 1 || decoded[0].name !== profile.name)
+        throw new Error("Builder account data could not be loaded.");
+    return {
+        ...decoded[0],
+        account: {
+            id: profile.id,
+            revision: profile.revision,
+            updatedOn: profile.updatedOn
+        }
+    };
 }
 
 export default function Builder({
@@ -44,6 +68,12 @@ export default function Builder({
     const [state, dispatch] = useReducer(builderReducer, undefined, createInitialBuilderState);
     const columnsTriggerRef = useRef(null);
     const hydrated = useRef(false);
+    const syncControllerRef = useRef(null);
+    const syncBaselinesRef = useRef(new Map());
+    const syncLocalKeysRef = useRef(new WeakMap());
+    const nextSyncLocalKeyRef = useRef(1);
+    const latestStateRef = useRef(state);
+    latestStateRef.current = state;
     const selected = state.selectedList;
     const totals = useMemo(() => Object.fromEntries(state.statInfo.map(stat => [stat.var, selected && (stat.type === "int" || stat.var === "alignRestriction") ? selectStatTotal({selectedList: selected}, stat.var) : ""])), [state.statInfo, selected]);
     const statRestrictions = useMemo(() => Object.fromEntries(state.statInfo.map(stat => [stat.var, selected && (stat.type === "int" || stat.var === "alignRestriction") ? selectStatRestrictions({selectedList: selected}, stat.var) : []])), [state.statInfo, selected]);
@@ -168,6 +198,186 @@ export default function Builder({
         if (size !== state.clientSideDataSize) dispatch({type: "ui/patch", value: {clientSideDataSize: formatStorageSize(size)}});
     }, [state.allLists, state.selectedListIndex, state.selectedListVariantIndex, selected, state.statInfo, state.itemsPerPage, state.exceptionEncountered, state.storageMode]);
 
+    function accountSnapshot(character, storageGeneration) {
+        const {account, ...profile} = character;
+        let queueKey = null;
+        if (!account?.id) {
+            queueKey = syncLocalKeysRef.current.get(account);
+            if (!queueKey) {
+                queueKey = `profile-${nextSyncLocalKeyRef.current++}`;
+                syncLocalKeysRef.current.set(account, queueKey);
+            }
+        }
+        const payload = encodeBuilderLists([profile]);
+        return {
+            id: account?.id || null,
+            name: character.name,
+            payload,
+            revision: account?.revision || 0,
+            storageGeneration,
+            fingerprint: payload,
+            ...(queueKey ? {queueKey} : {})
+        };
+    }
+
+    function snapshotKey(snapshot) {
+        if (snapshot.queueKey)
+            return `local:${snapshot.queueKey}`;
+        return `id:${snapshot.id}`;
+    }
+
+    useEffect(function() {
+        syncControllerRef.current?.dispose();
+        syncControllerRef.current = null;
+        syncBaselinesRef.current = new Map();
+        if (state.storageMode !== "account" || !state.initialized || !state.accountState)
+            return;
+
+        let active = true;
+        for (const character of state.allLists) {
+            const snapshot = accountSnapshot(character, state.accountState.storageGeneration);
+            syncBaselinesRef.current.set(snapshotKey(snapshot), snapshot.fingerprint);
+        }
+
+        const controller = createBuilderSyncController({
+            saveProfile: async function(snapshot) {
+                const request = {
+                    id: snapshot.id,
+                    name: snapshot.name,
+                    payload: snapshot.payload,
+                    revision: snapshot.revision,
+                    storageGeneration: snapshot.storageGeneration
+                };
+                return snapshot.id
+                    ? updateAccountProfile(request)
+                    : createAccountProfile(request);
+            },
+            deleteProfile: async function(snapshot) {
+                return deleteAccountProfile({
+                    id: snapshot.id,
+                    revision: snapshot.revision,
+                    storageGeneration: snapshot.storageGeneration
+                });
+            },
+            onStatus: function(value) {
+                if (active)
+                    dispatch({type: "sync/status", ...value});
+            },
+            onResult: async function(event) {
+                if (!active)
+                    return;
+                if (event.type === "generation-changed") {
+                    dispatch({
+                        type: "account/generation-changed",
+                        message: "Synced Builder data changed in another session. Export your unsaved data before reloading."
+                    });
+                    return;
+                }
+                if (event.type === "deleted") {
+                    dispatch({
+                        type: "account/profile-deleted",
+                        id: event.snapshot.id,
+                        storageGeneration: event.result.storageGeneration,
+                        usedBytes: event.result.usedBytes,
+                        quotaBytes: event.result.quotaBytes
+                    });
+                    return;
+                }
+                if (event.type === "saved") {
+                    const profile = decodeAccountProfile(event.result.profile);
+                    const previousKey = snapshotKey(event.previous);
+                    const currentKey = `id:${profile.account.id}`;
+                    syncBaselinesRef.current.delete(previousKey);
+                    syncBaselinesRef.current.set(currentKey, event.current.fingerprint);
+                    dispatch({
+                        type: "account/profile-saved",
+                        previous: {id: event.previous.id, name: event.previous.name},
+                        current: {id: event.current.id, name: event.current.name},
+                        profile,
+                        storageGeneration: event.result.storageGeneration,
+                        usedBytes: event.result.usedBytes,
+                        quotaBytes: event.result.quotaBytes
+                    });
+                    return;
+                }
+                if (event.type === "conflict") {
+                    const serverDeleted = event.result.profile?.payload === null;
+                    if (serverDeleted &&
+                        (typeof event.result.profile?.id !== "string" ||
+                        event.result.profile.id !== event.previous.id ||
+                        !Number.isInteger(event.result.profile.revision) ||
+                        event.result.profile.revision < 1))
+                        throw new Error("Builder account data could not be loaded.");
+                    let profiles = [
+                        ...(!serverDeleted ? [decodeAccountProfile(event.result.profile)] : []),
+                        decodeAccountProfile(event.result.conflictProfile)
+                    ];
+                    try {
+                        profiles = await hydrateLists(profiles, latestStateRef.current.itemFragment);
+                    }
+                    catch {
+                        dispatch({
+                            type: "ui/patch",
+                            value: {requestStatus: "error", requestError: BUILDER_HYDRATION_ERROR}
+                        });
+                    }
+                    if (!active)
+                        return;
+                    syncBaselinesRef.current.delete(`id:${event.previous.id}`);
+                    for (const profile of profiles) {
+                        syncBaselinesRef.current.set(`id:${profile.account.id}`, encodeBuilderLists([
+                            {name: profile.name, variants: profile.variants}
+                        ]));
+                    }
+                    const serverProfile = serverDeleted ? null : profiles[0];
+                    const conflictProfile = serverDeleted ? profiles[0] : profiles[1];
+                    dispatch({
+                        type: "account/profile-conflicted",
+                        id: event.previous.id,
+                        profile: serverProfile,
+                        conflictProfile,
+                        preserveNewerEdits: event.current.fingerprint !== event.previous.fingerprint,
+                        storageGeneration: event.result.storageGeneration,
+                        usedBytes: event.result.usedBytes,
+                        quotaBytes: event.result.quotaBytes,
+                        message: "A newer account copy was kept and your edits were saved as a conflict copy."
+                    });
+                }
+            }
+        });
+        syncControllerRef.current = controller;
+        return function() {
+            active = false;
+            controller.dispose();
+            if (syncControllerRef.current === controller)
+                syncControllerRef.current = null;
+        };
+    }, [state.storageMode, state.syncSourceVersion, state.initialized]);
+
+    useEffect(function() {
+        const controller = syncControllerRef.current;
+        if (!controller || state.storageMode !== "account" || !state.accountState)
+            return;
+        const currentKeys = new Set();
+        for (const character of state.allLists) {
+            const snapshot = accountSnapshot(character, state.accountState.storageGeneration);
+            const key = snapshotKey(snapshot);
+            currentKeys.add(key);
+            const priorFingerprint = syncBaselinesRef.current.get(key);
+            if (priorFingerprint === undefined && character.account?.placeholder === true) {
+                syncBaselinesRef.current.set(key, snapshot.fingerprint);
+                continue;
+            }
+            if (priorFingerprint === undefined || priorFingerprint !== snapshot.fingerprint)
+                controller.queue(snapshot);
+            syncBaselinesRef.current.set(key, snapshot.fingerprint);
+        }
+        for (const key of syncBaselinesRef.current.keys()) {
+            if (!currentKeys.has(key))
+                syncBaselinesRef.current.delete(key);
+        }
+    }, [state.allLists, state.accountState?.storageGeneration, state.storageMode, state.syncSourceVersion, state.initialized]);
+
     function action(value) {
         if (state.storageMode === "anonymous" && value.type === "variant/select" && value.listIndex !== state.selectedListIndex) {
             const characterName = state.allLists[value.listIndex].name;
@@ -274,7 +484,8 @@ export default function Builder({
         if (typing) return dispatch({type: "ui/patch", value: {dialogName: value}});
         if (state.currentDialog === "clear") dispatch({type: "items/clear-unlocked"});
         else if (state.currentDialog === "delete-character") {
-            const deletedCharacter = state.allLists[state.selectedListIndex].name;
+            const deletedProfile = state.allLists[state.selectedListIndex];
+            const deletedCharacter = deletedProfile.name;
             const remainingCharacters = state.allLists.filter((_list, index) => index !== state.selectedListIndex);
             const fallbackIndex = Math.min(state.selectedListIndex, remainingCharacters.length - 1);
             const fallbackCharacter = remainingCharacters[fallbackIndex]?.name || "Untitled";
@@ -282,6 +493,15 @@ export default function Builder({
                 const cookieValues = cookies();
                 dispatch({type: "ui/patch", value: {statInfo: applySelectedColumns(cookieValues[`sc-${fallbackCharacter}`] || cookieValues.sc2, state.defaultStatInfo)}});
                 cookieStore().remove(`sc-${deletedCharacter}`);
+            }
+            if (state.storageMode === "account" && state.accountState) {
+                const snapshot = accountSnapshot(deletedProfile, state.accountState.storageGeneration);
+                syncBaselinesRef.current.delete(snapshotKey(snapshot));
+                syncControllerRef.current?.remove(snapshot);
+                if (snapshot.id) {
+                    close();
+                    return;
+                }
             }
             dispatch({type: "character/delete", fallbackVariant: createDefaultVariant("Original")});
         }
@@ -347,5 +567,6 @@ export default function Builder({
     const requestAlert = state.requestError && <p role="alert" className="text-danger">{state.requestError} <button type="button" className="btn btn-link p-0" onClick={() => window.location.reload()}>Retry</button></p>;
     if (state.requestStatus === "pending" && !state.initialized) return <main className="container-fluid"><p role="status">Loading Builder…</p></main>;
     if (!selected) return <main className="container-fluid">{requestAlert}</main>;
-    return <main className="container-fluid"><div className="row"><CharacterPanel state={state} columnsOpen={state.currentDialog === "columns"} columnsTriggerRef={columnsTriggerRef} onAction={action} onDialog={openDialog} /><StatsPanel state={state} onAction={action} /></div>{requestAlert}<BuilderMigrationOffer migration={state.migration} onOpen={() => dispatch({type: "migration/opened"})} /><EquipmentPanel state={state} totals={totals} restrictions={restrictions} statRestrictions={statRestrictions} onAction={action} onToggleLocks={requestToggleLocks} onOpen={openItem} onPick={pickItem} onClose={close} />{state.currentDialog === "export" && <ImportExportDialog mode="export" value={exportValue()} onClose={close} />}{state.currentDialog === "import" && <ImportExportDialog mode="import" value={state.importModel || {input: "", lists: [], message: "", loading: false}} onChange={importChange} onClose={close} onSubmit={submitImport} />}{state.currentDialog === "columns" && <ColumnsDialog categories={itemStatCategories} open onClose={close} onReset={resetColumns} onToggle={toggleColumn} selectedColumns={state.statInfo.filter(stat => stat.showColumn).map(stat => stat.short)} triggerRef={columnsTriggerRef} />}{state.currentDialog && !["columns", "import", "export"].includes(state.currentDialog) && <BuilderListsDialog dialog={state.currentDialog} state={state} onClose={close} onSubmit={listsDialog} />}{state.confirmMessage && <BuilderModal label={`Confirm ${state.confirmMessage.includes("unlock") ? "unlock" : "lock"} all items`} onClose={closeConfirmation}><div className="modal-body"><p>{state.confirmMessage}</p><button className="btn btn-primary" type="button" onClick={confirmAction}>Yes</button></div></BuilderModal>}<BuilderMigrationDialog migration={state.migration} onClose={closeMigration} onCopy={copyMigration} onPreferenceChange={value => dispatch({type: "migration/preferences-changed", value})} /></main>;
+    const storageStatus = <BuilderSyncStatus mode={state.storageMode} status={state.syncStatus} message={state.syncMessage} onExport={() => openDialog("export")} onReload={() => window.location.reload()} />;
+    return <main className="container-fluid"><div className="row"><CharacterPanel state={state} columnsOpen={state.currentDialog === "columns"} columnsTriggerRef={columnsTriggerRef} storageStatus={storageStatus} onAction={action} onDialog={openDialog} /><StatsPanel state={state} onAction={action} /></div>{requestAlert}<BuilderMigrationOffer migration={state.migration} onOpen={() => dispatch({type: "migration/opened"})} /><EquipmentPanel state={state} totals={totals} restrictions={restrictions} statRestrictions={statRestrictions} onAction={action} onToggleLocks={requestToggleLocks} onOpen={openItem} onPick={pickItem} onClose={close} />{state.currentDialog === "export" && <ImportExportDialog mode="export" value={exportValue()} onClose={close} />}{state.currentDialog === "import" && <ImportExportDialog mode="import" value={state.importModel || {input: "", lists: [], message: "", loading: false}} onChange={importChange} onClose={close} onSubmit={submitImport} />}{state.currentDialog === "columns" && <ColumnsDialog categories={itemStatCategories} open onClose={close} onReset={resetColumns} onToggle={toggleColumn} selectedColumns={state.statInfo.filter(stat => stat.showColumn).map(stat => stat.short)} triggerRef={columnsTriggerRef} />}{state.currentDialog && !["columns", "import", "export"].includes(state.currentDialog) && <BuilderListsDialog dialog={state.currentDialog} state={state} onClose={close} onSubmit={listsDialog} />}{state.confirmMessage && <BuilderModal label={`Confirm ${state.confirmMessage.includes("unlock") ? "unlock" : "lock"} all items`} onClose={closeConfirmation}><div className="modal-body"><p>{state.confirmMessage}</p><button className="btn btn-primary" type="button" onClick={confirmAction}>Yes</button></div></BuilderModal>}<BuilderMigrationDialog migration={state.migration} onClose={closeMigration} onCopy={copyMigration} onPreferenceChange={value => dispatch({type: "migration/preferences-changed", value})} /></main>;
 }

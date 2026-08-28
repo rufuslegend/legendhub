@@ -280,6 +280,281 @@ test("Builder startup creates unsaved Untitled for an empty verified account", a
     expect(await page.evaluate(() => localStorage.getItem("cln"))).toBe(encodedLists);
 });
 
+// Catches account edits staying browser-only, announcing Saved before the
+// server response, or exposing private network diagnostics in recovery UI.
+test("Builder announces Saving, Sync problem, and committed account saves", async function({context, page}) {
+    await context.addCookies([{name: "loginToken", value: "sync-status-account", url: baseUrl}]);
+    let updateAttempts = 0;
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (request.query.includes("GetBuilderAccountState")) {
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({
+                data: {getBuilderAccountState: accountBuilderState()}
+            })});
+        }
+        if (!request.query.includes("UpdateBuilderProfile"))
+            return route.fallback();
+        updateAttempts += 1;
+        if (updateAttempts === 1)
+            return route.abort("connectionreset");
+        return route.fulfill({contentType: "application/json", body: JSON.stringify({data: {
+            updateBuilderProfile: {
+                status: "saved",
+                profile: {
+                    ...accountProfile,
+                    payload: request.variables.payload,
+                    revision: 5,
+                    updatedOn: "2026-08-28T12:00:00.000Z"
+                },
+                conflictProfile: null,
+                storageGeneration: 1,
+                usedBytes: request.variables.payload.length,
+                quotaBytes: 10485760
+            }
+        }})});
+    });
+
+    await page.goto(`${baseUrl}/builder/`);
+    await expect(page.getByText("Saved to account", {exact: true})).toBeVisible();
+    await page.locator("#strInput").fill("44");
+    await expect(page.getByText("Saving…", {exact: true})).toBeVisible();
+    const problem = page.getByText(/Sync problem/);
+    await expect(problem).toBeVisible({timeout: 2500});
+    await expect(problem).not.toContainText("private");
+    await expect(page.getByText("Saved to account", {exact: true})).toBeVisible({timeout: 4000});
+    expect(updateAttempts).toBe(2);
+});
+
+// Catches revision conflicts silently replacing the attempted edit, selecting
+// the conflict copy, or providing no keyboard-operable export recovery.
+test("Builder preserves and announces a saved conflict copy", async function({context, page}) {
+    await context.addCookies([{name: "loginToken", value: "sync-conflict-account", url: baseUrl}]);
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (request.query.includes("GetBuilderAccountState")) {
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({
+                data: {getBuilderAccountState: accountBuilderState()}
+            })});
+        }
+        if (!request.query.includes("UpdateBuilderProfile"))
+            return route.fallback();
+        const conflictPayload = request.variables.payload.replaceAll("Guest~", "Guest Conflict~");
+        return route.fulfill({contentType: "application/json", body: JSON.stringify({data: {
+            updateBuilderProfile: {
+                status: "conflict",
+                profile: {...accountProfile, revision: 5, updatedOn: "2026-08-28T12:00:00.000Z"},
+                conflictProfile: {
+                    ...accountProfile,
+                    id: "conflict-profile-id",
+                    name: "Guest Conflict",
+                    payload: conflictPayload,
+                    revision: 1,
+                    updatedOn: "2026-08-28T12:00:00.000Z"
+                },
+                storageGeneration: 1,
+                usedBytes: accountProfilePayload.length + conflictPayload.length,
+                quotaBytes: 10485760
+            }
+        }})});
+    });
+
+    await page.goto(`${baseUrl}/builder/`);
+    await page.locator("#strInput").fill("44");
+    const alert = page.getByRole("alert").filter({hasText: "conflict copy"});
+    await expect(alert).toBeVisible({timeout: 2500});
+    await expect(alert.getByRole("button", {name: "Export Builder data"})).toBeVisible();
+    await expect(page.getByLabel("Character", {exact: true})).toContainText("Guest Conflict");
+    await expect(page.getByLabel("Character", {exact: true})).toHaveValue("0");
+});
+
+// Catches a profile deleted at home making a work edit disappear instead of
+// retaining the server-created conflict copy and another active selection.
+test("Builder preserves a conflict copy when the original was deleted elsewhere", async function({context, page}) {
+    await context.addCookies([{name: "loginToken", value: "sync-deleted-conflict-account", url: baseUrl}]);
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (request.query.includes("GetBuilderAccountState")) {
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({
+                data: {getBuilderAccountState: accountBuilderState([accountProfile, importedAccountProfiles[2]])}
+            })});
+        }
+        if (!request.query.includes("UpdateBuilderProfile"))
+            return route.fallback();
+        const conflictPayload = request.variables.payload.replaceAll("Guest~", "Guest Conflict~");
+        return route.fulfill({contentType: "application/json", body: JSON.stringify({data: {
+            updateBuilderProfile: {
+                status: "conflict",
+                profile: {
+                    ...accountProfile,
+                    payload: null,
+                    payloadVersion: null,
+                    revision: 5,
+                    updatedOn: "2026-08-28T12:00:00.000Z"
+                },
+                conflictProfile: {
+                    ...accountProfile,
+                    id: "deleted-conflict-profile-id",
+                    name: "Guest Conflict",
+                    payload: conflictPayload,
+                    revision: 1,
+                    updatedOn: "2026-08-28T12:00:00.000Z"
+                },
+                storageGeneration: 1,
+                usedBytes: scoutProfilePayload.length + conflictPayload.length,
+                quotaBytes: 10485760
+            }
+        }})});
+    });
+
+    await page.goto(`${baseUrl}/builder/`);
+    await page.locator("#strInput").fill("44");
+    await expect(page.getByRole("alert").filter({hasText: "conflict copy"})).toBeVisible({timeout: 2500});
+    await expect(page.getByLabel("Character", {exact: true})).not.toContainText(/^Guest$/);
+    await expect(page.getByLabel("Character", {exact: true})).toContainText("Guest Conflict");
+    await expect(page.getByLabel("Character", {exact: true})).toHaveValue("1");
+    await expect(page.getByLabel("Character", {exact: true})).toContainText("Scout");
+});
+
+// Catches generation rejection retrying or recreating deleted account data,
+// leaking server text, or leaving no export-first recovery action.
+test("Builder stops autosave and offers export on storage generation change", async function({context, page}) {
+    await context.addCookies([{name: "loginToken", value: "sync-generation-account", url: baseUrl}]);
+    let updateAttempts = 0;
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (request.query.includes("GetBuilderAccountState")) {
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({
+                data: {getBuilderAccountState: accountBuilderState()}
+            })});
+        }
+        if (!request.query.includes("UpdateBuilderProfile"))
+            return route.fallback();
+        updateAttempts += 1;
+        return route.fulfill({contentType: "application/json", body: JSON.stringify({
+            errors: [{
+                message: "Account storage changed. Reload before saving.",
+                extensions: {code: 409, privateDiagnostic: "private generation detail"}
+            }]
+        })});
+    });
+
+    await page.goto(`${baseUrl}/builder/`);
+    await page.locator("#strInput").fill("44");
+    const alert = page.getByRole("alert").filter({hasText: "Export your unsaved data before reloading."});
+    await expect(alert).toBeVisible({timeout: 2500});
+    await expect(alert).not.toContainText("private generation detail");
+    await expect(alert.getByRole("button", {name: "Export Builder data"})).toBeVisible();
+    await expect(alert.getByRole("button", {name: "Reload account data"})).toBeVisible();
+    await page.waitForTimeout(1250);
+    expect(updateAttempts).toBe(1);
+    await page.locator("#minInput").fill("45");
+    await page.waitForTimeout(850);
+    expect(updateAttempts).toBe(1);
+});
+
+// Catches an unsaved first edit using update, a completed create losing its ID
+// before the next edit, or internal queue metadata crossing the API boundary.
+test("Builder creates an empty-account profile once and updates it thereafter", async function({context, page}) {
+    await context.addCookies([{name: "loginToken", value: "sync-create-account", url: baseUrl}]);
+    const mutations = [];
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (request.query.includes("GetBuilderAccountState")) {
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({
+                data: {getBuilderAccountState: accountBuilderState([])}
+            })});
+        }
+        const field = request.query.includes("CreateBuilderProfile")
+            ? "createBuilderProfile"
+            : request.query.includes("UpdateBuilderProfile")
+                ? "updateBuilderProfile"
+                : null;
+        if (!field)
+            return route.fallback();
+        mutations.push({field, variables: request.variables});
+        const revision = field === "createBuilderProfile" ? 1 : 2;
+        return route.fulfill({contentType: "application/json", body: JSON.stringify({data: {
+            [field]: {
+                status: "saved",
+                profile: {
+                    id: "created-profile-id",
+                    name: request.variables.name,
+                    payload: request.variables.payload,
+                    payloadVersion: 6,
+                    revision,
+                    updatedOn: "2026-08-28T12:00:00.000Z"
+                },
+                conflictProfile: null,
+                storageGeneration: 1,
+                usedBytes: request.variables.payload.length,
+                quotaBytes: 10485760
+            }
+        }})});
+    });
+
+    await page.goto(`${baseUrl}/builder/`);
+    await page.locator("#strInput").fill("1");
+    await expect.poll(() => mutations.length, {timeout: 2500}).toBe(1);
+    expect(mutations[0].field).toBe("createBuilderProfile");
+    expect(mutations[0].variables).not.toHaveProperty("id");
+    expect(JSON.stringify(mutations[0].variables)).not.toContain("queueKey");
+    await expect(page.getByText("Saved to account", {exact: true})).toBeVisible();
+
+    await page.locator("#minInput").fill("2");
+    await expect.poll(() => mutations.length, {timeout: 2500}).toBe(2);
+    expect(mutations[1]).toMatchObject({
+        field: "updateBuilderProfile",
+        variables: {id: "created-profile-id", revision: 1, storageGeneration: 1}
+    });
+    expect(JSON.stringify(mutations[1].variables)).not.toContain("queueKey");
+});
+
+// Catches confirmed deletion waiting for debounce, removing local state before
+// server success, or sending payload/client-only fields to the delete mutation.
+test("Builder deletes a saved account profile immediately after confirmation", async function({context, page}) {
+    await context.addCookies([{name: "loginToken", value: "sync-delete-account", url: baseUrl}]);
+    const deletes = [];
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (request.query.includes("GetBuilderAccountState")) {
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({
+                data: {getBuilderAccountState: accountBuilderState()}
+            })});
+        }
+        if (!request.query.includes("DeleteBuilderProfile"))
+            return route.fallback();
+        deletes.push(request.variables);
+        return route.fulfill({contentType: "application/json", body: JSON.stringify({data: {
+            deleteBuilderProfile: {
+                status: "deleted",
+                profile: {
+                    ...accountProfile,
+                    payload: null,
+                    payloadVersion: null,
+                    revision: 5,
+                    updatedOn: "2026-08-28T12:00:00.000Z"
+                },
+                conflictProfile: null,
+                storageGeneration: 1,
+                usedBytes: 0,
+                quotaBytes: 10485760
+            }
+        }})});
+    });
+
+    await page.goto(`${baseUrl}/builder/`);
+    await page.getByRole("button", {name: "Delete Character", exact: true}).click();
+    await page.getByRole("dialog", {name: "Are you sure?"})
+        .getByRole("button", {name: "Yes", exact: true}).click();
+    await expect.poll(() => deletes.length).toBe(1);
+    expect(deletes[0]).toMatchObject({
+        id: "account-profile-id", revision: 4, storageGeneration: 1
+    });
+    expect(deletes[0]).not.toHaveProperty("payload");
+    await expect(page.getByLabel("Character", {exact: true})).toContainText("Untitled");
+    await expect(page.getByText("Saved to account", {exact: true})).toBeVisible();
+});
+
 // Catches account startup failure activating anonymous data, leaking a private
 // diagnostic, or exposing no keyboard-operable recovery action.
 test("Builder startup keeps verified account failures isolated behind Retry", async function({context, page}) {
@@ -764,6 +1039,7 @@ test("Builder preserves persisted characters, variants, totals, panels, and expo
     expect(response.status()).toBe(200);
 
     await expect(page.locator('[data-react-root="builder"]')).toHaveCount(1);
+    await expect(page.getByText("Saved in this browser", {exact: true})).toBeVisible();
     await expect(page.getByLabel("Character", {exact: true})).toHaveValue("0");
     await expect(page.getByLabel("Variant", {exact: true})).toHaveValue("0");
     await expect(page.getByLabel("Variant", {exact: true})).toContainText("Tank Variant");
