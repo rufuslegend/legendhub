@@ -114,3 +114,113 @@ test("verified source rejects malformed account preferences without anonymous fa
         });
     }
 });
+
+// Catches malformed preferences reaching profile decoding before the complete
+// account envelope is accepted, which could activate or process bad state.
+test("verified source validates preferences before decoding profiles", async function() {
+    const {loadBuilderSource} = await loadSource();
+    let decodeCalls = 0;
+    await assert.rejects(loadBuilderSource({
+        accountContext: {canUseAccountStorage: true},
+        loadAccount: async () => ({...accountState, preferences: "{"}),
+        readAnonymous: () => anonymousSnapshot,
+        decode: () => { decodeCalls++; return decodedAccountProfiles; }
+    }), error => accountFailure(error, "{"));
+    assert.equal(decodeCalls, 0);
+});
+
+function accountFailure(error, privateValue) {
+    assert.equal(error.message, "Builder account data could not be loaded.");
+    assert.equal(error.message.includes(privateValue), false);
+    return true;
+}
+
+function accountStateWith(change) {
+    const profile = {...accountState.profiles[0]};
+    const state = {...accountState, profiles: [profile]};
+    change(state, profile);
+    return state;
+}
+
+// Catches account API responses being trusted before the source selector has
+// established the minimum Plan 2 state envelope and row metadata contract.
+test("verified source rejects malformed account state envelopes before decoding", async function(t) {
+    const {loadBuilderSource} = await loadSource();
+    const cases = [
+        ["null state", null],
+        ["array state", []],
+        ["empty object", {}],
+        ["non-array profiles", {...accountState, profiles: {}}],
+        ["non-string preferences", {...accountState, preferences: {theme: "dark"}}],
+        ["negative usage", {...accountState, usedBytes: -1}],
+        ["negative quota", {...accountState, quotaBytes: -1}],
+        ["zero preference revision", {...accountState, preferenceRevision: 0}],
+        ["zero storage generation", {...accountState, storageGeneration: 0}]
+    ];
+
+    for (const [label, invalidState] of cases) {
+        await t.test(label, async function() {
+            let decodeCalls = 0;
+            await assert.rejects(loadBuilderSource({
+                accountContext: {canUseAccountStorage: true},
+                loadAccount: async () => invalidState,
+                readAnonymous: () => anonymousSnapshot,
+                decode: () => { decodeCalls++; return decodedAccountProfiles; }
+            }), error => accountFailure(error, "private-envelope"));
+            assert.equal(decodeCalls, 0);
+        });
+    }
+});
+
+// Catches partial, stale, or unsupported profile metadata being attached to a
+// decoded character, including a row name that disagrees with its payload.
+test("verified source rejects malformed profile metadata and decoded name mismatches", async function(t) {
+    const {loadBuilderSource} = await loadSource();
+    const cases = [
+        ["missing id", state => { delete state.profiles[0].id; }],
+        ["empty id", state => { state.profiles[0].id = ""; }],
+        ["missing name", state => { delete state.profiles[0].name; }],
+        ["empty name", state => { state.profiles[0].name = ""; }],
+        ["missing payload", state => { delete state.profiles[0].payload; }],
+        ["empty payload", state => { state.profiles[0].payload = ""; }],
+        ["missing payload version", state => { delete state.profiles[0].payloadVersion; }],
+        ["unsupported payload version", state => { state.profiles[0].payloadVersion = 99; }],
+        ["missing revision", state => { delete state.profiles[0].revision; }],
+        ["zero revision", state => { state.profiles[0].revision = 0; }],
+        ["missing updated time", state => { delete state.profiles[0].updatedOn; }],
+        ["invalid updated time", state => { state.profiles[0].updatedOn = "not-a-date"; }]
+    ];
+
+    for (const [label, change] of cases) {
+        await t.test(label, async function() {
+            const invalidState = accountStateWith(change);
+            let decodeCalls = 0;
+            await assert.rejects(loadBuilderSource({
+                accountContext: {canUseAccountStorage: true},
+                loadAccount: async () => invalidState,
+                readAnonymous: () => anonymousSnapshot,
+                decode: () => { decodeCalls++; return decodedAccountProfiles; }
+            }), error => accountFailure(error, "private-profile"));
+            assert.equal(decodeCalls, 0);
+        });
+    }
+
+    await assert.rejects(loadBuilderSource({
+        accountContext: {canUseAccountStorage: true},
+        loadAccount: async () => accountState,
+        readAnonymous: () => anonymousSnapshot,
+        decode: () => [{name: "Other Hero", variants: [{name: "Original"}]}]
+    }), error => accountFailure(error, "Other Hero"));
+});
+
+// Catches GraphQL/load transport failures leaking diagnostics through account
+// startup instead of leaving the anonymous snapshot retained but inactive.
+test("verified source normalizes account loader failures", async function() {
+    const {loadBuilderSource} = await loadSource();
+    await assert.rejects(loadBuilderSource({
+        accountContext: {canUseAccountStorage: true},
+        loadAccount: async () => { throw new Error("private loader diagnostic"); },
+        readAnonymous: () => anonymousSnapshot,
+        decode: () => decodedAccountProfiles
+    }), error => accountFailure(error, "private loader diagnostic"));
+});
