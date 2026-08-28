@@ -29,6 +29,60 @@ function compareCharacters(a, b) {
     return left < right ? -1 : left > right ? 1 : 0;
 }
 
+function accountMetadata(profile) {
+    if (profile?.account)
+        return {...profile.account};
+    if (!profile || !(typeof profile.id === "string" || profile.id === null) || !Number.isInteger(profile.revision))
+        return null;
+    return {
+        id: profile.id,
+        revision: profile.revision,
+        ...(profile.updatedOn ? {updatedOn: profile.updatedOn} : {})
+    };
+}
+
+function newCharacter(state, name, variant) {
+    return {
+        name,
+        variants: [cloneVariant(variant)],
+        ...(state.storageMode === "account" ? {account: {id: null, revision: 0}} : {})
+    };
+}
+
+function accountStateWithUsage(state, action) {
+    if (action.accountState)
+        return action.accountState;
+    if (!state.accountState)
+        return null;
+    const usage = {};
+    for (const property of ["storageGeneration", "usedBytes", "quotaBytes"]) {
+        if (action[property] !== undefined)
+            usage[property] = action[property];
+    }
+    return {...state.accountState, ...usage};
+}
+
+function selectedCharacterKey(state) {
+    const character = state.allLists[state.selectedListIndex];
+    if (!character)
+        return null;
+    return character.account?.id || `name:${character.name}`;
+}
+
+function selectAfterAccountMutation(state, allLists, preferredKey = selectedCharacterKey(state)) {
+    allLists.sort(compareCharacters);
+    let listIndex = allLists.findIndex(character =>
+        (character.account?.id || `name:${character.name}`) === preferredKey);
+    if (listIndex < 0)
+        listIndex = Math.min(state.selectedListIndex, allLists.length - 1);
+    const character = allLists[listIndex];
+    const selectedName = state.selectedList?.name;
+    let variantIndex = character.variants.findIndex(variant => variant.name === selectedName);
+    if (variantIndex < 0)
+        variantIndex = Math.min(state.selectedListVariantIndex, character.variants.length - 1);
+    return selectVariant(state, allLists, listIndex, Math.max(variantIndex, 0));
+}
+
 function cloneSelected(state, change) {
     const allLists = state.allLists.slice();
     const character = {...allLists[state.selectedListIndex]};
@@ -102,6 +156,10 @@ export function createInitialBuilderState() {
         loadingModal: false,
         requestStatus: "idle",
         requestError: null,
+        storageMode: null,
+        accountState: null,
+        syncStatus: "browser",
+        syncMessage: "",
         exceptionEncountered: false,
         clientSideDataSize: 0
     };
@@ -116,6 +174,111 @@ export function builderReducer(state, action) {
                 ...state,
                 allLists: action.lists.slice().sort(compareCharacters)
             };
+        case "source/loaded": {
+            const allLists = action.profiles.slice();
+            if (allLists.length === 0)
+                allLists.push(newCharacter({...state, storageMode: action.mode}, "Untitled", createDefaultVariant("Original")));
+            allLists.sort(compareCharacters);
+            return {
+                ...state,
+                storageMode: action.mode,
+                accountState: action.accountState,
+                syncStatus: action.mode === "account" ? "saved" : "browser",
+                syncMessage: "",
+                allLists,
+                selectedListIndex: 0,
+                selectedListVariantIndex: 0,
+                selectedList: allLists[0]?.variants[0] || null
+            };
+        }
+        case "account/profile-saved": {
+            const allLists = state.allLists.slice();
+            const metadata = accountMetadata(action.profile);
+            const profileId = action.previousId ?? metadata?.id;
+            let index = typeof profileId === "string"
+                ? allLists.findIndex(character => character.account?.id === profileId)
+                : -1;
+            if (index < 0) {
+                const previousName = action.previousName || action.profile?.name;
+                index = allLists.findIndex(character =>
+                    character.account?.id === null && character.name === previousName);
+            }
+            if (index < 0)
+                return state;
+            const current = allLists[index];
+            const profile = action.profile?.variants
+                ? {...action.profile, account: metadata || current.account}
+                : {
+                    ...current,
+                    ...(action.profile?.name ? {name: action.profile.name} : {}),
+                    account: metadata || current.account
+                };
+            const wasSelected = index === state.selectedListIndex;
+            allLists[index] = profile;
+            const next = selectAfterAccountMutation(
+                state,
+                allLists,
+                wasSelected ? (profile.account?.id || `name:${profile.name}`) : selectedCharacterKey(state)
+            );
+            return {
+                ...next,
+                accountState: accountStateWithUsage(state, action),
+                syncStatus: "saved",
+                syncMessage: ""
+            };
+        }
+        case "account/profile-conflicted": {
+            const allLists = state.allLists.slice();
+            const profileMetadata = accountMetadata(action.profile);
+            const profileId = profileMetadata?.id || action.id;
+            const index = allLists.findIndex(character => character.account?.id === profileId);
+            if (index < 0 || !action.profile?.variants || !action.conflictProfile?.variants)
+                return state;
+            const wasSelected = index === state.selectedListIndex;
+            const profile = {...action.profile, account: profileMetadata || allLists[index].account};
+            const conflictProfile = {
+                ...action.conflictProfile,
+                account: accountMetadata(action.conflictProfile)
+            };
+            allLists[index] = profile;
+            allLists.push(conflictProfile);
+            const next = selectAfterAccountMutation(
+                state,
+                allLists,
+                wasSelected ? (profile.account?.id || `name:${profile.name}`) : selectedCharacterKey(state)
+            );
+            return {
+                ...next,
+                accountState: accountStateWithUsage(state, action),
+                syncStatus: "conflict",
+                syncMessage: action.message || ""
+            };
+        }
+        case "account/profile-deleted": {
+            const allLists = state.allLists.filter(character => character.account?.id !== action.id);
+            if (allLists.length === 0)
+                allLists.push(newCharacter(state, "Untitled", action.fallbackVariant || createDefaultVariant("Original")));
+            const next = selectAfterAccountMutation(state, allLists);
+            return {
+                ...next,
+                accountState: accountStateWithUsage(state, action),
+                syncStatus: "saved",
+                syncMessage: ""
+            };
+        }
+        case "account/generation-changed":
+            return {
+                ...state,
+                accountState: accountStateWithUsage(state, action),
+                syncStatus: "generation-changed",
+                syncMessage: action.message || ""
+            };
+        case "sync/status":
+            return {
+                ...state,
+                syncStatus: action.status,
+                syncMessage: action.message || ""
+            };
         case "variant/select": {
             const selectedList = state.allLists[action.listIndex].variants[action.variantIndex];
             return {
@@ -127,7 +290,7 @@ export function builderReducer(state, action) {
         }
         case "character/add": {
             const allLists = state.allLists.slice();
-            allLists.push({name: action.name, variants: [cloneVariant(action.variant)]});
+            allLists.push(newCharacter(state, action.name, action.variant));
             allLists.sort(compareCharacters);
             return selectVariant(state, allLists, allLists.findIndex(list => list.name === action.name), 0);
         }
@@ -140,7 +303,7 @@ export function builderReducer(state, action) {
             const allLists = state.allLists.slice();
             allLists.splice(state.selectedListIndex, 1);
             if (allLists.length === 0)
-                allLists.push({name: "Untitled", variants: [cloneVariant(action.fallbackVariant)]});
+                allLists.push(newCharacter(state, "Untitled", action.fallbackVariant));
             const listIndex = Math.min(state.selectedListIndex, allLists.length - 1);
             return selectVariant(state, allLists, listIndex, 0);
         }
@@ -182,7 +345,11 @@ export function builderReducer(state, action) {
                 const variant = cloneVariant(imported.variants[0]);
                 const character = allLists.find(list => list.name === imported.name);
                 if (!character) {
-                    allLists.push({name: imported.name, variants: [variant]});
+                    allLists.push({
+                        name: imported.name,
+                        variants: [variant],
+                        ...(state.storageMode === "account" ? {account: {id: null, revision: 0}} : {})
+                    });
                     continue;
                 }
                 const variantIndex = character.variants.findIndex(entry => entry.name === variant.name);

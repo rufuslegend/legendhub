@@ -11,6 +11,16 @@ const currentTankExport = "6*Hero~Tank~1c0K0K0K0J0J1-10000___00H00N00T00000100.0
 const guestImport = "6*Guest~Imported~0X0X0X0X0X0X000000___0000000000000000000f__-BHKAA_______________________________*";
 const duplicateTankImport = "6*Hero~Tank~0X0X0X0X0X0X000000___0000000000000000000f__________________________________*";
 const newHeroVariantImport = "6*Hero~Newcomer~0i0X0X0X0X0X000000___0000000000000000000g__________________________________*";
+const accountProfilePayload = guestImport;
+const accountProfile = {
+    id: "account-profile-id",
+    name: "Guest",
+    payload: accountProfilePayload,
+    payloadVersion: 6,
+    revision: 4,
+    updatedOn: "2026-08-26T12:00:00.000Z"
+};
+const accountPreferences = "{\"itemsPerPage\":99,\"builderColumns\":[\"Rent\"],\"sentinel\":\"private-account-preference\"}";
 const itemFragment = "fragment ItemAll on Item { id name slot strength strengthCap hit dam hp ma mv ac rent weight uniqueWear isLimited twoHanded fauxObject isLight alignRestriction weaponStat }";
 const itemStatInfo = [
     {display: "Name", short: "Name", var: "name", type: "string", showColumnDefault: true},
@@ -77,8 +87,21 @@ async function totalFor(page, shortName) {
     return equipmentTable(page).locator("tbody tr").first().locator("th, td").nth(column).innerText();
 }
 let baseUrl;
-let restorePostAsync;
+let restoreDependencies;
+let restoreAuthDependencies;
 let server;
+
+function accountBuilderState(profiles = [accountProfile]) {
+    return {
+        profiles,
+        preferences: accountPreferences,
+        preferenceRevision: 1,
+        preferencesUpdatedOn: "2026-08-26T12:00:00.000Z",
+        storageGeneration: 1,
+        usedBytes: profiles.length ? accountProfilePayload.length : 0,
+        quotaBytes: 10485760
+    };
+}
 
 function loadAppWithoutDatabaseMetadataQuery() {
     const originalLoad = Module._load;
@@ -88,6 +111,23 @@ function loadAppWithoutDatabaseMetadataQuery() {
         return originalLoad.call(this, request, parent, isMain);
     };
     try {
+        const authApi = require("../src/routes/api/auth");
+        const originalAuthToken = authApi.utils.authToken;
+        const originalGetPermissions = authApi.utils.getPermissions;
+        authApi.utils.authToken = async function() {
+            return {
+                memberId: 7,
+                username: "Builder Tester",
+                email: "builder@example.test",
+                emailVerified: true,
+                storageNamespace: "0123456789abcdef0123456789abcdef"
+            };
+        };
+        authApi.utils.getPermissions = async function() { return {}; };
+        restoreAuthDependencies = function() {
+            authApi.utils.authToken = originalAuthToken;
+            authApi.utils.getPermissions = originalGetPermissions;
+        };
         return require("../src/create-app")({logging: false});
     }
     finally {
@@ -102,9 +142,15 @@ test.beforeAll(async function() {
     apiUtils.postAsync = function(query) {
         if (query.includes("getItemStatCategories"))
             return Promise.resolve({getItemStatCategories: itemStatCategories, getItemStatInfo: itemStatInfo});
+        if (query.includes("getNotifications"))
+            return Promise.resolve({getNotifications: {moreResults: false, results: []}});
         return publicPageData(query);
     };
-    restorePostAsync = function() { apiUtils.postAsync = originalPostAsync; };
+    restoreDependencies = function() {
+        apiUtils.postAsync = originalPostAsync;
+        if (restoreAuthDependencies)
+            restoreAuthDependencies();
+    };
     server = await new Promise(function(resolve) {
         const listeningServer = app.listen(0, "127.0.0.1", function() {
             resolve(listeningServer);
@@ -114,10 +160,127 @@ test.beforeAll(async function() {
 });
 
 test.afterAll(async function() {
-    if (restorePostAsync)
-        restorePostAsync();
+    if (restoreDependencies)
+        restoreDependencies();
     if (server)
         await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+});
+
+// Catches verified startup reading or overwriting the retained anonymous
+// snapshot, persisting account preferences to cookies, or exporting server
+// identity metadata in a Builder string.
+test("account mode never overwrites saved Builder browser data", async function({context, page}) {
+    await context.addCookies([
+        {name: "loginToken", value: "builder-account-token", url: baseUrl},
+        {name: "ipp", value: "37", url: baseUrl},
+        {name: "sc-Local", value: "Name-", url: baseUrl},
+        {name: "cl1", value: "legacy-cookie-lists", url: baseUrl},
+        {name: "scl1", value: "legacy-cookie-selection", url: baseUrl}
+    ]);
+    await page.addInitScript(function() {
+        localStorage.setItem("cl2", "legacy-two");
+        localStorage.setItem("cl1", "legacy-one");
+        localStorage.setItem("cl", "legacy-oldest");
+    });
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (request.query.includes("GetBuilderAccountState")) {
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({
+                data: {getBuilderAccountState: accountBuilderState()}
+            })});
+        }
+        return route.fallback();
+    });
+
+    await page.goto(`${baseUrl}/builder/`);
+    await expect(page.getByLabel("Character", {exact: true})).toContainText("Guest");
+    await expect(page.getByLabel("Character", {exact: true})).not.toContainText("Hero");
+    await page.locator("#strInput").fill("44");
+    await page.locator("#strInput").blur();
+    await page.waitForTimeout(100);
+
+    expect(await page.evaluate(() => ({
+        lists: localStorage.getItem("cln"),
+        selected: localStorage.getItem("scl"),
+        version2: localStorage.getItem("cl2"),
+        version1: localStorage.getItem("cl1"),
+        legacy: localStorage.getItem("cl")
+    }))).toEqual({
+        lists: encodedLists,
+        selected: "Hero!Tank",
+        version2: "legacy-two",
+        version1: "legacy-one",
+        legacy: "legacy-oldest"
+    });
+    const browserCookies = await context.cookies(baseUrl);
+    const cookieNames = browserCookies.map(cookie => cookie.name);
+    expect(cookieNames).not.toContain("sc-Guest");
+    expect(Object.fromEntries(browserCookies.map(cookie => [cookie.name, cookie.value]))).toMatchObject({
+        ipp: "37",
+        "sc-Local": "Name-",
+        cl1: "legacy-cookie-lists",
+        scl1: "legacy-cookie-selection"
+    });
+    expect(JSON.stringify(browserCookies)).not.toContain("private-account-preference");
+
+    await page.getByRole("button", {name: "Export", exact: true}).click();
+    for (const field of ["#allListsExport", "#curListExport", "#curVariantExport"])
+        await expect(page.locator(field)).not.toHaveValue(/account-profile-id/);
+});
+
+// Catches an empty verified account falling back to anonymous local profiles
+// instead of creating only the first-edit account placeholder in memory.
+test("Builder startup creates unsaved Untitled for an empty verified account", async function({context, page}) {
+    await context.addCookies([{name: "loginToken", value: "empty-builder-account", url: baseUrl}]);
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (request.query.includes("GetBuilderAccountState")) {
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({
+                data: {getBuilderAccountState: accountBuilderState([])}
+            })});
+        }
+        return route.fallback();
+    });
+
+    await page.goto(`${baseUrl}/builder/`);
+    await expect(page.getByLabel("Character", {exact: true})).toContainText("Untitled");
+    await expect(page.getByLabel("Character", {exact: true})).not.toContainText("Hero");
+    await page.locator("#strInput").fill("1");
+    await page.locator("#strInput").blur();
+    await page.waitForTimeout(100);
+    expect(await page.evaluate(() => localStorage.getItem("cln"))).toBe(encodedLists);
+});
+
+// Catches account startup failure activating anonymous data, leaking a private
+// diagnostic, or exposing no keyboard-operable recovery action.
+test("Builder startup keeps verified account failures isolated behind Retry", async function({context, page}) {
+    await context.addCookies([{name: "loginToken", value: "retry-builder-account", url: baseUrl}]);
+    let attempts = 0;
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (!request.query.includes("GetBuilderAccountState"))
+            return route.fallback();
+        attempts += 1;
+        if (attempts === 1) {
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({
+                errors: [{message: "private account loader diagnostic"}]
+            })});
+        }
+        return route.fulfill({contentType: "application/json", body: JSON.stringify({
+            data: {getBuilderAccountState: accountBuilderState()}
+        })});
+    });
+
+    await page.goto(`${baseUrl}/builder/`);
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText("Builder account data could not be loaded.");
+    await expect(alert).not.toContainText("private account loader diagnostic");
+    await expect(page.getByLabel("Character", {exact: true})).toHaveCount(0);
+    await expect(alert.getByRole("button", {name: "Retry", exact: true})).toBeVisible();
+    await alert.getByRole("button", {name: "Retry", exact: true}).click();
+    await expect(page.getByLabel("Character", {exact: true})).toContainText("Guest");
+    expect(attempts).toBe(2);
+    expect(await page.evaluate(() => localStorage.getItem("cln"))).toBe(encodedLists);
 });
 
 test.beforeEach(async function({context, page}) {

@@ -42,7 +42,7 @@ export function readBuilderPersistence({cookies = {}, storage = {}, characterNam
 }
 
 export function createBuilderPersistencePlan(state, writtenAt = new Date()) {
-    if (!state.hasConsent || state.exceptionEncountered)
+    if (state.storageMode === "account" || !state.hasConsent || state.exceptionEncountered)
         return null;
 
     const expires = new Date(writtenAt);

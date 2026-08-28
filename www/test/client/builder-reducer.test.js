@@ -46,9 +46,162 @@ test("builder initial state owns list, equipment, search, dialog, and request st
         loadingModal: false,
         requestStatus: "idle",
         requestError: null,
+        storageMode: null,
+        accountState: null,
+        syncStatus: "browser",
+        syncMessage: "",
         exceptionEncountered: false,
         clientSideDataSize: 0
     });
+});
+
+// Catches source activation dropping the stable server identity that later
+// edits must use for optimistic account updates.
+test("account source keeps stable profile metadata through character rename", async function() {
+    const {builderReducer, createDefaultVariant, createInitialBuilderState} = await loadReducer();
+    const accountState = {
+        storageGeneration: 2, usedBytes: 32, quotaBytes: 10485760
+    };
+    const accountProfiles = [{
+        name: "Account Hero",
+        variants: [createDefaultVariant("Original")],
+        account: {
+            id: "profile-id", revision: 4,
+            updatedOn: "2026-08-26T12:00:00.000Z"
+        }
+    }];
+
+    let state = createInitialBuilderState();
+    state = builderReducer(state, {
+        type: "source/loaded", mode: "account", profiles: accountProfiles, accountState
+    });
+    state = builderReducer(state, {type: "character/rename", name: "Renamed"});
+
+    assert.equal(state.storageMode, "account");
+    assert.equal(state.accountState, accountState);
+    assert.equal(state.allLists[0].account.id, "profile-id");
+    assert.equal(state.allLists[0].account.revision, 4);
+});
+
+// Catches account-only characters entering reducer memory without the explicit
+// unsaved identity required for first-edit creation, or stable identity being
+// dropped by variant and import mutations.
+test("account character lifecycle retains saved identity and marks new profiles unsaved", async function() {
+    const {builderReducer, createDefaultVariant, createInitialBuilderState} = await loadReducer();
+    const saved = {
+        name: "Hero", variants: [createDefaultVariant("Original")],
+        account: {id: "profile-id", revision: 4, updatedOn: "2026-08-26T12:00:00.000Z"}
+    };
+    let state = builderReducer(createInitialBuilderState(), {
+        type: "source/loaded", mode: "account", profiles: [saved],
+        accountState: {storageGeneration: 2, usedBytes: 32, quotaBytes: 10485760}
+    });
+
+    state = builderReducer(state, {
+        type: "variant/add", listIndex: 0, variant: createDefaultVariant("Caster")
+    });
+    state = builderReducer(state, {type: "variant/rename", name: "Mage"});
+    state = builderReducer(state, {type: "variant/make-primary"});
+    state = builderReducer(state, {type: "stat/change", section: "baseStats", stat: "strength", value: 44});
+    state = builderReducer(state, {type: "lists/import", lists: [{
+        name: "Hero", exists: true, overwrite: true,
+        variants: [createDefaultVariant("Mage")]
+    }]});
+    assert.deepEqual(state.allLists[0].account, saved.account);
+
+    state = builderReducer(state, {
+        type: "character/add", name: "New Hero", variant: createDefaultVariant("Original")
+    });
+    assert.deepEqual(state.allLists.find(list => list.name === "New Hero").account, {
+        id: null, revision: 0
+    });
+
+    state = builderReducer(state, {type: "lists/import", lists: [{
+        name: "Imported", exists: false, variants: [createDefaultVariant("Original")]
+    }]});
+    assert.deepEqual(state.allLists.find(list => list.name === "Imported").account, {
+        id: null, revision: 0
+    });
+});
+
+// Catches an empty verified account activating an anonymous profile or leaving
+// no editable in-memory profile for first-edit creation.
+test("empty account source creates only an in-memory unsaved Untitled profile", async function() {
+    const {builderReducer, createInitialBuilderState} = await loadReducer();
+    const state = builderReducer(createInitialBuilderState(), {
+        type: "source/loaded", mode: "account", profiles: [],
+        accountState: {storageGeneration: 1, usedBytes: 0, quotaBytes: 10485760}
+    });
+
+    assert.equal(state.allLists.length, 1);
+    assert.equal(state.allLists[0].name, "Untitled");
+    assert.equal(state.allLists[0].variants[0].name, "Original");
+    assert.deepEqual(state.allLists[0].account, {id: null, revision: 0});
+    assert.equal(state.selectedList, state.allLists[0].variants[0]);
+    assert.equal(state.syncStatus, "saved");
+});
+
+// Catches sync-result actions updating detached copies, losing usage/generation
+// state, selecting a conflict copy, or leaving stale status text behind.
+test("account result and status actions update canonical profile state", async function() {
+    const {builderReducer, createDefaultVariant, createInitialBuilderState} = await loadReducer();
+    const local = {
+        name: "Hero", variants: [createDefaultVariant("Original")],
+        account: {id: "profile-id", revision: 4, updatedOn: "2026-08-26T12:00:00.000Z"}
+    };
+    let state = builderReducer(createInitialBuilderState(), {
+        type: "source/loaded", mode: "account", profiles: [local],
+        accountState: {storageGeneration: 2, usedBytes: 32, quotaBytes: 1000}
+    });
+    state = builderReducer(state, {type: "sync/status", status: "saving", message: "Saving…"});
+    assert.deepEqual([state.syncStatus, state.syncMessage], ["saving", "Saving…"]);
+
+    state = builderReducer(state, {
+        type: "account/profile-saved", previousId: "profile-id",
+        profile: {
+            name: "Renamed", variants: [createDefaultVariant("Original")],
+            account: {id: "profile-id", revision: 5, updatedOn: "2026-08-26T12:01:00.000Z"}
+        },
+        storageGeneration: 2, usedBytes: 36, quotaBytes: 1000
+    });
+    assert.equal(state.allLists[0].name, "Renamed");
+    assert.equal(state.allLists[0].account.revision, 5);
+    assert.equal(state.selectedList, state.allLists[0].variants[0]);
+    assert.deepEqual([state.accountState.storageGeneration, state.accountState.usedBytes], [2, 36]);
+    assert.deepEqual([state.syncStatus, state.syncMessage], ["saved", ""]);
+
+    const server = {
+        name: "Renamed", variants: [createDefaultVariant("Server")],
+        account: {id: "profile-id", revision: 6, updatedOn: "2026-08-26T12:02:00.000Z"}
+    };
+    const conflict = {
+        name: "Renamed Conflict", variants: [createDefaultVariant("Local")],
+        account: {id: "conflict-id", revision: 1, updatedOn: "2026-08-26T12:02:00.000Z"}
+    };
+    state = builderReducer(state, {
+        type: "account/profile-conflicted", profile: server, conflictProfile: conflict,
+        storageGeneration: 2, usedBytes: 70, quotaBytes: 1000,
+        message: "A conflict copy was saved."
+    });
+    assert.deepEqual(state.allLists.map(list => list.name), ["Renamed", "Renamed Conflict"]);
+    assert.equal(state.selectedList.name, "Server");
+    assert.deepEqual([state.syncStatus, state.syncMessage], ["conflict", "A conflict copy was saved."]);
+
+    state = builderReducer(state, {
+        type: "account/profile-deleted", id: "conflict-id",
+        storageGeneration: 2, usedBytes: 36, quotaBytes: 1000
+    });
+    assert.deepEqual(state.allLists.map(list => list.name), ["Renamed"]);
+
+    state = builderReducer(state, {
+        type: "account/generation-changed", storageGeneration: 3,
+        usedBytes: 0, quotaBytes: 1000,
+        message: "Account storage changed. Export before reloading."
+    });
+    assert.equal(state.accountState.storageGeneration, 3);
+    assert.deepEqual([state.syncStatus, state.syncMessage], [
+        "generation-changed", "Account storage changed. Export before reloading."
+    ]);
 });
 
 // Catches the React page's transient UI state leaking into a second owner instead of the Builder reducer.

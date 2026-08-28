@@ -133,6 +133,45 @@ test("builder persistence refuses writes without consent or after an exception",
     assert.equal(createBuilderPersistencePlan({...input, hasConsent: true, exceptionEncountered: true}), null);
 });
 
+// Catches verified account profiles or preferences leaking into the anonymous
+// localStorage and consent-cookie persistence path.
+test("account mode never creates an anonymous persistence plan", async function() {
+    const {createBuilderPersistencePlan} = await loadPersistence();
+    const input = {
+        hasConsent: true,
+        exceptionEncountered: false,
+        encodedLists: "6*AccountPayload*",
+        selectedCharacter: "Account Hero",
+        selectedVariant: "Original",
+        itemsPerPage: 50,
+        selectedColumns: ["Slot", "Name"],
+        storageMode: "account"
+    };
+
+    assert.equal(createBuilderPersistencePlan(input), null);
+});
+
+// Catches the account separation guard changing even one anonymous key, value,
+// removal, or cookie option when the caller supplies the explicit mode.
+test("explicit anonymous mode remains byte-compatible with the deployed plan", async function() {
+    const {createBuilderPersistencePlan} = await loadPersistence();
+    const writtenAt = new Date("2026-08-23T14:15:16.000Z");
+    const input = {
+        hasConsent: true,
+        exceptionEncountered: false,
+        encodedLists: "6*Encoded*",
+        selectedCharacter: "Hero",
+        selectedVariant: "Tank",
+        itemsPerPage: 50,
+        selectedColumns: ["Slot", "Name"]
+    };
+
+    assert.deepEqual(
+        createBuilderPersistencePlan({...input, storageMode: "anonymous"}, writtenAt),
+        createBuilderPersistencePlan(input, writtenAt)
+    );
+});
+
 // Catches storage-size display drift from the existing UTF-16 byte estimate and 10 MB label contract.
 test("builder persistence calculates and formats client storage size", async function() {
     const {calculateStorageSize, formatStorageSize} = await loadPersistence();

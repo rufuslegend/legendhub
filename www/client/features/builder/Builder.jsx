@@ -13,6 +13,8 @@ import {applyBuilderPersistencePlan, applySelectedColumns, calculateStorageSize,
 import {builderReducer, createDefaultVariant, createInitialBuilderState, selectStatRestrictions, selectStatTotal} from "./builder-reducer.js";
 import {RUNE_CHARM_ID} from "./item-constants.js";
 import {createItemsBySlotQuery, createItemsInIdsQuery, hydrateBuilderVariant} from "./builder-api.js";
+import {loadBuilderAccountState} from "./builder-account-api.js";
+import {loadBuilderSource} from "./builder-source.js";
 import {validateBuilderListName} from "./builder-list-validation.js";
 
 function cookies() { return Object.fromEntries(document.cookie.split("; ").filter(Boolean).map(value => value.split("=").map(decodeURIComponent))); }
@@ -25,7 +27,16 @@ async function hydrateLists(lists, fragment) {
     return lists.map(list => ({...list, variants: list.variants.map(variant => hydrateBuilderVariant(variant, data.getItemsInIds))}));
 }
 
-export default function Builder({itemStatCategories = [], selectedColumns = []}) {
+export default function Builder({
+    itemStatCategories = [],
+    selectedColumns = [],
+    accountContext = {
+        authenticated: false,
+        emailVerified: false,
+        canUseAccountStorage: false,
+        storageNamespace: null
+    }
+}) {
     const [state, dispatch] = useReducer(builderReducer, undefined, createInitialBuilderState);
     const columnsTriggerRef = useRef(null);
     const hydrated = useRef(false);
@@ -41,35 +52,68 @@ export default function Builder({itemStatCategories = [], selectedColumns = []})
             try {
                 const data = await graphqlRequest({query: "{ getItemStatInfo { display short var type filterString defaultValue netStat showColumnDefault } getItemFragment }"});
                 if (cancelled) return;
-                const cookieValues = cookies();
-                const persisted = readBuilderPersistence({cookies: cookieValues, storage: localStorage});
-                let lists = persisted.encodedLists ? decodeBuilderLists(persisted.encodedLists) : [];
-                if (!lists.length) lists.push({name: "Untitled", variants: [createDefaultVariant("Original")]});
+                const source = await loadBuilderSource({
+                    accountContext,
+                    loadAccount: () => loadBuilderAccountState(),
+                    readAnonymous: () => readBuilderPersistence({cookies: cookies(), storage: localStorage}),
+                    decode: decodeBuilderLists
+                });
+                if (cancelled) return;
+                const preferences = source.preferences || {};
+                let lists = source.profiles;
+                if (!lists.length) {
+                    lists = [{
+                        name: "Untitled",
+                        variants: [createDefaultVariant("Original")],
+                        ...(source.mode === "account" ? {account: {id: null, revision: 0}} : {})
+                    }];
+                }
                 try { lists = await hydrateLists(lists, data.getItemFragment); }
                 catch (error) {
                     // The encoding is still usable. Never replace it or persist an empty
                     // fallback merely because the optional item metadata request failed.
                     lists.sort((left, right) => left.name.localeCompare(right.name, undefined, {sensitivity: "accent"}));
-                    const [characterName, variantName] = String(persisted.selectedList || "!").split("!");
+                    const [characterName, variantName] = source.mode === "anonymous"
+                        ? String(preferences.selectedList || "!").split("!")
+                        : ["", ""];
                     const listIndex = Math.max(lists.findIndex(list => list.name === characterName), 0);
                     const variantIndex = Math.max(lists[listIndex].variants.findIndex(variant => variant.name === variantName), 0);
-                    const columns = cookies()[`sc-${lists[listIndex].name}`] || persisted.columns;
-                    dispatch({type: "ui/patch", value: {allLists: lists, selectedListIndex: listIndex, selectedListVariantIndex: variantIndex, selectedList: lists[listIndex].variants[variantIndex], statInfo: applySelectedColumns(columns, data.getItemStatInfo), defaultStatInfo: data.getItemStatInfo, itemFragment: data.getItemFragment, itemsPerPage: persisted.itemsPerPage, initialized: true, requestStatus: "error", requestError: "Saved builder data could not be hydrated. Retry to restore item details."}});
+                    const columns = source.mode === "anonymous"
+                        ? cookies()[`sc-${lists[listIndex].name}`] || preferences.columns
+                        : null;
+                    dispatch({type: "source/loaded", mode: source.mode, profiles: lists, accountState: source.accountState});
+                    dispatch({type: "ui/patch", value: {allLists: lists, selectedListIndex: listIndex, selectedListVariantIndex: variantIndex, selectedList: lists[listIndex].variants[variantIndex], statInfo: applySelectedColumns(columns, data.getItemStatInfo), defaultStatInfo: data.getItemStatInfo, itemFragment: data.getItemFragment, itemsPerPage: source.mode === "anonymous" ? preferences.itemsPerPage : state.itemsPerPage, initialized: true, requestStatus: "error", requestError: "Saved builder data could not be hydrated. Retry to restore item details."}});
                     return;
                 }
                 if (cancelled) return;
                 lists.sort((left, right) => left.name.localeCompare(right.name, undefined, {sensitivity: "accent"}));
-                const [characterName, variantName] = String(persisted.selectedList || "!").split("!");
+                const [characterName, variantName] = source.mode === "anonymous"
+                    ? String(preferences.selectedList || "!").split("!")
+                    : ["", ""];
                 const listIndex = Math.max(lists.findIndex(list => list.name === characterName), 0);
                 const variantIndex = Math.max(lists[listIndex].variants.findIndex(variant => variant.name === variantName), 0);
                 const selectedCharacterName = lists[listIndex].name;
-                const statInfo = applySelectedColumns(cookies()[`sc-${selectedCharacterName}`] || persisted.columns, data.getItemStatInfo);
-                dispatch({type: "ui/patch", value: {allLists: lists, selectedListIndex: listIndex, selectedListVariantIndex: variantIndex, selectedList: lists[listIndex].variants[variantIndex], statInfo, defaultStatInfo: data.getItemStatInfo, itemFragment: data.getItemFragment, itemsPerPage: persisted.itemsPerPage, initialized: true}});
+                const columns = source.mode === "anonymous"
+                    ? cookies()[`sc-${selectedCharacterName}`] || preferences.columns
+                    : null;
+                const statInfo = applySelectedColumns(columns, data.getItemStatInfo);
+                dispatch({type: "source/loaded", mode: source.mode, profiles: lists, accountState: source.accountState});
+                dispatch({type: "ui/patch", value: {allLists: lists, selectedListIndex: listIndex, selectedListVariantIndex: variantIndex, selectedList: lists[listIndex].variants[variantIndex], statInfo, defaultStatInfo: data.getItemStatInfo, itemFragment: data.getItemFragment, itemsPerPage: source.mode === "anonymous" ? preferences.itemsPerPage : state.itemsPerPage, initialized: true}});
                 dispatch({type: "request/succeeded"});
                 hydrated.current = true;
             }
             catch (error) {
                 if (cancelled) return;
+                if (accountContext.canUseAccountStorage) {
+                    dispatch({type: "ui/patch", value: {
+                        storageMode: "account",
+                        initialized: true,
+                        requestStatus: "error",
+                        requestError: error.message || "Builder account data could not be loaded.",
+                        exceptionEncountered: true
+                    }});
+                    return;
+                }
                 const list = {name: "Untitled", variants: [createDefaultVariant("Original")]};
                 const fallbackStatInfo = itemStatCategories.flatMap(category => category.getItemStatInfo || []).map(stat => ({...stat, showColumn: selectedColumns.includes(stat.short) || Boolean(stat.showColumnDefault)}));
                 dispatch({type: "ui/patch", value: {allLists: [list], selectedListIndex: 0, selectedListVariantIndex: 0, selectedList: list.variants[0], statInfo: fallbackStatInfo, defaultStatInfo: fallbackStatInfo, initialized: true, requestStatus: "error", requestError: error.message || "Builder data could not be loaded. Try refreshing the page.", exceptionEncountered: true}});
@@ -80,15 +124,15 @@ export default function Builder({itemStatCategories = [], selectedColumns = []})
     }, []);
 
     useEffect(function() {
-        if (!hydrated.current || !selected) return;
-        const plan = createBuilderPersistencePlan({hasConsent: Boolean(cookies()["cookie-consent"]), exceptionEncountered: state.exceptionEncountered, encodedLists: encodeBuilderLists(state.allLists), selectedCharacter: state.allLists[state.selectedListIndex].name, selectedVariant: selected.name, itemsPerPage: state.itemsPerPage, selectedColumns: state.statInfo.filter(stat => stat.showColumn).map(stat => stat.short)});
+        if (state.storageMode !== "anonymous" || !hydrated.current || !selected) return;
+        const plan = createBuilderPersistencePlan({hasConsent: Boolean(cookies()["cookie-consent"]), exceptionEncountered: state.exceptionEncountered, storageMode: state.storageMode, encodedLists: encodeBuilderLists(state.allLists), selectedCharacter: state.allLists[state.selectedListIndex].name, selectedVariant: selected.name, itemsPerPage: state.itemsPerPage, selectedColumns: state.statInfo.filter(stat => stat.showColumn).map(stat => stat.short)});
         applyBuilderPersistencePlan(plan, {cookies: cookieStore(), storage: storageAdapter()});
         const size = calculateStorageSize(localStorage);
         if (size !== state.clientSideDataSize) dispatch({type: "ui/patch", value: {clientSideDataSize: formatStorageSize(size)}});
-    }, [state.allLists, state.selectedListIndex, state.selectedListVariantIndex, selected, state.statInfo, state.itemsPerPage, state.exceptionEncountered]);
+    }, [state.allLists, state.selectedListIndex, state.selectedListVariantIndex, selected, state.statInfo, state.itemsPerPage, state.exceptionEncountered, state.storageMode]);
 
     function action(value) {
-        if (value.type === "variant/select" && value.listIndex !== state.selectedListIndex) {
+        if (state.storageMode === "anonymous" && value.type === "variant/select" && value.listIndex !== state.selectedListIndex) {
             const characterName = state.allLists[value.listIndex].name;
             const cookieValues = cookies();
             dispatch({type: "ui/patch", value: {statInfo: applySelectedColumns(cookieValues[`sc-${characterName}`] || cookieValues.sc2, state.defaultStatInfo)}});
@@ -119,9 +163,11 @@ export default function Builder({itemStatCategories = [], selectedColumns = []})
             const remainingCharacters = state.allLists.filter((_list, index) => index !== state.selectedListIndex);
             const fallbackIndex = Math.min(state.selectedListIndex, remainingCharacters.length - 1);
             const fallbackCharacter = remainingCharacters[fallbackIndex]?.name || "Untitled";
-            const cookieValues = cookies();
-            dispatch({type: "ui/patch", value: {statInfo: applySelectedColumns(cookieValues[`sc-${fallbackCharacter}`] || cookieValues.sc2, state.defaultStatInfo)}});
-            cookieStore().remove(`sc-${deletedCharacter}`);
+            if (state.storageMode === "anonymous") {
+                const cookieValues = cookies();
+                dispatch({type: "ui/patch", value: {statInfo: applySelectedColumns(cookieValues[`sc-${fallbackCharacter}`] || cookieValues.sc2, state.defaultStatInfo)}});
+                cookieStore().remove(`sc-${deletedCharacter}`);
+            }
             dispatch({type: "character/delete", fallbackVariant: createDefaultVariant("Original")});
         }
         else if (state.currentDialog === "delete-variant") dispatch({type: "variant/delete", fallbackVariant: createDefaultVariant("Original")});
@@ -134,15 +180,17 @@ export default function Builder({itemStatCategories = [], selectedColumns = []})
             if (state.currentDialog === "add-variant") dispatch({type: "variant/add", listIndex: state.selectedListIndex, variant: {...selected, name}});
             if (state.currentDialog === "edit-character") {
                 const oldName = character.name;
-                const columns = cookies()[`sc-${oldName}`];
-                if (columns) { cookieStore().put(`sc-${name}`, columns, {path: "/", expires: new Date("2100-01-01")}); cookieStore().remove(`sc-${oldName}`); }
+                if (state.storageMode === "anonymous") {
+                    const columns = cookies()[`sc-${oldName}`];
+                    if (columns) { cookieStore().put(`sc-${name}`, columns, {path: "/", expires: new Date("2100-01-01")}); cookieStore().remove(`sc-${oldName}`); }
+                }
                 dispatch({type: "character/rename", name});
             }
             if (state.currentDialog === "edit-variant") dispatch({type: "variant/rename", name});
         }
         close();
     }
-    function exportValue() { const character = state.allLists[state.selectedListIndex]; return {allLists: encodeBuilderLists(state.allLists), curList: `6*${character.variants.map(variant => encodeBuilderVariant(character.name, variant)).join("*")}*`, curVariant: `6*${encodeBuilderVariant(character.name, selected)}*`, characterName: character.name, variantName: selected.name}; }
+    function exportValue() { const character = state.allLists[state.selectedListIndex]; const exportLists = state.allLists.map(({account: _account, ...list}) => list); return {allLists: encodeBuilderLists(exportLists), curList: `6*${character.variants.map(variant => encodeBuilderVariant(character.name, variant)).join("*")}*`, curVariant: `6*${encodeBuilderVariant(character.name, selected)}*`, characterName: character.name, variantName: selected.name}; }
     function importChange(input, overwriteIndex, overwrite) {
         let lists = [];
         let message = "";
@@ -181,7 +229,8 @@ export default function Builder({itemStatCategories = [], selectedColumns = []})
         catch (error) { dispatch({type: "request/failed", error: error.message || "Items could not be loaded. Try again."}); }
     }
     function pickItem(item, rune) { if (rune) { const charm = state.charmSelectors.join(""); dispatch({type: "rune/update", index: state.currentItemIndex, charm, runeId: RUNE_CHARM_ID, runeStats: deriveRuneCharmStats(charm)}); } else dispatch({type: "item/select", index: state.currentItemIndex, item}); close(); }
+    const requestAlert = state.requestError && <p role="alert" className="text-danger">{state.requestError} <button type="button" className="btn btn-link p-0" onClick={() => window.location.reload()}>Retry</button></p>;
     if (state.requestStatus === "pending" && !state.initialized) return <main className="container-fluid"><p role="status">Loading Builder…</p></main>;
-    if (!selected) return null;
-    return <main className="container-fluid"><div className="row"><CharacterPanel state={state} columnsOpen={state.currentDialog === "columns"} columnsTriggerRef={columnsTriggerRef} onAction={action} onDialog={openDialog} /><StatsPanel state={state} onAction={action} /></div>{state.requestError && <p role="alert" className="text-danger">{state.requestError} <button type="button" className="btn btn-link p-0" onClick={() => window.location.reload()}>Retry</button></p>}<EquipmentPanel state={state} totals={totals} restrictions={restrictions} statRestrictions={statRestrictions} onAction={action} onToggleLocks={requestToggleLocks} onOpen={openItem} onPick={pickItem} onClose={close} />{state.currentDialog === "export" && <ImportExportDialog mode="export" value={exportValue()} onClose={close} />}{state.currentDialog === "import" && <ImportExportDialog mode="import" value={state.importModel || {input: "", lists: [], message: "", loading: false}} onChange={importChange} onClose={close} onSubmit={submitImport} />}{state.currentDialog === "columns" && <ColumnsDialog categories={itemStatCategories} open onClose={close} onReset={resetColumns} onToggle={toggleColumn} selectedColumns={state.statInfo.filter(stat => stat.showColumn).map(stat => stat.short)} triggerRef={columnsTriggerRef} />}{state.currentDialog && !["columns", "import", "export"].includes(state.currentDialog) && <BuilderListsDialog dialog={state.currentDialog} state={state} onClose={close} onSubmit={listsDialog} />}{state.confirmMessage && <BuilderModal label={`Confirm ${state.confirmMessage.includes("unlock") ? "unlock" : "lock"} all items`} onClose={closeConfirmation}><div className="modal-body"><p>{state.confirmMessage}</p><button className="btn btn-primary" type="button" onClick={confirmAction}>Yes</button></div></BuilderModal>}</main>;
+    if (!selected) return <main className="container-fluid">{requestAlert}</main>;
+    return <main className="container-fluid"><div className="row"><CharacterPanel state={state} columnsOpen={state.currentDialog === "columns"} columnsTriggerRef={columnsTriggerRef} onAction={action} onDialog={openDialog} /><StatsPanel state={state} onAction={action} /></div>{requestAlert}<EquipmentPanel state={state} totals={totals} restrictions={restrictions} statRestrictions={statRestrictions} onAction={action} onToggleLocks={requestToggleLocks} onOpen={openItem} onPick={pickItem} onClose={close} />{state.currentDialog === "export" && <ImportExportDialog mode="export" value={exportValue()} onClose={close} />}{state.currentDialog === "import" && <ImportExportDialog mode="import" value={state.importModel || {input: "", lists: [], message: "", loading: false}} onChange={importChange} onClose={close} onSubmit={submitImport} />}{state.currentDialog === "columns" && <ColumnsDialog categories={itemStatCategories} open onClose={close} onReset={resetColumns} onToggle={toggleColumn} selectedColumns={state.statInfo.filter(stat => stat.showColumn).map(stat => stat.short)} triggerRef={columnsTriggerRef} />}{state.currentDialog && !["columns", "import", "export"].includes(state.currentDialog) && <BuilderListsDialog dialog={state.currentDialog} state={state} onClose={close} onSubmit={listsDialog} />}{state.confirmMessage && <BuilderModal label={`Confirm ${state.confirmMessage.includes("unlock") ? "unlock" : "lock"} all items`} onClose={closeConfirmation}><div className="modal-body"><p>{state.confirmMessage}</p><button className="btn btn-primary" type="button" onClick={confirmAction}>Yes</button></div></BuilderModal>}</main>;
 }
