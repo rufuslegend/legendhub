@@ -13,17 +13,32 @@ test("builder persistence gates reads on consent and preserves storage fallback 
     const storage = {cln: "6*Current", cl2: "Old two", cl1: "Old one", cl: "Oldest", scl: "Hero!Tank"};
 
     assert.deepEqual(readBuilderPersistence({cookies: {}, storage}), {
-        encodedLists: null, selectedList: null, itemsPerPage: 20, columns: null
+        encodedLists: null,
+        selectedList: null,
+        theme: null,
+        itemsPerPage: 20,
+        itemColumns: null,
+        builderColumns: {}
     });
     assert.deepEqual(readBuilderPersistence({
-        cookies: {"cookie-consent": "yes", ipp: "50", sc2: "Slot-Name-", scl1: "Cookie!Original"},
+        cookies: {
+            "cookie-consent": "yes",
+            theme: "dark",
+            ipp: "50",
+            sc2: "Slot-Name-",
+            "sc-Hero": "Rent-",
+            "sc-Scout": "Name-Str-",
+            scl1: "Cookie!Original"
+        },
         storage,
         characterName: "Hero"
     }), {
         encodedLists: "6*Current",
         selectedList: "Hero!Tank",
+        theme: "dark",
         itemsPerPage: 50,
-        columns: "Slot-Name-"
+        itemColumns: "Slot-Name-",
+        builderColumns: {Hero: "Rent-", Scout: "Name-Str-"}
     });
 });
 
@@ -46,7 +61,7 @@ test("builder persistence reads each deployed list-key fallback in order", async
 });
 
 // Catches character column lookup that ignores its scoped cookie or loses deployed default-column behavior.
-test("builder persistence applies scoped and fallback selected columns", async function() {
+test("builder persistence keeps Item Search and scoped Builder columns distinct", async function() {
     const {applySelectedColumns, readBuilderPersistence} = await loadPersistence();
     const statInfo = [
         {short: "Slot", showColumnDefault: true},
@@ -59,7 +74,9 @@ test("builder persistence applies scoped and fallback selected columns", async f
         characterName: "Hero"
     });
 
-    assert.deepEqual(applySelectedColumns(preference.columns, statInfo).map(stat => stat.showColumn), [false, false, true]);
+    assert.equal(preference.itemColumns, "Name-");
+    assert.deepEqual(preference.builderColumns, {Hero: "Rent-"});
+    assert.deepEqual(applySelectedColumns(preference.builderColumns.Hero, statInfo).map(stat => stat.showColumn), [false, false, true]);
     assert.deepEqual(applySelectedColumns(null, statInfo).map(stat => stat.showColumn), [true, true, false]);
     assert.equal(statInfo[0].showColumn, undefined);
 });

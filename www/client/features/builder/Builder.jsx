@@ -10,7 +10,7 @@ import BuilderListsDialog from "./BuilderListsDialog.jsx";
 import BuilderMigrationDialog, {BuilderMigrationOffer} from "./BuilderMigrationDialog.jsx";
 import {deriveItemRestrictions, deriveRuneCharmStats} from "./builder-derivations.js";
 import {decodeBuilderEntries, decodeBuilderLists, encodeBuilderLists, encodeBuilderVariant} from "./builder-encoding.js";
-import {buildImportRequest, defaultMigrationPreferencesChoice, fingerprintAnonymousData, migrationAcknowledgementKey, normalizeMigrationResult, shouldOfferMigration} from "./builder-migration.js";
+import {buildImportRequest, classifyAnonymousData, defaultMigrationPreferencesChoice, fingerprintAnonymousData, migrationAcknowledgementKey, normalizeMigrationResult, shouldOfferMigration, writeMigrationAcknowledgement} from "./builder-migration.js";
 import {applyBuilderPersistencePlan, applySelectedColumns, calculateStorageSize, createBuilderPersistencePlan, formatStorageSize, readBuilderPersistence} from "./builder-persistence.js";
 import {builderReducer, createDefaultVariant, createInitialBuilderState, selectStatRestrictions, selectStatTotal} from "./builder-reducer.js";
 import {RUNE_CHARM_ID} from "./item-constants.js";
@@ -78,8 +78,11 @@ export default function Builder({
                             migrationOffer = {
                                 snapshot: source.anonymousSnapshot,
                                 fingerprint,
-                                profiles: decodeBuilderLists(source.anonymousSnapshot.encodedLists).map(profile => profile.name),
-                                preferencesChoice: defaultMigrationPreferencesChoice(source.preferences)
+                                profiles: classifyAnonymousData(source.anonymousSnapshot).profiles.map(profile => profile.name),
+                                preferencesChoice: defaultMigrationPreferencesChoice(
+                                    source.preferences,
+                                    source.accountState?.preferenceRevision
+                                )
                             };
                         }
                     }
@@ -107,7 +110,7 @@ export default function Builder({
                     const listIndex = Math.max(lists.findIndex(list => list.name === characterName), 0);
                     const variantIndex = Math.max(lists[listIndex].variants.findIndex(variant => variant.name === variantName), 0);
                     const columns = source.mode === "anonymous"
-                        ? cookies()[`sc-${lists[listIndex].name}`] || preferences.columns
+                        ? preferences.builderColumns?.[lists[listIndex].name] || preferences.itemColumns
                         : null;
                     dispatch({type: "source/loaded", mode: source.mode, profiles: lists, accountState: source.accountState});
                     if (migrationOffer)
@@ -124,7 +127,7 @@ export default function Builder({
                 const variantIndex = Math.max(lists[listIndex].variants.findIndex(variant => variant.name === variantName), 0);
                 const selectedCharacterName = lists[listIndex].name;
                 const columns = source.mode === "anonymous"
-                    ? cookies()[`sc-${selectedCharacterName}`] || preferences.columns
+                    ? preferences.builderColumns?.[selectedCharacterName] || preferences.itemColumns
                     : null;
                 const statInfo = applySelectedColumns(columns, data.getItemStatInfo);
                 dispatch({type: "source/loaded", mode: source.mode, profiles: lists, accountState: source.accountState});
@@ -172,12 +175,11 @@ export default function Builder({
         dispatch(value);
     }
     function acknowledgeMigration() {
-        if (!state.migration.fingerprint || typeof accountContext.storageNamespace !== "string" || !accountContext.storageNamespace)
-            return;
-        localStorage.setItem(
-            migrationAcknowledgementKey(accountContext.storageNamespace),
-            state.migration.fingerprint
-        );
+        return writeMigrationAcknowledgement({
+            storage: localStorage,
+            storageNamespace: accountContext.storageNamespace,
+            fingerprint: state.migration.fingerprint
+        });
     }
     function closeMigration() {
         if (state.migration.status === "pending")
@@ -206,7 +208,7 @@ export default function Builder({
                     ? null
                     : JSON.stringify(request.preferences)
             });
-            const result = normalizeMigrationResult(response.result);
+            const result = normalizeMigrationResult(response.result, request.localRejected);
             const importedSource = await loadBuilderSource({
                 accountContext,
                 loadAccount: async function() { return response.state; },
@@ -220,11 +222,12 @@ export default function Builder({
                 profiles,
                 accountState: importedSource.accountState
             });
-            localStorage.setItem(
-                migrationAcknowledgementKey(accountContext.storageNamespace),
-                state.migration.fingerprint
-            );
-            dispatch({type: "migration/succeeded", result});
+            const acknowledged = acknowledgeMigration();
+            dispatch({
+                type: "migration/succeeded",
+                result,
+                acknowledgementWarning: !acknowledged
+            });
         }
         catch {
             dispatch({

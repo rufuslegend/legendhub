@@ -41,6 +41,15 @@ const importedAccountProfiles = [
     }
 ];
 const accountPreferences = "{\"itemsPerPage\":99,\"builderColumns\":[\"Rent\"],\"sentinel\":\"private-account-preference\"}";
+const canonicalDefaultPreferences = JSON.stringify({
+    version: 1,
+    theme: "glass-blue",
+    itemsPerPage: 20,
+    itemColumns: [],
+    builderColumns: {},
+    selectedProfileId: null,
+    selectedVariant: null
+});
 const itemFragment = "fragment ItemAll on Item { id name slot strength strengthCap hit dam hp ma mv ac rent weight uniqueWear isLimited twoHanded fauxObject isLight alignRestriction weaponStat }";
 const itemStatInfo = [
     {display: "Name", short: "Name", var: "name", type: "string", showColumnDefault: true},
@@ -350,9 +359,26 @@ test("Builder startup normalizes verified item metadata failures before account 
 // key on retry, acknowledging a failure, leaking private errors, or activating
 // anything other than the strict account state returned by the atomic import.
 test("local Builder data migration is explicit, retry-safe, private, and reports every result", async function({context, page}) {
-    await context.addCookies([{name: "loginToken", value: "migration-builder-account", url: baseUrl}]);
+    await context.addCookies([
+        {name: "loginToken", value: "migration-builder-account", url: baseUrl},
+        {name: "theme", value: "dark", url: baseUrl},
+        {name: "ipp", value: "50", url: baseUrl},
+        {name: "sc2", value: "Slot-AC-HP-", url: baseUrl},
+        {name: "sc-Hero", value: "Name-Str-", url: baseUrl},
+        {name: "sc-Scout", value: "Rent-Name-", url: baseUrl}
+    ]);
+    const privateMalformedRow = "private<malformed>builder-row";
+    const mixedEncodedLists = encodedLists.replace(
+        "*Scout~Original",
+        `*${privateMalformedRow}*Scout~Original`
+    );
+    await page.addInitScript(value => localStorage.setItem("cln", value), mixedEncodedLists);
     const idempotencyKeys = [];
     let importAttempts = 0;
+    let releaseFirstImport;
+    let markFirstImportStarted;
+    const firstImportGate = new Promise(resolve => { releaseFirstImport = resolve; });
+    const firstImportStarted = new Promise(resolve => { markFirstImportStarted = resolve; });
     await page.route(`${baseUrl}/api`, async function(route) {
         const request = route.request().postDataJSON();
         if (request.query.includes("GetBuilderAccountState")) {
@@ -366,14 +392,25 @@ test("local Builder data migration is explicit, retry-safe, private, and reports
         idempotencyKeys.push(request.variables.idempotencyKey);
         expect(request.variables.profiles.map(profile => profile.name)).toEqual(["Hero", "Scout"]);
         const preferences = JSON.parse(request.variables.preferences);
-        expect(Object.keys(preferences).sort()).toEqual([
-            "builderColumns", "itemColumns", "itemsPerPage", "selectedProfileId",
-            "selectedVariant", "version"
-        ]);
+        expect(preferences).toEqual({
+            version: 1,
+            theme: "dark",
+            itemsPerPage: 50,
+            itemColumns: ["Slot", "Ac", "Hp"],
+            builderColumns: {
+                "local-1": ["Name", "Str"],
+                "local-2": ["Rent", "Name"]
+            },
+            selectedProfileId: "local-1",
+            selectedVariant: "Tank"
+        });
         const {authToken, ...migrationVariables} = request.variables;
         expect(authToken).toBe("migration-builder-account");
         expect(JSON.stringify(migrationVariables)).not.toContain("migration-builder-account");
+        expect(JSON.stringify(migrationVariables)).not.toContain(privateMalformedRow);
         if (importAttempts === 1) {
+            markFirstImportStarted();
+            await firstImportGate;
             return route.fulfill({contentType: "application/json", body: JSON.stringify({
                 errors: [{message: "database rejected 6*private-builder-payload"}]
             })});
@@ -387,7 +424,7 @@ test("local Builder data migration is explicit, retry-safe, private, and reports
                         renamed: [{from: "Hero", to: "Hero Local"}],
                         deduplicated: ["Same"],
                         rejected: [{
-                            name: "Broken",
+                            name: null,
                             reason: "decoder rejected 6*private-builder-payload"
                         }],
                         preferencesImported: true
@@ -416,6 +453,11 @@ test("local Builder data migration is explicit, retry-safe, private, and reports
     await expect(dialog.getByLabel("Keep my account preferences")).toBeChecked();
     await dialog.getByLabel("Use this browser's preferences").check();
     await dialog.getByRole("button", {name: "Copy all to my account"}).click();
+    await firstImportStarted;
+    await expect(dialog.getByRole("button", {name: "Close"})).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeVisible();
+    releaseFirstImport();
 
     const alert = dialog.getByRole("alert");
     await expect(alert).toContainText("Local Builder data could not be copied. Try again.");
@@ -432,8 +474,10 @@ test("local Builder data migration is explicit, retry-safe, private, and reports
     await expect(dialog.getByText("Scout", {exact: true})).toBeVisible();
     await expect(dialog.getByText("Hero → Hero Local", {exact: true})).toBeVisible();
     await expect(dialog.getByText("Same", {exact: true})).toBeVisible();
-    await expect(dialog.getByText("Broken — Could not be copied.", {exact: true})).toBeVisible();
+    await expect(dialog.getByText("Local row 3 — Could not be copied.", {exact: true})).toBeVisible();
+    await expect(dialog.getByText("Server rejection 1 — Could not be copied.", {exact: true})).toBeVisible();
     await expect(dialog).not.toContainText("private-builder-payload");
+    await expect(dialog).not.toContainText(privateMalformedRow);
     await expect(page.getByLabel("Character", {exact: true})).toContainText("Guest");
     await expect(page.getByLabel("Character", {exact: true})).toContainText("Hero");
     await expect(page.getByLabel("Character", {exact: true})).toContainText("Scout");
@@ -444,7 +488,7 @@ test("local Builder data migration is explicit, retry-safe, private, and reports
         anonymousLists: localStorage.getItem("cln")
     }))).toEqual({
         acknowledgement: expect.stringMatching(/^[a-f0-9]{64}$/),
-        anonymousLists: encodedLists
+        anonymousLists: mixedEncodedLists
     });
 
     await dialog.getByRole("button", {name: "Close results"}).click();
@@ -460,7 +504,11 @@ test("local Builder data migration dismissal retains browser source and restores
         const request = route.request().postDataJSON();
         if (request.query.includes("GetBuilderAccountState")) {
             return route.fulfill({contentType: "application/json", body: JSON.stringify({
-                data: {getBuilderAccountState: {...accountBuilderState(), preferences: "{}"}}
+                data: {getBuilderAccountState: {
+                    ...accountBuilderState(),
+                    preferences: canonicalDefaultPreferences,
+                    preferenceRevision: 1
+                }}
             })});
         }
         if (request.query.includes("ImportBuilderProfiles"))
@@ -491,6 +539,109 @@ test("local Builder data migration dismissal retains browser source and restores
     await page.reload();
     await expect(page.getByRole("region", {name: "Local Builder data"})).toHaveCount(0);
     expect(importAttempts).toBe(0);
+});
+
+// Catches a local acknowledgement quota/privacy failure converting a committed
+// atomic server import into a false retryable failure.
+test("successful local Builder data migration survives acknowledgement storage failure", async function({context, page}) {
+    await context.addCookies([{name: "loginToken", value: "migration-ack-failure", url: baseUrl}]);
+    let importAttempts = 0;
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (request.query.includes("GetBuilderAccountState")) {
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({
+                data: {getBuilderAccountState: accountBuilderState()}
+            })});
+        }
+        if (!request.query.includes("ImportBuilderProfiles"))
+            return route.fallback();
+        importAttempts += 1;
+        return route.fulfill({contentType: "application/json", body: JSON.stringify({data: {
+            importBuilderProfiles: {
+                result: JSON.stringify({
+                    copied: ["Hero", "Scout"],
+                    renamed: [],
+                    deduplicated: [],
+                    rejected: [],
+                    preferencesImported: false
+                }),
+                state: accountBuilderState(importedAccountProfiles)
+            }
+        }})});
+    });
+
+    await page.goto(`${baseUrl}/builder/`);
+    await page.evaluate(function() {
+        const original = Storage.prototype.setItem;
+        Storage.prototype.setItem = function(name, value) {
+            if (name.startsWith("legendhub-builder-import:"))
+                throw new DOMException("private acknowledgement diagnostic", "QuotaExceededError");
+            return original.call(this, name, value);
+        };
+    });
+    const offer = page.getByRole("region", {name: "Local Builder data"});
+    await offer.getByRole("button", {name: "Review local Builder data"}).click();
+    const dialog = page.getByRole("dialog", {name: "Copy local Builder data"});
+    await dialog.getByRole("button", {name: "Copy all to my account"}).click();
+
+    await expect(dialog.locator("#builder-migration-result")).toBeFocused();
+    await expect(dialog).toContainText("The copy completed, but this browser could not remember it.");
+    await expect(dialog).not.toContainText("private acknowledgement diagnostic");
+    await expect(page.getByLabel("Character", {exact: true})).toContainText("Hero");
+    expect(importAttempts).toBe(1);
+    expect(await page.evaluate(() => ({
+        acknowledgement: localStorage.getItem(
+            "legendhub-builder-import:0123456789abcdef0123456789abcdef"
+        ),
+        anonymousLists: localStorage.getItem("cln")
+    }))).toEqual({acknowledgement: null, anonymousLists: encodedLists});
+
+    await dialog.getByRole("button", {name: "Close results"}).click();
+    await page.reload();
+    await expect(page.getByRole("region", {name: "Local Builder data"})).toBeVisible();
+    expect(importAttempts).toBe(1);
+});
+
+// Catches the same best-effort acknowledgement boundary preventing Not now
+// from closing or changing the retained anonymous source.
+test("local Builder data dismissal closes when acknowledgement storage fails", async function({context, page}) {
+    await context.addCookies([{name: "loginToken", value: "dismiss-ack-failure", url: baseUrl}]);
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (request.query.includes("GetBuilderAccountState")) {
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({
+                data: {getBuilderAccountState: accountBuilderState()}
+            })});
+        }
+        return route.fallback();
+    });
+
+    await page.goto(`${baseUrl}/builder/`);
+    const offer = page.getByRole("region", {name: "Local Builder data"});
+    const trigger = offer.getByRole("button", {name: "Review local Builder data"});
+    await trigger.click();
+    await page.evaluate(function() {
+        const original = Storage.prototype.setItem;
+        Storage.prototype.setItem = function(name, value) {
+            if (name.startsWith("legendhub-builder-import:"))
+                throw new DOMException("private dismissal diagnostic", "QuotaExceededError");
+            return original.call(this, name, value);
+        };
+    });
+    await page.getByRole("dialog", {name: "Copy local Builder data"})
+        .getByRole("button", {name: "Not now"}).click();
+
+    await expect(page.getByRole("dialog", {name: "Copy local Builder data"})).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    expect(await page.evaluate(() => ({
+        acknowledgement: localStorage.getItem(
+            "legendhub-builder-import:0123456789abcdef0123456789abcdef"
+        ),
+        anonymousLists: localStorage.getItem("cln")
+    }))).toEqual({acknowledgement: null, anonymousLists: encodedLists});
+
+    await page.reload();
+    await expect(page.getByRole("region", {name: "Local Builder data"})).toBeVisible();
 });
 
 test.beforeEach(async function({context, page}) {

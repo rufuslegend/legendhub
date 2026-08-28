@@ -33,8 +33,11 @@ function MigrationResults({result, onClose}) {
         <ResultList heading="Deduplicated" values={result.deduplicated} />
         <ResultList heading="Rejected" values={result.rejected} render={entry => `${entry.name} — ${entry.reason}`} />
         <p className="mt-3 mb-0">{result.preferencesImported
-            ? "This browser's Builder preferences were copied to the account."
+            ? "This browser's selected preferences were copied to the account."
             : "Your account preferences were kept."}</p>
+        {result.acknowledgementWarning && <p role="status" className="text-warning mt-3 mb-0">
+            The copy completed, but this browser could not remember it. You may be asked to copy this local data again.
+        </p>}
         <button type="button" className="btn btn-primary mt-3" onClick={onClose}>Close results</button>
     </div>;
 }
@@ -50,12 +53,15 @@ export default function BuilderMigrationDialog({migration, onClose, onCopy, onPr
         return null;
     if (migration.status === "succeeded") {
         return <BuilderModal key="migration-results" label="Copy local Builder data" onClose={onClose} initialFocus="#builder-migration-result">
-            <MigrationResults result={migration.result} onClose={onClose} />
+            <MigrationResults result={{
+                ...migration.result,
+                acknowledgementWarning: migration.acknowledgementWarning
+            }} onClose={onClose} />
         </BuilderModal>;
     }
 
     const pending = migration.status === "pending";
-    return <BuilderModal key="migration-form" label="Copy local Builder data" onClose={pending ? function() {} : onClose} initialFocus="#builder-migration-copy">
+    return <BuilderModal key="migration-form" label="Copy local Builder data" onClose={onClose} closeDisabled={pending} initialFocus="#builder-migration-copy">
         <div className="modal-body" aria-describedby="builder-migration-retention">
             <p id="builder-migration-retention">
                 Copying adds these profiles to your account. It never deletes or changes the originals saved in this browser.
@@ -72,7 +78,7 @@ export default function BuilderMigrationDialog({migration, onClose, onCopy, onPr
                     <label className="form-check-label" htmlFor="migration-preferences-browser">Use this browser's preferences</label>
                 </div>
             </fieldset>
-            <p className="small mt-2">Only Builder display, selection, and paging preferences are copyable. Login, consent, timezone, and other device-only values stay in this browser.</p>
+            <p className="small mt-2">Only theme, Item Search columns, and Builder display, selection, and paging preferences are copyable. Login, consent, timezone, and other device-only values stay in this browser.</p>
             {pending && <p ref={statusRef} role="status" aria-live="polite" tabIndex="-1">Copying local Builder data…</p>}
             {migration.error && <p ref={statusRef} role="alert" tabIndex="-1" className="text-danger">{migration.error}</p>}
             <div className="mt-3 d-flex flex-wrap">

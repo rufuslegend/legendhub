@@ -59,7 +59,8 @@ test("builder initial state owns list, equipment, search, dialog, and request st
             preferencesChoice: "account",
             request: null,
             result: null,
-            error: ""
+            error: "",
+            acknowledgementWarning: false
         },
         exceptionEncountered: false,
         clientSideDataSize: 0
@@ -82,7 +83,7 @@ test("migration reducer reuses one atomic request through failure and retry", as
     assert.deepEqual(state.migration, {
         status: "offered", open: false, snapshot, fingerprint: "abc123",
         profiles: ["Hero"], preferencesChoice: "browser", request: null,
-        result: null, error: ""
+        result: null, error: "", acknowledgementWarning: false
     });
 
     state = builderReducer(state, {type: "migration/opened"});
@@ -103,10 +104,12 @@ test("migration reducer reuses one atomic request through failure and retry", as
     assert.equal(state.migration.request, request);
     state = builderReducer(state, {
         type: "migration/succeeded",
-        result: {copied: ["Hero"]}
+        result: {copied: ["Hero"]},
+        acknowledgementWarning: true
     });
     assert.equal(state.migration.status, "succeeded");
     assert.deepEqual(state.migration.result, {copied: ["Hero"]});
+    assert.equal(state.migration.acknowledgementWarning, true);
     assert.equal(state.migration.request, null);
 });
 

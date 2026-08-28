@@ -21,11 +21,13 @@ function focusableElements(element) {
     return Array.from(element?.querySelectorAll("a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])") || []).filter(entry => !entry.hidden);
 }
 
-export function BuilderModal({children, label, onClose, initialFocus, size = "lg"}) {
+export function BuilderModal({children, closeDisabled = false, label, onClose, initialFocus, size = "lg"}) {
     const ref = useRef(null);
     const triggerRef = useRef(null);
     const closeRef = useRef(onClose);
+    const closeDisabledRef = useRef(closeDisabled);
     closeRef.current = onClose;
+    closeDisabledRef.current = closeDisabled;
 
     useEffect(function() {
         lockPageScroll();
@@ -51,7 +53,12 @@ export function BuilderModal({children, label, onClose, initialFocus, size = "lg
                 focusInitial();
         }
         function keydown(event) {
-            if (event.key === "Escape") { event.preventDefault(); closeRef.current(); return; }
+            if (event.key === "Escape") {
+                event.preventDefault();
+                if (!closeDisabledRef.current)
+                    closeRef.current();
+                return;
+            }
             if (event.key !== "Tab") return;
             const focusable = focusableElements(modal);
             if (!focusable.length) { event.preventDefault(); modal?.focus(); return; }
@@ -74,7 +81,7 @@ export function BuilderModal({children, label, onClose, initialFocus, size = "lg
             triggerRef.current?.focus();
         };
     }, []);
-    return <div ref={ref} className="modal d-block" role="dialog" aria-modal="true" aria-label={label} tabIndex="-1"><div className={`modal-dialog modal-${size} modal-dialog-scrollable`} role="document"><div className="modal-content"><div className="modal-header"><h2 className="modal-title h5">{label}</h2><button type="button" className="close" aria-label="Close" onClick={() => closeRef.current()}><span aria-hidden="true">×</span></button></div>{children}</div></div></div>;
+    return <div ref={ref} className="modal d-block" role="dialog" aria-modal="true" aria-label={label} tabIndex="-1"><div className={`modal-dialog modal-${size} modal-dialog-scrollable`} role="document"><div className="modal-content"><div className="modal-header"><h2 className="modal-title h5">{label}</h2><button type="button" className="close" aria-label="Close" disabled={closeDisabled} onClick={() => closeRef.current()}><span aria-hidden="true">×</span></button></div>{children}</div></div></div>;
 }
 
 function CopyField({id, label, value, onCopied}) {

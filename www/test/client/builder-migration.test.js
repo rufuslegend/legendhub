@@ -13,8 +13,13 @@ const scout = "Scout~Original~0X0X0X0X0X0X000000___0000000000000000000f_________
 const snapshot = {
     encodedLists: `6*${hero}*${scout}*`,
     selectedList: "Hero!Tank",
+    theme: "dark",
     itemsPerPage: 50,
-    columns: "Name-Str-",
+    itemColumns: "Slot-AC-HP-",
+    builderColumns: {
+        Hero: "Name-Str-",
+        Scout: "Rent-Name-Name-"
+    },
     cookieConsent: true,
     loginToken: "private-login-token",
     timezone: "America/Chicago",
@@ -44,9 +49,13 @@ test("anonymous fingerprint hashes only canonical lists and syncable preferences
         encodedLists: snapshot.encodedLists,
         preferences: {
             version: 1,
+            theme: "dark",
             itemsPerPage: 50,
-            itemColumns: [],
-            builderColumns: {"local-1": ["Name", "Str"]},
+            itemColumns: ["Slot", "Ac", "Hp"],
+            builderColumns: {
+                "local-1": ["Name", "Str"],
+                "local-2": ["Rent", "Name"]
+            },
             selectedProfileId: "local-1",
             selectedVariant: "Tank"
         }
@@ -65,6 +74,33 @@ test("migration acknowledgement key is scoped only by opaque storage namespace",
         migrationAcknowledgementKey("0123456789abcdef0123456789abcdef"),
         "legendhub-builder-import:0123456789abcdef0123456789abcdef"
     );
+});
+
+// Catches acknowledgement storage availability being treated as part of the
+// already-committed server transaction.
+test("acknowledgement writes are best effort and never expose storage failures", async function() {
+    const {writeMigrationAcknowledgement} = await loadMigration();
+    const fingerprint = "a".repeat(64);
+    const written = [];
+    assert.equal(writeMigrationAcknowledgement({
+        storage: {setItem: (key, value) => written.push([key, value])},
+        storageNamespace: "opaque-namespace",
+        fingerprint
+    }), true);
+    assert.deepEqual(written, [[
+        "legendhub-builder-import:opaque-namespace",
+        fingerprint
+    ]]);
+    assert.equal(writeMigrationAcknowledgement({
+        storage: {setItem() { throw new Error("private quota diagnostic"); }},
+        storageNamespace: "opaque-namespace",
+        fingerprint
+    }), false);
+    assert.equal(writeMigrationAcknowledgement({
+        storage: {setItem() {}},
+        storageNamespace: "opaque-namespace",
+        fingerprint: "not-hex"
+    }), false);
 });
 
 // Catches unchanged acknowledged anonymous data being offered on every login,
@@ -89,6 +125,47 @@ test("migration offer requires a nonempty valid anonymous list and a completed f
     assert.equal(shouldOfferMigration({snapshot, fingerprint: "", acknowledgedFingerprint: null}), false);
 });
 
+// Catches one malformed local row suppressing otherwise valid characters or
+// leaking its contents into the request/result surface.
+test("mixed anonymous rows keep valid profiles importable and label invalid rows by position", async function() {
+    const {buildImportRequest, fingerprintAnonymousData, shouldOfferMigration} = await loadMigration();
+    const privateMalformedRow = "private<malformed>payload";
+    const mixedSnapshot = {
+        ...snapshot,
+        encodedLists: `6*${hero}*${privateMalformedRow}*${scout}*`
+    };
+
+    assert.equal(shouldOfferMigration({
+        snapshot: mixedSnapshot,
+        fingerprint: "changed",
+        acknowledgedFingerprint: null
+    }), true);
+    const request = buildImportRequest({
+        snapshot: mixedSnapshot,
+        preferencesChoice: "browser",
+        storageGeneration: 3
+    });
+    assert.deepEqual(request.profiles.map(({id, name}) => ({id, name})), [
+        {id: "local-1", name: "Hero"},
+        {id: "local-2", name: "Scout"}
+    ]);
+    assert.deepEqual(request.localRejected, [{
+        name: "Local row 2",
+        reason: "Could not be copied."
+    }]);
+    assert.equal(JSON.stringify(request).includes(privateMalformedRow), false);
+
+    let fingerprintInput;
+    await fingerprintAnonymousData(mixedSnapshot, {
+        subtle: {async digest(_algorithm, bytes) {
+            fingerprintInput = new TextDecoder().decode(bytes);
+            return new Uint8Array(32).buffer;
+        }}
+    });
+    assert.equal(JSON.parse(fingerprintInput).encodedLists, `6*${hero}*${scout}*`);
+    assert.equal(fingerprintInput.includes(privateMalformedRow), false);
+});
+
 // Catches migration collapsing all local characters into one payload, omitting
 // the atomic batch key, or sending device-only/unknown preference state.
 test("migration request creates per-profile payloads and strips device-only values", async function() {
@@ -101,9 +178,13 @@ test("migration request creates per-profile payloads and strips device-only valu
     ]);
     assert.deepEqual(request.preferences, {
         version: 1,
+        theme: "dark",
         itemsPerPage: 50,
-        itemColumns: [],
-        builderColumns: {"local-1": ["Name", "Str"]},
+        itemColumns: ["Slot", "Ac", "Hp"],
+        builderColumns: {
+            "local-1": ["Name", "Str"],
+            "local-2": ["Rent", "Name"]
+        },
         selectedProfileId: "local-1",
         selectedVariant: "Tank"
     });
@@ -114,6 +195,34 @@ test("migration request creates per-profile payloads and strips device-only valu
     assert.equal(Object.hasOwn(request.preferences, "loginToken"), false);
     assert.equal(Object.hasOwn(request.preferences, "timezone"), false);
     assert.equal(Object.hasOwn(request.preferences, "futureDeviceValue"), false);
+});
+
+// Catches hostile or obsolete preference cookies reaching the fingerprint or
+// server instead of being reduced to the shared canonical preference domain.
+test("browser preference document defaults and filters unsupported cookie values", async function() {
+    const {buildImportRequest} = await loadMigration();
+    const request = buildImportRequest({
+        snapshot: {
+            ...snapshot,
+            theme: "private-theme-path",
+            itemsPerPage: 25,
+            itemColumns: "private-column-Slot-AC-",
+            builderColumns: {Hero: "private-column-HP-Accu-"}
+        },
+        preferencesChoice: "browser",
+        storageGeneration: 3
+    });
+
+    assert.deepEqual(request.preferences, {
+        version: 1,
+        theme: "glass-blue",
+        itemsPerPage: 20,
+        itemColumns: ["Slot", "Ac"],
+        builderColumns: {"local-1": ["Hp", "Shot Acc"]},
+        selectedProfileId: "local-1",
+        selectedVariant: "Tank"
+    });
+    assert.equal(JSON.stringify(request.preferences).includes("private"), false);
 });
 
 // Catches choosing account preferences while still overwriting them with the
@@ -130,11 +239,23 @@ test("account preference choice omits browser preferences and each new attempt g
 
 // Catches an existing account preference document being overwritten by
 // default while preserving the browser-first default for truly absent state.
-test("preference choice defaults to browser only when account preferences are absent", async function() {
+test("preference choice defaults to browser for a fresh canonical account and otherwise protects account choices", async function() {
     const {defaultMigrationPreferencesChoice} = await loadMigration();
+    const canonicalDefault = {
+        version: 1,
+        theme: "glass-blue",
+        itemsPerPage: 20,
+        itemColumns: [],
+        builderColumns: {},
+        selectedProfileId: null,
+        selectedVariant: null
+    };
     assert.equal(defaultMigrationPreferencesChoice(null), "browser");
     assert.equal(defaultMigrationPreferencesChoice({}), "browser");
-    assert.equal(defaultMigrationPreferencesChoice({version: 1, theme: "dark"}), "account");
+    assert.equal(defaultMigrationPreferencesChoice(canonicalDefault, 1), "browser");
+    assert.equal(defaultMigrationPreferencesChoice(canonicalDefault, 2), "account");
+    assert.equal(defaultMigrationPreferencesChoice({...canonicalDefault, theme: "dark"}, 1), "account");
+    assert.equal(defaultMigrationPreferencesChoice({...canonicalDefault, customized: true}, 1), "account");
 });
 
 // Catches raw server result/error text reaching the accessible result report.
@@ -172,8 +293,14 @@ test("migration result rejects missing or non-string display names", async funct
         () => normalizeMigrationResult({...base, renamed: [{to: "Hero Local"}]}),
         /Builder migration result is invalid\./
     );
-    assert.throws(
-        () => normalizeMigrationResult({...base, rejected: [{name: null}]}),
-        /Builder migration result is invalid\./
+    assert.deepEqual(
+        normalizeMigrationResult(
+            {...base, rejected: [{name: null, reason: "private-server-diagnostic"}]},
+            [{name: "Local row 2", reason: "Could not be copied."}]
+        ).rejected,
+        [
+            {name: "Local row 2", reason: "Could not be copied."},
+            {name: "Server rejection 1", reason: "Could not be copied."}
+        ]
     );
 });

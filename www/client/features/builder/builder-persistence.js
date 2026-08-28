@@ -10,6 +10,14 @@ function hasOwn(object, property) {
     return Object.prototype.hasOwnProperty.call(object || {}, property);
 }
 
+function readBuilderColumnCookies(cookies) {
+    return Object.fromEntries(Object.entries(cookies).flatMap(function([name, value]) {
+        if (!name.startsWith("sc-") || name.length <= 3 || typeof value !== "string")
+            return [];
+        return [[name.slice(3), value]];
+    }));
+}
+
 export function applySelectedColumns(cookie, statInfo) {
     const selected = cookie ? new Set(cookie.split("-").filter(Boolean)) : null;
     return (statInfo || []).map(function(stat) {
@@ -20,9 +28,16 @@ export function applySelectedColumns(cookie, statInfo) {
     });
 }
 
-export function readBuilderPersistence({cookies = {}, storage = {}, characterName} = {}) {
+export function readBuilderPersistence({cookies = {}, storage = {}} = {}) {
     if (!cookies["cookie-consent"]) {
-        return {encodedLists: null, selectedList: null, itemsPerPage: 20, columns: null};
+        return {
+            encodedLists: null,
+            selectedList: null,
+            theme: null,
+            itemsPerPage: 20,
+            itemColumns: null,
+            builderColumns: {}
+        };
     }
 
     let encodedLists = storage.cln || null;
@@ -36,8 +51,10 @@ export function readBuilderPersistence({cookies = {}, storage = {}, characterNam
     return {
         encodedLists,
         selectedList: storage.scl || cookies.scl1 || null,
+        theme: typeof cookies.theme === "string" ? cookies.theme : null,
         itemsPerPage: Number(cookies.ipp || "20"),
-        columns: (characterName && cookies[`sc-${characterName}`]) || cookies.sc2 || null
+        itemColumns: typeof cookies.sc2 === "string" ? cookies.sc2 : null,
+        builderColumns: readBuilderColumnCookies(cookies)
     };
 }
 

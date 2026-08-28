@@ -198,7 +198,8 @@ export function createInitialBuilderState() {
             preferencesChoice: "account",
             request: null,
             result: null,
-            error: ""
+            error: "",
+            acknowledgementWarning: false
         },
         exceptionEncountered: false,
         clientSideDataSize: 0
@@ -243,7 +244,8 @@ export function builderReducer(state, action) {
                     preferencesChoice: action.preferencesChoice,
                     request: null,
                     result: null,
-                    error: ""
+                    error: "",
+                    acknowledgementWarning: false
                 }
             };
         case "migration/opened":
@@ -257,7 +259,8 @@ export function builderReducer(state, action) {
                     preferencesChoice: action.value,
                     request: null,
                     result: null,
-                    error: ""
+                    error: "",
+                    acknowledgementWarning: false
                 }
             };
         case "migration/requested":
@@ -268,7 +271,8 @@ export function builderReducer(state, action) {
                     status: "pending",
                     open: true,
                     request: action.request || state.migration.request,
-                    error: ""
+                    error: "",
+                    acknowledgementWarning: false
                 }
             };
         case "migration/succeeded":
@@ -280,7 +284,8 @@ export function builderReducer(state, action) {
                     open: true,
                     request: null,
                     result: action.result,
-                    error: ""
+                    error: "",
+                    acknowledgementWarning: Boolean(action.acknowledgementWarning)
                 }
             };
         case "migration/failed":
