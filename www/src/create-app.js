@@ -22,6 +22,23 @@ const createChangelogRouter = require("./routes/changelog");
 const notificationsRouter = require("./routes/notifications");
 const accountRouter = require("./routes/account");
 
+function accessLogPath(req) {
+    const originalUrl = typeof req.originalUrl === "string" ? req.originalUrl : "/";
+    const queryIndex = originalUrl.indexOf("?");
+    return (queryIndex < 0 ? originalUrl : originalUrl.slice(0, queryIndex)) || "/";
+}
+
+function accessLogFormat(tokens, req, res) {
+    return [
+        tokens.method(req, res),
+        accessLogPath(req),
+        tokens.status(req, res),
+        `${tokens["response-time"](req, res)} ms`,
+        "-",
+        tokens.res(req, res, "content-length") || "-"
+    ].join(" ");
+}
+
 module.exports = function createApp(options = {}) {
     const app = express();
     const environment = options.environment || process.env.NODE_ENV;
@@ -55,14 +72,18 @@ module.exports = function createApp(options = {}) {
         strictTransportSecurity: environment === "production"
     }));
     app.use(compression());
-    if (options.logging !== false)
-        app.use(logger("dev", {
+    if (options.logging !== false) {
+        const loggerOptions = {
             skip: function(req) {
                 const requestPath = req.path.replace(/\/+$/, "").toLowerCase();
                 return requestPath === "/verify-email.html" ||
                     requestPath === "/reset-password.html";
             }
-        }));
+        };
+        if (options.accessLogStream)
+            loggerOptions.stream = options.accessLogStream;
+        app.use(logger(accessLogFormat, loggerOptions));
+    }
     app.use("/api", express.json({limit: "11mb"}), apiRouter);
     app.use(express.json());
     app.use(express.urlencoded({ extended: false }));

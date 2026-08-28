@@ -251,6 +251,135 @@ function createHarness(overrides = {}) {
     return {service, repository, state, events, trace, validateCalls};
 }
 
+function createSimultaneousImportHarness() {
+    const trace = [];
+    const profiles = [];
+    const receipts = new Map();
+    const preferences = {
+        documentVersion: 1,
+        payload: {
+            version: 1,
+            theme: "glass-blue",
+            itemsPerPage: 20,
+            itemColumns: [],
+            builderColumns: {},
+            selectedProfileId: null,
+            selectedVariant: null
+        },
+        revision: 1,
+        storageGeneration: 1,
+        updatedOn: NOW
+    };
+    let connectionId = 0;
+    let memberLockOwner = null;
+    const memberLockWaiters = [];
+
+    function releaseMemberLock(connection) {
+        if (memberLockOwner !== connection)
+            return;
+        connection.memberLocked = false;
+        const next = memberLockWaiters.shift();
+        if (next) {
+            memberLockOwner = next.connection;
+            next.connection.memberLocked = true;
+            next.resolve();
+        }
+        else {
+            memberLockOwner = null;
+        }
+    }
+
+    function acquireMemberLock(connection) {
+        if (!memberLockOwner) {
+            memberLockOwner = connection;
+            connection.memberLocked = true;
+            return Promise.resolve();
+        }
+        return new Promise(resolve => {
+            memberLockWaiters.push({connection, resolve});
+        });
+    }
+
+    const pool = {
+        getConnection(callback) {
+            const connection = {
+                id: ++connectionId,
+                memberLocked: false,
+                beginTransaction(done) {
+                    trace.push([this.id, "begin"]);
+                    done(null);
+                },
+                commit(done) {
+                    trace.push([this.id, "commit"]);
+                    releaseMemberLock(this);
+                    done(null);
+                },
+                rollback(done) {
+                    trace.push([this.id, "rollback"]);
+                    releaseMemberLock(this);
+                    done(null);
+                },
+                release() {
+                    trace.push([this.id, "release"]);
+                }
+            };
+            callback(null, connection);
+        }
+    };
+    const repository = {
+        async readPreferencesForUpdate(_memberId, {executor}) {
+            trace.push([executor.id, "preferences"]);
+            await acquireMemberLock(executor);
+            return structuredClone(preferences);
+        },
+        async readImportReceipt(memberId, key, {executor}) {
+            trace.push([executor.id, "receipt", key]);
+            if (executor.id > 2 && !executor.memberLocked)
+                throw new Error("receipt gap lock preceded the member preference lock");
+            const result = receipts.get(`${memberId}:${key}`);
+            return result ? {result: structuredClone(result), createdOn: NOW} : null;
+        },
+        async list() {
+            return profiles.map(value => ({...value}));
+        },
+        async usedBytes() {
+            return profiles.reduce((total, value) => total + value.payloadBytes, 0);
+        },
+        async insert(value) {
+            profiles.push({...value});
+            return profiles.length;
+        },
+        async writeImportReceipt(memberId, key, result) {
+            receipts.set(`${memberId}:${key}`, structuredClone(result));
+            return receipts.size;
+        }
+    };
+    const bothValidationsEntered = deferred();
+    let validationCount = 0;
+    async function validateProfile(input) {
+        validationCount += 1;
+        if (validationCount === 2)
+            bothValidationsEntered.resolve();
+        await bothValidationsEntered.promise;
+        return {
+            name: input.name,
+            payload: `canonical-${input.payload}`,
+            payloadVersion: 6,
+            byteLength: 70,
+            decoded: {name: input.name}
+        };
+    }
+    let id = 0;
+    const service = createBuilderStorageService({
+        pool,
+        repository,
+        validateProfile,
+        clock: () => NOW,
+        randomUUID: () => `simultaneous-${++id}`
+    });
+    return {service, profiles, receipts, trace};
+}
+
 // Catches any storage method querying by profile before enforcing verified
 // account access, or accepting a caller-supplied member identity.
 test("unverified member cannot read or mutate account storage", async function() {
@@ -737,7 +866,7 @@ test("batch import validates independently then classifies and commits one resul
         "begin"
     ]);
     assert.deepEqual(state.calls.slice(0, 4).map(call => call[0]), [
-        "readImportReceipt", "readImportReceipt", "preferences", "list"
+        "readImportReceipt", "preferences", "readImportReceipt", "list"
     ]);
     const firstInsert = state.calls.findIndex(call => call[0] === "insert");
     assert.ok(state.calls.findIndex(call => call[0] === "usedBytes") < firstInsert);
@@ -863,6 +992,50 @@ test("import releases receipt preflight before validation and replays a concurre
     assert.equal(state.insertCount, 1);
     assert.equal(state.profiles[0].name, "Winner");
     assert.equal(state.calls.filter(call => call[0] === "readImportReceipt").length, 4);
+});
+
+// Catches simultaneous receipt misses taking an InnoDB gap lock before the
+// one per-member row. The deterministic lock model turns that inversion into
+// a failure while preserving identical-key replay and distinct-key commits.
+test("simultaneous import misses lock member state before receipt recheck", async function(t) {
+    for (const sameKey of [true, false]) {
+        await t.test(sameKey ? "identical keys" : "distinct keys", async function() {
+            const {service, profiles, receipts, trace} = createSimultaneousImportHarness();
+            const keys = sameKey ? ["same-key", "same-key"] : ["first-key", "second-key"];
+            const settled = await Promise.allSettled([
+                service.importProfiles(auth, {
+                    idempotencyKey: keys[0],
+                    storageGeneration: 1,
+                    replacePreferences: false,
+                    profiles: [{name: "First", payload: "first"}]
+                }),
+                service.importProfiles(auth, {
+                    idempotencyKey: keys[1],
+                    storageGeneration: 1,
+                    replacePreferences: false,
+                    profiles: [{name: "Second", payload: "second"}]
+                })
+            ]);
+
+            assert.deepEqual(settled.map(result => result.status), ["fulfilled", "fulfilled"]);
+            const results = settled.map(result => result.value);
+            assert.equal(profiles.length, sameKey ? 1 : 2);
+            assert.equal(receipts.size, sameKey ? 1 : 2);
+            if (sameKey)
+                assert.deepEqual(results[1], results[0]);
+            else
+                assert.deepEqual(results.map(result => result.copied).sort(), [["First"], ["Second"]]);
+
+            const writeConnections = [...new Set(trace.filter(([, operation]) =>
+                operation === "preferences").map(([idValue]) => idValue))];
+            assert.equal(writeConnections.length, 2);
+            for (const idValue of writeConnections) {
+                assert.deepEqual(trace.filter(([traceId, operation]) =>
+                    traceId === idValue && ["preferences", "receipt"].includes(operation))
+                    .map(([, operation]) => operation), ["preferences", "receipt"]);
+            }
+        });
+    }
 });
 
 // Catches a canonical duplicate of an earlier local row losing its source-ID
@@ -1033,7 +1206,7 @@ test("batch import rolls back rows and preferences when receipt storage fails", 
 
 // Catches generation verification happening before the write-time receipt
 // recheck, after writes, or before every profile has independently validated.
-test("batch import locks receipt then generation and rejects stale state before writes", async function() {
+test("batch import locks member state then receipt and rejects stale generation before writes", async function() {
     const {service, state, trace} = createHarness({preferences: {storageGeneration: 2}});
 
     await assert.rejects(service.importProfiles(auth, {
@@ -1048,7 +1221,7 @@ test("batch import locks receipt then generation and rejects stale state before 
 
     assert.deepEqual(trace, ["begin", "validate:One", "validate:Two", "begin"]);
     assert.deepEqual(state.calls.map(call => call[0]), [
-        "readImportReceipt", "readImportReceipt", "preferences"
+        "readImportReceipt", "preferences", "readImportReceipt"
     ]);
     assert.equal(state.insertAttempts, 0);
 });

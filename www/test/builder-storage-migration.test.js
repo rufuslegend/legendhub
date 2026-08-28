@@ -34,7 +34,7 @@ const EXPECTED_TABLES = {
     BuilderImportReceipts: {
         columns: [
             ["Id", "bigint", "NO", null], ["MemberId", "int", "NO", null],
-            ["IdempotencyKey", "char(64)", "NO", "ascii"],
+            ["IdempotencyKey", "char(64)", "NO", "ascii", "ascii_bin"],
             ["ResultPayload", "json", "NO", "utf8mb4"], ["CreatedOn", "datetime", "NO", null]
         ],
         indexes: [
@@ -96,9 +96,11 @@ function schemaFromExpectation(tableName) {
     };
 }
 
-function expectedColumnMetadata(tableName, [COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, CHARACTER_SET_NAME]) {
+function expectedColumnMetadata(tableName, [
+    COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, CHARACTER_SET_NAME, COLLATION_NAME
+]) {
     const key = `${tableName}.${COLUMN_NAME}`;
-    return {
+    const metadata = {
         COLUMN_NAME,
         COLUMN_TYPE: mysql57ColumnType(COLUMN_TYPE),
         IS_NULLABLE,
@@ -106,6 +108,9 @@ function expectedColumnMetadata(tableName, [COLUMN_NAME, COLUMN_TYPE, IS_NULLABL
         COLUMN_DEFAULT: COLUMN_DEFAULTS[key] || null,
         EXTRA: AUTO_INCREMENT_COLUMNS.has(key) ? "auto_increment" : ""
     };
+    if (COLLATION_NAME !== undefined)
+        metadata.COLLATION_NAME = COLLATION_NAME;
+    return metadata;
 }
 
 function mysql57ColumnType(type) {
@@ -150,6 +155,9 @@ function parseTableDefinition(sql) {
                 COLUMN_DEFAULT: /DEFAULT (\S+)/.exec(rest)?.[1] || null,
                 EXTRA: rest.includes("AUTO_INCREMENT") ? "auto_increment" : ""
             });
+            const collation = /COLLATE (\w+)/.exec(rest)?.[1];
+            if (collation)
+                columns.at(-1).COLLATION_NAME = collation;
         }
     }
     return {columns, indexes, foreignKeys};
@@ -248,6 +256,19 @@ test("storage migration verification rejects a missing auto-increment column pro
             schemas.get("BuilderProfiles").columns.find(
                 (column) => column.COLUMN_NAME === "Id"
             ).EXTRA = "";
+        }
+    });
+
+    assert.equal(await migration.verify(context), false);
+});
+
+test("storage migration verification rejects a case-insensitive import key collation", async function() {
+    const context = createSchemaContext({
+        tables: Object.keys(EXPECTED_TABLES),
+        mutateSchema: function(schemas) {
+            schemas.get("BuilderImportReceipts").columns.find(
+                column => column.COLUMN_NAME === "IdempotencyKey"
+            ).COLLATION_NAME = "ascii_general_ci";
         }
     });
 

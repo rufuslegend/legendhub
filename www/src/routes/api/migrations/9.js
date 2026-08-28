@@ -72,7 +72,7 @@ const TABLES = {
             CREATE TABLE BuilderImportReceipts (
                 Id BIGINT NOT NULL AUTO_INCREMENT,
                 MemberId INT NOT NULL,
-                IdempotencyKey CHAR(64) CHARACTER SET ascii NOT NULL,
+                IdempotencyKey CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
                 ResultPayload JSON NOT NULL,
                 CreatedOn DATETIME NOT NULL,
                 PRIMARY KEY (Id),
@@ -84,7 +84,10 @@ const TABLES = {
         columns: [
             {name: "Id", type: "bigint", nullable: "NO", autoIncrement: true},
             {name: "MemberId", type: "int", nullable: "NO"},
-            {name: "IdempotencyKey", type: "char(64)", nullable: "NO", characterSet: "ascii"},
+            {
+                name: "IdempotencyKey", type: "char(64)", nullable: "NO",
+                characterSet: "ascii", collation: "ascii_bin"
+            },
             {name: "ResultPayload", type: "json", nullable: "NO", characterSet: "utf8mb4"},
             {name: "CreatedOn", type: "datetime", nullable: "NO"}
         ],
@@ -137,7 +140,8 @@ async function tableColumnsMatch(query, tableName, expectedColumns) {
     const columns = await query(
         `inspect ${tableName} columns`,
         `
-            SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, CHARACTER_SET_NAME, COLUMN_DEFAULT, EXTRA
+            SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, CHARACTER_SET_NAME,
+                COLLATION_NAME, COLUMN_DEFAULT, EXTRA
             FROM information_schema.columns
             WHERE TABLE_SCHEMA = DATABASE()
                 AND TABLE_NAME = '${tableName}'
@@ -145,8 +149,19 @@ async function tableColumnsMatch(query, tableName, expectedColumns) {
     );
     const expectedSignatures = expectedColumns.map(columnSignature).sort();
     const actualSignatures = columns.map(columnSignature).sort();
-    return actualSignatures.length === expectedSignatures.length &&
-        actualSignatures.every((signature, index) => signature === expectedSignatures[index]);
+    if (actualSignatures.length !== expectedSignatures.length ||
+        !actualSignatures.every((signature, index) => signature === expectedSignatures[index])) {
+        return false;
+    }
+    return expectedColumns.every(function(expected) {
+        if (!expected.collation)
+            return true;
+        const actual = columns.find(column =>
+            (column.COLUMN_NAME || column.name) === expected.name);
+        return actual &&
+            (actual.COLLATION_NAME === undefined ? actual.collation : actual.COLLATION_NAME) ===
+                expected.collation;
+    });
 }
 
 async function tableIndexesMatch(query, tableName, expectedIndexes) {

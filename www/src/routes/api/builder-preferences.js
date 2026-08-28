@@ -16,16 +16,31 @@ const THEMES = new Set([
 const ITEMS_PER_PAGE = new Set([20, 50, 100, 200, 500, 1000]);
 const ITEM_COLUMNS = new Set([
     "Slot", "Name", "Light", "Heroic", "Str", "Min", "Dex", "Con",
-    "Per", "Spi", "Ac", "AC", "Align", "Hp", "HP", "Ma", "Mv",
+    "Per", "Spi", "Ac", "Align", "Hp", "Ma", "Mv",
     "Hpr", "Mar", "Mvr", "Hit", "Dam", "SpDam", "SpCrit", "Ma Redux",
-    "Concen", "Mit", "Parry", "Accu", "Ammo", "AccuBonus", "2H",
+    "Concen", "Mit", "Parry", "Shot Acc", "Ammo", "Bonus Acc", "2H",
     "Quality", "Speed", "MaxDam", "AvgDam", "MinDam", "Holdable",
     "Weap Type", "Weap Stat", "Weight", "Unique", "Bonded", "Casts",
     "Level", "Net Stat", "Sell", "Rent", "Str Cap", "Min Cap", "Dex Cap",
     "Con Cap", "Per Cap", "Spi Cap", "Soulbound", "Limited", "MeCritPerc",
     "MeCrit", "MeDamCap", "DmgShield"
 ]);
+const LEGACY_ITEM_COLUMN_ALIASES = new Map([
+    ["Accu", "Shot Acc"],
+    ["AccuBonus", "Bonus Acc"],
+    ["AC", "Ac"],
+    ["HP", "Hp"]
+]);
 const PROFILE_ID = /^[A-Za-z0-9-]{1,64}$/;
+const DEFAULT_PREFERENCES = Object.freeze({
+    version: 1,
+    theme: "glass-blue",
+    itemsPerPage: 20,
+    itemColumns: Object.freeze([]),
+    builderColumns: Object.freeze({}),
+    selectedProfileId: null,
+    selectedVariant: null
+});
 
 function invalidPreferences() {
     return new BadRequestError("The preference payload is invalid.");
@@ -52,11 +67,12 @@ function knownColumns(value) {
     const result = [];
     const seen = new Set();
     for (const column of value) {
-        if (typeof column !== "string" || !column || !ITEM_COLUMNS.has(column))
+        const canonical = LEGACY_ITEM_COLUMN_ALIASES.get(column) || column;
+        if (typeof column !== "string" || !column || !ITEM_COLUMNS.has(canonical))
             throw invalidPreferences();
-        if (!seen.has(column)) {
-            result.push(column);
-            seen.add(column);
+        if (!seen.has(canonical)) {
+            result.push(canonical);
+            seen.add(canonical);
         }
     }
     return result;
@@ -125,8 +141,8 @@ function validatePreferences(payload, options = {}) {
 
     return {
         version: 1,
-        theme: input.theme || "glass-blue",
-        itemsPerPage: input.itemsPerPage || 20,
+        theme: input.theme || DEFAULT_PREFERENCES.theme,
+        itemsPerPage: input.itemsPerPage || DEFAULT_PREFERENCES.itemsPerPage,
         itemColumns,
         builderColumns,
         selectedProfileId,
@@ -134,4 +150,4 @@ function validatePreferences(payload, options = {}) {
     };
 }
 
-module.exports = {validatePreferences};
+module.exports = {DEFAULT_PREFERENCES, validatePreferences};

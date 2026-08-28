@@ -20,6 +20,12 @@ const {
     mutationFields,
     queryFields
 } = require("../src/routes/api/builder-storage");
+const {
+    createBuilderProfileRepository
+} = require("../src/routes/api/builder-profile-repository");
+const {
+    createBuilderStorageService
+} = require("../src/routes/api/builder-storage-service");
 
 const NOW = new Date("2026-08-27T12:00:00.000Z");
 const AUTH = {
@@ -32,6 +38,15 @@ const BLANK_ITEMS = "_".repeat(35);
 const HERO = `6*Hero~Tank~${BASE_STATS}000000___00000000000000000${BLANK_ITEMS}*` +
     `Hero~Caster~${BASE_STATS}000000___00000000000000000${BLANK_ITEMS}*`;
 const SCOUT = `6*Scout~Original~${BASE_STATS}000000___00000000000000000${BLANK_ITEMS}*`;
+const CANONICAL_DEFAULT_PREFERENCES = {
+    version: 1,
+    theme: "glass-blue",
+    itemsPerPage: 20,
+    itemColumns: [],
+    builderColumns: {},
+    selectedProfileId: null,
+    selectedVariant: null
+};
 
 function profile(overrides = {}) {
     return {
@@ -90,6 +105,63 @@ function loadApiRouter() {
     }
 }
 
+function createPreferenceStatePool(initial) {
+    const calls = [];
+    let row = initial ? {
+        DocumentVersion: initial.documentVersion,
+        Payload: initial.payload,
+        Revision: initial.revision,
+        StorageGeneration: initial.storageGeneration,
+        UpdatedOn: initial.updatedOn
+    } : null;
+    const connection = {
+        beginTransaction(callback) { callback(null); },
+        commit(callback) { callback(null); },
+        rollback(callback) { callback(null); },
+        release() {},
+        query(sql, values, callback) {
+            calls.push({sql, values});
+            if (sql.includes("INSERT IGNORE INTO AccountPreferences")) {
+                if (!row) {
+                    row = {
+                        DocumentVersion: 1,
+                        Payload: values[1],
+                        Revision: 1,
+                        StorageGeneration: 1,
+                        UpdatedOn: NOW
+                    };
+                }
+                callback(null, {affectedRows: 1});
+                return;
+            }
+            if (sql.includes("UPDATE AccountPreferences")) {
+                row.DocumentVersion = 1;
+                row.Payload = values[0];
+                callback(null, {affectedRows: 1});
+                return;
+            }
+            if (sql.includes("FROM AccountPreferences")) {
+                callback(null, row ? [{...row}] : []);
+                return;
+            }
+            if (sql.includes("SUM(PayloadBytes)")) {
+                callback(null, [{UsedBytes: 0}]);
+                return;
+            }
+            if (sql.includes("FROM BuilderProfiles")) {
+                callback(null, []);
+                return;
+            }
+            callback(new Error("Unexpected Builder storage SQL in fresh-state test."));
+        }
+    };
+    return {
+        calls,
+        getConnection(callback) { callback(null, connection); },
+        storedPayload() { return row?.Payload; }
+    };
+}
+
 // Catches any protected storage operation accepting a caller-owned account
 // identity or replacing explicit scalar/input fields with an unbounded JSON
 // scalar.
@@ -131,6 +203,103 @@ test("production schema exposes every Builder storage operation", function() {
     }
 });
 
+// Catches a reachable result/input field silently changing nullability or
+// widening to JSON/MemberId even when the eight top-level operation names remain.
+test("production storage schema keeps its exact recursive bounded contract", function() {
+    const schema = loadApiRouter().schema;
+    const operations = {
+        getBuilderAccountState: ["BuilderAccountState!", {authToken: "String!"}],
+        exportBuilderData: ["String!", {authToken: "String!"}],
+        createBuilderProfile: ["BuilderProfileResult!", {
+            authToken: "String!", name: "String!", payload: "String!", storageGeneration: "Int!"
+        }],
+        updateBuilderProfile: ["BuilderProfileResult!", {
+            authToken: "String!", id: "String!", name: "String!", payload: "String!",
+            revision: "Int!", storageGeneration: "Int!"
+        }],
+        deleteBuilderProfile: ["BuilderProfileResult!", {
+            authToken: "String!", id: "String!", revision: "Int!", storageGeneration: "Int!"
+        }],
+        updateBuilderPreferences: ["BuilderPreferencesResult!", {
+            authToken: "String!", preferences: "String!", storageGeneration: "Int!"
+        }],
+        importBuilderProfiles: ["BuilderImportResult!", {
+            authToken: "String!", profiles: "[BuilderImportProfileInput!]!",
+            preferences: "String", replacePreferences: "Boolean!",
+            idempotencyKey: "String!", storageGeneration: "Int!"
+        }],
+        deleteAllBuilderData: ["BuilderDeleteAllResult!", {
+            authToken: "String!", storageGeneration: "Int!"
+        }]
+    };
+    const expectedTypes = {
+        BuilderProfile: {
+            id: "String!", name: "String!", payload: "String", payloadVersion: "Int",
+            payloadBytes: "Int!", revision: "Int!", createdOn: "DateTime!",
+            updatedOn: "DateTime!", deletedOn: "DateTime"
+        },
+        BuilderAccountState: {
+            profiles: "[BuilderProfile!]!", preferences: "String!",
+            preferenceRevision: "Int!", preferencesUpdatedOn: "DateTime!",
+            storageGeneration: "Int!", usedBytes: "Int!", quotaBytes: "Int!"
+        },
+        BuilderProfileResult: {
+            status: "String!", profile: "BuilderProfile", conflictProfile: "BuilderProfile",
+            storageGeneration: "Int!", usedBytes: "Int!", quotaBytes: "Int!"
+        },
+        BuilderPreferencesResult: {
+            status: "String!", preferences: "String!", preferenceRevision: "Int!",
+            preferencesUpdatedOn: "DateTime!", storageGeneration: "Int!",
+            usedBytes: "Int!", quotaBytes: "Int!"
+        },
+        BuilderImportProfileInput: {id: "String", name: "String!", payload: "String!"},
+        BuilderImportResult: {result: "String!", state: "BuilderAccountState!"},
+        BuilderDeleteAllResult: {
+            status: "String!", storageGeneration: "Int!", usedBytes: "Int!", quotaBytes: "Int!"
+        }
+    };
+    const query = schema.getQueryType().getFields();
+    const mutation = schema.getMutationType().getFields();
+    const roots = {...query, ...mutation};
+
+    for (const [name, [type, args]] of Object.entries(operations)) {
+        assert.equal(String(roots[name].type), type, name);
+        assert.deepEqual(Object.fromEntries(roots[name].args.map(argument => [
+            argument.name, String(argument.type)
+        ])), args, name);
+    }
+    for (const [name, expectedFields] of Object.entries(expectedTypes)) {
+        const fields = schema.getType(name).getFields();
+        assert.deepEqual(Object.fromEntries(Object.entries(fields).map(([fieldName, field]) => [
+            fieldName, String(field.type)
+        ])), expectedFields, name);
+    }
+
+    const visited = new Set();
+    function assertBounded(type) {
+        const named = gql.getNamedType(type);
+        assert.notEqual(named.name, "JSON");
+        if (visited.has(named.name))
+            return;
+        visited.add(named.name);
+        if (!gql.isObjectType(named) && !gql.isInputObjectType(named))
+            return;
+        for (const [name, field] of Object.entries(named.getFields())) {
+            assert.notEqual(name.toLowerCase(), "memberid");
+            for (const argument of field.args || []) {
+                assert.notEqual(argument.name.toLowerCase(), "memberid");
+                assertBounded(argument.type);
+            }
+            assertBounded(field.type);
+        }
+    }
+    for (const name of Object.keys(operations)) {
+        assertBounded(roots[name].type);
+        for (const argument of roots[name].args)
+            assertBounded(argument.type);
+    }
+});
+
 // Catches preference documents being exposed as mutable server objects or
 // losing their independently versioned account metadata.
 test("account state returns a canonical preference string and typed quota metadata", async function() {
@@ -158,6 +327,49 @@ test("account state returns a canonical preference string and typed quota metada
     assert.equal(result.usedBytes, 417);
     assert.equal(result.quotaBytes, 10_485_760);
     assert.equal(Object.hasOwn(result.profiles[0], "memberId"), false);
+});
+
+// Catches a fresh seed or an older empty preference row exposing `{}` at any
+// point from SQL persistence through the authenticated GraphQL response.
+test("fresh and migrated-empty accounts expose the complete canonical preference document", async function(t) {
+    const cases = [
+        ["fresh account", null, {revision: 1, storageGeneration: 1, updatedOn: NOW}],
+        ["migrated empty row", {
+            documentVersion: 1,
+            payload: "{}",
+            revision: 7,
+            storageGeneration: 3,
+            updatedOn: new Date("2026-08-20T12:00:00.000Z")
+        }, {
+            revision: 7,
+            storageGeneration: 3,
+            updatedOn: new Date("2026-08-20T12:00:00.000Z")
+        }]
+    ];
+
+    for (const [label, initial, expectedMetadata] of cases) {
+        await t.test(label, async function() {
+            const pool = createPreferenceStatePool(initial);
+            const repository = createBuilderProfileRepository({pool});
+            const service = createBuilderStorageService({pool, repository});
+            const fields = createBuilderStorageFields({
+                authenticate: async () => AUTH,
+                storageService: service
+            });
+
+            const result = await fields.queryFields.getBuilderAccountState.resolve(
+                null, {authToken: "selector-validator"}, {ip: "request"}
+            );
+
+            assert.equal(result.preferences, JSON.stringify(CANONICAL_DEFAULT_PREFERENCES));
+            assert.equal(pool.storedPayload(), JSON.stringify(CANONICAL_DEFAULT_PREFERENCES));
+            assert.equal(result.preferenceRevision, expectedMetadata.revision);
+            assert.equal(result.storageGeneration, expectedMetadata.storageGeneration);
+            assert.equal(result.preferencesUpdatedOn.getTime(), expectedMetadata.updatedOn.getTime());
+            assert.deepEqual(result.profiles, []);
+            assert.equal(result.usedBytes, 0);
+        });
+    }
 });
 
 // Catches stale edits dropping either copy or a resolver translating a safe

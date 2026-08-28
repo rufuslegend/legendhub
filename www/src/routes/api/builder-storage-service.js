@@ -464,15 +464,15 @@ function createBuilderStorageService({
 
         return runStorageTransaction(pool, async function(connection) {
             const options = {executor: connection};
+            const currentPreferences = await repository.readPreferencesForUpdate(
+                memberId, options
+            );
             const receipt = await repository.readImportReceipt(
                 memberId, idempotencyKey, options
             );
             if (receipt)
                 return receipt.result;
 
-            const currentPreferences = await repository.readPreferencesForUpdate(
-                memberId, options
-            );
             assertGeneration(currentPreferences, expectedGeneration);
             const accountProfiles = await repository.list(memberId, options);
             const actions = classifyImport({

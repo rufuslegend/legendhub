@@ -2,10 +2,12 @@
 
 const crypto = require("node:crypto");
 const {query} = require("./database");
+const {DEFAULT_PREFERENCES} = require("./builder-preferences");
 
 const PROFILE_COLUMNS = `
     PublicId, Name, Payload, PayloadVersion, PayloadBytes, Revision,
     CreatedOn, UpdatedOn, DeletedOn`;
+const DEFAULT_PREFERENCES_JSON = JSON.stringify(DEFAULT_PREFERENCES);
 
 function nameHash(name) {
     return crypto.createHash("sha256").update(name, "utf8").digest();
@@ -24,6 +26,11 @@ function parseStoredJson(value, kind) {
     catch {
         throw new Error(`Stored ${kind} data is invalid.`);
     }
+}
+
+function emptyDocument(value) {
+    return value && typeof value === "object" && !Array.isArray(value) &&
+        Object.keys(value).length === 0;
 }
 
 function profileFromRow(row) {
@@ -141,7 +148,7 @@ function createBuilderProfileRepository({pool}) {
             await query(executor, `
                 INSERT IGNORE INTO AccountPreferences
                     (MemberId, DocumentVersion, Payload, Revision, StorageGeneration, UpdatedOn)
-                VALUES (?, 1, ?, 1, 1, NOW())`, [memberId, "{}"]);
+                VALUES (?, 1, ?, 1, 1, NOW())`, [memberId, DEFAULT_PREFERENCES_JSON]);
             const rows = await query(executor, `
                 SELECT DocumentVersion, Payload, Revision, StorageGeneration, UpdatedOn
                 FROM AccountPreferences
@@ -149,9 +156,19 @@ function createBuilderProfileRepository({pool}) {
                 FOR UPDATE`, [memberId]);
             if (!rows[0])
                 return null;
+            let documentVersion = numberValue(rows[0].DocumentVersion);
+            let payload = parseStoredJson(rows[0].Payload, "preference");
+            if (emptyDocument(payload)) {
+                await query(executor, `
+                    UPDATE AccountPreferences
+                    SET DocumentVersion = 1, Payload = ?
+                    WHERE MemberId = ?`, [DEFAULT_PREFERENCES_JSON, memberId]);
+                documentVersion = 1;
+                payload = JSON.parse(DEFAULT_PREFERENCES_JSON);
+            }
             return {
-                documentVersion: numberValue(rows[0].DocumentVersion),
-                payload: parseStoredJson(rows[0].Payload, "preference"),
+                documentVersion,
+                payload,
                 revision: numberValue(rows[0].Revision),
                 storageGeneration: numberValue(rows[0].StorageGeneration),
                 updatedOn: rows[0].UpdatedOn

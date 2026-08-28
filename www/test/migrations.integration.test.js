@@ -377,6 +377,19 @@ test("Builder storage migration verifies its additive schema and is retry-safe",
             await query(
                 pool,
                 `
+                    SELECT COLLATION_NAME
+                    FROM information_schema.columns
+                    WHERE TABLE_SCHEMA = DATABASE()
+                        AND TABLE_NAME = 'BuilderImportReceipts'
+                        AND COLUMN_NAME = 'IdempotencyKey'
+                `
+            ),
+            [{COLLATION_NAME: "ascii_bin"}]
+        );
+        assert.deepEqual(
+            await query(
+                pool,
+                `
                     SELECT
                         TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, CHARACTER_SET_NAME,
                         COLUMN_DEFAULT, EXTRA

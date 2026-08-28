@@ -196,3 +196,32 @@ test("preferences and import receipts are locked and scoped to their member", as
     assert.equal(executor.calls.every(({sql}) =>
         !sql.includes("idem-key") && !sql.includes("theme\":\"light")), true);
 });
+
+// Catches repository-side normalization or case folding defeating the binary
+// SQL collation and making two opaque idempotency keys share one receipt.
+test("import receipt keys preserve exact ASCII case at the repository boundary", async function() {
+    const stored = new Map();
+    const executor = createExecutor(function(sql, values) {
+        if (sql.includes("INSERT INTO BuilderImportReceipts")) {
+            stored.set(values[1], values[2]);
+            return {insertId: stored.size};
+        }
+        if (sql.includes("FROM BuilderImportReceipts")) {
+            const payload = stored.get(values[1]);
+            return payload === undefined ? [] : [{ResultPayload: payload, CreatedOn: NOW}];
+        }
+        throw new Error("Unexpected receipt SQL.");
+    });
+    const repository = createBuilderProfileRepository({pool: executor});
+
+    await repository.writeImportReceipt(73, "ImportKey", {copied: ["Upper"]}, NOW, {executor});
+    await repository.writeImportReceipt(73, "importkey", {copied: ["Lower"]}, NOW, {executor});
+    const upper = await repository.readImportReceipt(73, "ImportKey", {executor});
+    const lower = await repository.readImportReceipt(73, "importkey", {executor});
+
+    assert.deepEqual(upper.result, {copied: ["Upper"]});
+    assert.deepEqual(lower.result, {copied: ["Lower"]});
+    assert.deepEqual(executor.calls.map(call => call.values[1]), [
+        "ImportKey", "importkey", "ImportKey", "importkey"
+    ]);
+});

@@ -31,6 +31,35 @@ function loadRecoveryService(dependencies) {
     return require(recoveryPath).createPasswordRecoveryService(dependencies);
 }
 
+function loadAppForLoggingTest(options) {
+    const originalLoad = Module._load;
+    Module._load = function(request, parent, isMain) {
+        if (request === "sync-rpc")
+            return () => () => [];
+        return originalLoad.call(this, request, parent, isMain);
+    };
+    try {
+        return require("../src/create-app")(options);
+    }
+    finally {
+        Module._load = originalLoad;
+    }
+}
+
+async function listenForLoggingTest(t, app) {
+    const server = await new Promise(function(resolve) {
+        const listening = app.listen(0, "127.0.0.1", function() {
+            resolve(listening);
+        });
+    });
+    t.after(function() {
+        return new Promise(function(resolve, reject) {
+            server.close(error => error ? reject(error) : resolve());
+        });
+    });
+    return `http://127.0.0.1:${server.address().port}`;
+}
+
 // Catches renewed session credentials being written to process diagnostics.
 test("renewing an auth token does not write credentials to the console", async function(t) {
     const validator = "testvalidator";
@@ -229,4 +258,41 @@ test("Builder storage resolver failures expose and log no account secrets", asyn
         error.message === "The request could not be completed." &&
         privateValues.every(value => !error.message.includes(value)));
     assert.equal(writes.length, 0);
+});
+
+// Catches Morgan's default :url token writing a GraphQL GET query, variables,
+// auth token, or referrer while preserving useful API path/status/timing data
+// and the existing same-origin referrer policy.
+test("API access logs are path-only and omit query referrer and token markers", async function(t) {
+    const queryToken = "PrivateGraphqlGetAuthToken";
+    const referrerToken = "PrivateApiReferrerToken";
+    const logLines = [];
+    const app = loadAppForLoggingTest({
+        environment: "development",
+        accessLogStream: {write(line) { logLines.push(line); }}
+    });
+    const baseUrl = await listenForLoggingTest(t, app);
+    const parameters = new URLSearchParams({
+        query: "query { __typename }",
+        variables: JSON.stringify({authToken: queryToken})
+    });
+
+    const response = await fetch(`${baseUrl}/api?${parameters}`, {
+        headers: {
+            Accept: "application/json",
+            Origin: baseUrl,
+            Referer: `${baseUrl}/builder/?marker=${referrerToken}`
+        }
+    });
+    await response.text();
+    await new Promise(resolve => setImmediate(resolve));
+
+    const output = logLines.join("");
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("referrer-policy"), "same-origin");
+    assert.match(output, /GET \/api 200 [0-9.]+ ms/);
+    assert.equal(output.includes("?"), false);
+    assert.equal(output.includes(queryToken), false);
+    assert.equal(output.includes(referrerToken), false);
+    assert.equal(output.includes("__typename"), false);
 });

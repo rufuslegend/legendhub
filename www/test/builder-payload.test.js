@@ -16,6 +16,16 @@ const twoCharacters = `${legacyHero}*${legacyHero.replace("Hero", "Other")}`;
 const multiVariantHero = `6*Hero~Tank~${baseStats}000000___00000000000000000${blanks35}*` +
     `Hero~Caster~${baseStats}000000___00000000000000000${blanks35}*`;
 
+const supportedProfiles = [
+    ["unversioned", legacyHero],
+    ["format 1", `1*${legacyHero}`],
+    ["format 2", `2*Hero~Original~${baseStats}000000__${"_".repeat(29)}`],
+    ["format 3", `3*Hero~Original~${baseStats}000000___${blanks35}`],
+    ["format 4", `4*Hero~Original~${baseStats}000000___${blanks35}`],
+    ["format 5", `5*Hero~Original~${baseStats}000000___000000000${blanks35}`],
+    ["format 6", encodedHero]
+];
+
 // Catches the server retaining a legacy payload instead of storing current canonical text.
 test("server validator canonicalizes one legacy character", async function() {
     const result = await validateBuilderProfile({name: "Hero", payload: legacyHero});
@@ -120,4 +130,67 @@ test("server validator applies the literal-space name rule to every variant", as
             /variant name/
         );
     }
+});
+
+// Catches hardening the current persistence boundary by dropping a deployed
+// import format, or returning canonical text that changes on its own next
+// decode/encode cycle.
+test("server validator preserves every supported format through a stable canonical round trip", async function() {
+    const codec = await import("../shared/builder-codec.mjs");
+
+    for (const [label, payload] of supportedProfiles) {
+        const result = await validateBuilderProfile({name: "Hero", payload});
+        const decoded = codec.decodeBuilderLists(result.payload);
+
+        assert.equal(result.payloadVersion, 6, label);
+        assert.equal(codec.encodeBuilderLists(decoded), result.payload, label);
+        assert.deepEqual(
+            codec.decodeBuilderLists(codec.encodeBuilderLists(decoded)),
+            decoded,
+            label
+        );
+    }
+});
+
+// Catches legacy/current values that the preview decoder can read but the v6
+// encoder cannot preserve as the same stat, item, or rune-charm state.
+test("server validator rejects semantically unrepresentable data in every supported format", async function(t) {
+    const v5Items = `${"_".repeat(3)}-AAAAA${"_".repeat(31)}`;
+    const cases = [
+        ["unversioned fractional stat", legacyHero.replace("_30_", "_30.5_")],
+        ["format 1 oversized item ID", `1*${legacyHero.replace("_101_", "_238328_")}`],
+        ["format 2 invalid rune charm", `2*Hero~Original~${baseStats}000000_____-ZZZZZ`],
+        ["format 3 rune charm in a non-charm slot", `3*Hero~Original~${baseStats}000000___-BCDEF`],
+        ["format 4 untrimmed variant", `4*Hero~Original ~${baseStats}000000___${blanks35}`],
+        ["format 5 empty rune charm item", `5*Hero~Original~${baseStats}000000___000000000${v5Items}`],
+        ["format 6 duplicate variant", multiVariantHero.replace("Caster", "Tank")]
+    ];
+
+    for (const [label, payload] of cases) {
+        await t.test(label, async function() {
+            await assert.rejects(
+                validateBuilderProfile({name: "Hero", payload}),
+                error => error.extensions?.code === 400
+            );
+        });
+    }
+});
+
+// Catches leading/trailing character whitespace or duplicate current variant
+// labels diverging from the Builder dialog's trimmed, exact-name uniqueness rules.
+test("server validator requires trimmed character and unique variant names", async function() {
+    await assert.rejects(
+        validateBuilderProfile({
+            name: " Hero",
+            payload: encodedHero.replaceAll("Hero", " Hero")
+        }),
+        error => error.extensions?.code === 400
+    );
+    await assert.rejects(
+        validateBuilderProfile({
+            name: "Hero",
+            payload: multiVariantHero.replace("Caster", "Tank")
+        }),
+        error => error.extensions?.code === 400
+    );
 });
