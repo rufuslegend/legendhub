@@ -15,6 +15,14 @@ function persistTheme(document, theme, now) {
     document.cookie = formatCookie(THEME_COOKIE, theme, {expires});
 }
 
+function applyThemeStylesheet(themeLink, theme) {
+    const current = themeLink.getAttribute("href") || "";
+    const suffix = current.match(/[?#].*$/)?.[0] || "";
+    const next = `/css/bootstrap-${theme}.min.css${suffix}`;
+    if (current !== next)
+        themeLink.setAttribute("href", next);
+}
+
 function setGlassChoicesOpen({glassChoices, glassToggle, caret}, open) {
     glassToggle.setAttribute("aria-expanded", String(open));
     if (open)
@@ -39,8 +47,8 @@ export function initializeThemeMenu(document = globalThis.document, {
     const menu = {glassChoices, glassToggle, caret};
     setGlassChoicesOpen(menu, false);
     const accountPreferences = accountPreferencesStore?.get?.();
-    if (accountPreferences?.enabled && accountPreferences.document?.theme)
-        themeLink.setAttribute("href", `/css/bootstrap-${accountPreferences.document.theme}.min.css`);
+    if (accountPreferences?.account && accountPreferences.document?.theme)
+        applyThemeStylesheet(themeLink, accountPreferences.document.theme);
     document.cookie = formatCookie(
         TIMEZONE_COOKIE,
         String(now.getTimezoneOffset()),
@@ -57,16 +65,20 @@ export function initializeThemeMenu(document = globalThis.document, {
         choice.addEventListener("click", function(event) {
             event.preventDefault();
             const theme = choice.getAttribute("data-theme");
-            themeLink.setAttribute("href", `/css/bootstrap-${theme}.min.css`);
-            if (accountPreferencesStore?.get?.().enabled)
-                accountPreferencesStore.patch({theme});
-            else
+            applyThemeStylesheet(themeLink, theme);
+            const preferences = accountPreferencesStore?.get?.();
+            if (preferences?.account) {
+                if (preferences.enabled)
+                    accountPreferencesStore.patch({theme});
+            }
+            else {
                 persistTheme(document, theme, now);
+            }
         });
     }
 
     return accountPreferencesStore?.subscribe?.(function(value) {
-        if (value?.enabled && value.document?.theme)
-            themeLink.setAttribute("href", `/css/bootstrap-${value.document.theme}.min.css`);
+        if (value?.account && value.document?.theme)
+            applyThemeStylesheet(themeLink, value.document.theme);
     });
 }

@@ -130,3 +130,19 @@ test("account preference bootstrap whitelists only public preference state", asy
     ])
         assert.equal(html.includes(privateValue), false);
 });
+
+// Catches the shared shell omitting an independent accessible preference sync
+// status surface from theme, Items, and Builder pages.
+test("shared scripts include a preference-specific polite status region", async function() {
+    const html = await renderScripts({
+        enabled: false,
+        payload: null,
+        revision: 0,
+        storageGeneration: 0
+    });
+
+    assert.match(html, /data-account-preferences-status/);
+    assert.match(html, /role="status"/);
+    assert.match(html, /aria-live="polite"/);
+    assert.match(html, /hidden/);
+});

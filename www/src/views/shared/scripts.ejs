@@ -2,9 +2,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
 <%const rawAccountPreferences = locals.accountPreferenceContext || {};
-const rawPreferencePayload = rawAccountPreferences.payload || {};
-const accountPreferenceContext = rawAccountPreferences.enabled === true ? {
-    enabled: true,
+const rawPreferencePayload = rawAccountPreferences.payload;
+const hasAccountPreferencePayload = rawPreferencePayload &&
+    typeof rawPreferencePayload === "object" && !Array.isArray(rawPreferencePayload);
+const accountPreferenceContext = hasAccountPreferencePayload ? {
+    enabled: rawAccountPreferences.enabled === true,
     payload: {
         version: rawPreferencePayload.version,
         theme: rawPreferencePayload.theme,
@@ -14,11 +16,12 @@ const accountPreferenceContext = rawAccountPreferences.enabled === true ? {
         selectedProfileId: typeof rawPreferencePayload.selectedProfileId === "string" ? rawPreferencePayload.selectedProfileId : null,
         selectedVariant: typeof rawPreferencePayload.selectedVariant === "string" ? rawPreferencePayload.selectedVariant : null
     },
-    revision: rawAccountPreferences.revision,
-    storageGeneration: rawAccountPreferences.storageGeneration
+    revision: rawAccountPreferences.enabled === true ? rawAccountPreferences.revision : 0,
+    storageGeneration: rawAccountPreferences.enabled === true ? rawAccountPreferences.storageGeneration : 0
 } : {enabled: false, payload: null, revision: 0, storageGeneration: 0};
 const serializeAccountPreferences = typeof locals.serializeJsonForHtml === "function"
     ? locals.serializeJsonForHtml
     : JSON.stringify;%>
 <script type="application/json" data-account-preferences><%-serializeAccountPreferences(accountPreferenceContext)%></script>
+<p class="sr-only" role="status" aria-live="polite" data-account-preferences-status hidden></p>
 <script type="module" src="/build/shell.js?v=<%-locals.version%>"></script>

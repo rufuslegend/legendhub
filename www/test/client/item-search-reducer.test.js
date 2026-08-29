@@ -56,6 +56,7 @@ test("item search prefers enabled account columns without changing anonymous ini
     const account = createInitialItemSearchState(initial({
         selectedColumns: ["Name"],
         accountPreferences: {
+            account: true,
             enabled: true,
             document: {
                 version: 1,
@@ -70,11 +71,27 @@ test("item search prefers enabled account columns without changing anonymous ini
     }));
     const anonymous = createInitialItemSearchState(initial({
         selectedColumns: ["Name"],
-        accountPreferences: {enabled: false, document: null}
+        accountPreferences: {account: false, enabled: false, document: null}
     }));
 
     assert.deepEqual(account.selectedColumns, ["Slot"]);
     assert.deepEqual(anonymous.selectedColumns, ["Name"]);
+});
+
+// Catches a verified-but-unavailable preference bootstrap falling through to
+// the anonymous sc2-backed server props instead of safe account defaults.
+test("item search keeps unavailable verified accounts off anonymous columns", async function() {
+    const {createInitialItemSearchState} = await loadSearch();
+    const state = createInitialItemSearchState(initial({
+        selectedColumns: ["Name"],
+        accountPreferences: {
+            account: true,
+            enabled: false,
+            document: {itemColumns: []}
+        }
+    }));
+
+    assert.deepEqual(state.selectedColumns, []);
 });
 
 // Catches a filter toggle that mutates unrelated criteria or fails to mark unapplied filters.

@@ -1,6 +1,13 @@
 const SAVE_DELAY_MS = 750;
 const SAFE_SAVE_ERROR = "Account preferences could not be saved.";
+const RETRY_DELAYS_MS = [1000, 2000, 4000, 8000, 15000];
+const MAX_RETRY_WINDOW_MS = 30000;
 const PROFILE_ID = /^[A-Za-z0-9-]{1,64}$/;
+
+export const ACCOUNT_PREFERENCE_STATUS_MESSAGES = Object.freeze({
+    saving: "Saving account preferences…",
+    problem: "Account preference sync problem. Changes are still in this browser."
+});
 
 export const ACCOUNT_PREFERENCE_THEMES = new Set([
     "light",
@@ -176,10 +183,15 @@ function normalizeInitialState(initialState) {
     const context = plainObject(initialState) && Object.hasOwn(initialState, "enabled")
         ? initialState
         : {enabled: true, payload: initialState, revision: 1, storageGeneration: 1};
+    const account = context.enabled === true || plainObject(context.payload);
     if (context.enabled !== true) {
         return {
+            account,
             enabled: false,
-            document: canonicalizeAccountPreferences({}, {tolerant: true}),
+            document: canonicalizeAccountPreferences(
+                account ? context.payload : {},
+                {tolerant: true}
+            ),
             revision: 0,
             storageGeneration: 0
         };
@@ -189,6 +201,7 @@ function normalizeInitialState(initialState) {
             !Number.isSafeInteger(context.storageGeneration) || context.storageGeneration < 1)
             throw invalidPreferences();
         return {
+            account: true,
             enabled: true,
             document: canonicalizeAccountPreferences(context.payload),
             revision: context.revision,
@@ -197,6 +210,7 @@ function normalizeInitialState(initialState) {
     }
     catch {
         return {
+            account: true,
             enabled: false,
             document: canonicalizeAccountPreferences({}, {tolerant: true}),
             revision: 0,
@@ -244,6 +258,44 @@ function cancelTimer(timer) {
         globalThis.clearTimeout(timer);
 }
 
+function errorCode(error) {
+    const errors = Array.isArray(error?.errors) ? error.errors : [];
+    return errors[0]?.code ?? error?.code ?? error?.status;
+}
+
+function isRetryableNetworkFailure(error) {
+    if (error?.retryable === true)
+        return true;
+    if (error?.name === "AbortError")
+        return false;
+    if (error?.name === "TypeError" || error?.name === "NetworkError")
+        return true;
+    if (["NETWORK", "ECONNRESET", "ETIMEDOUT"].includes(errorCode(error)))
+        return true;
+    return false;
+}
+
+export function renderAccountPreferenceStatus(document, detail) {
+    const element = document?.querySelector?.("[data-account-preferences-status]");
+    if (!element)
+        return;
+    if (detail?.status === "saving") {
+        element.hidden = false;
+        element.className = "sr-only";
+        element.textContent = ACCOUNT_PREFERENCE_STATUS_MESSAGES.saving;
+        return;
+    }
+    if (detail?.status === "problem") {
+        element.hidden = false;
+        element.className = "container alert alert-warning mt-2";
+        element.textContent = ACCOUNT_PREFERENCE_STATUS_MESSAGES.problem;
+        return;
+    }
+    element.hidden = true;
+    element.className = "sr-only";
+    element.textContent = "";
+}
+
 export function createAccountPreferencesStore({
     initialState,
     save = async function() { throw new Error(SAFE_SAVE_ERROR); },
@@ -259,11 +311,14 @@ export function createAccountPreferencesStore({
     let timer = null;
     let ready = false;
     let activePromise = null;
+    let retryAttempt = 0;
+    let retryElapsed = 0;
     let disposed = false;
     const listeners = new Set();
 
     function snapshot() {
         return {
+            account: source.account,
             enabled: source.enabled,
             document: canonicalizeAccountPreferences(source.document),
             revision: source.revision,
@@ -295,14 +350,28 @@ export function createAccountPreferencesStore({
         timer = null;
     }
 
-    function scheduleSave() {
+    function schedulePerform(delay) {
         clearScheduled();
         ready = false;
         timer = schedule(function() {
             timer = null;
             ready = true;
             void perform();
-        }, SAVE_DELAY_MS);
+        }, delay);
+    }
+
+    function retryDelay() {
+        const proposed = RETRY_DELAYS_MS[retryAttempt];
+        if (proposed === undefined)
+            return null;
+        const remaining = MAX_RETRY_WINDOW_MS - retryElapsed;
+        if (remaining <= 0)
+            return null;
+        return Math.min(proposed, remaining);
+    }
+
+    function scheduleSave() {
+        schedulePerform(SAVE_DELAY_MS);
     }
 
     async function perform() {
@@ -329,7 +398,8 @@ export function createAccountPreferencesStore({
             if (disposed || requestEpoch !== epoch)
                 return;
             const accepted = resultState(result);
-            if (accepted.storageGeneration !== request.storageGeneration)
+            if (accepted.revision <= request.revision ||
+                accepted.storageGeneration !== request.storageGeneration)
                 throw new Error(SAFE_SAVE_ERROR);
             source = {
                 ...source,
@@ -337,14 +407,29 @@ export function createAccountPreferencesStore({
                 revision: accepted.revision,
                 storageGeneration: accepted.storageGeneration
             };
+            retryAttempt = 0;
+            retryElapsed = 0;
             settledVersion = Math.max(settledVersion, requestVersion);
             if (version === requestVersion)
                 setStatus("saved");
             else
                 setStatus("saving");
-        }).catch(function() {
+        }).catch(function(error) {
             if (disposed || requestEpoch !== epoch)
                 return;
+            if (version !== requestVersion) {
+                settledVersion = Math.max(settledVersion, requestVersion);
+                setStatus("saving");
+                return;
+            }
+            const delay = isRetryableNetworkFailure(error) ? retryDelay() : null;
+            if (delay !== null) {
+                retryAttempt += 1;
+                retryElapsed += delay;
+                setStatus("problem", SAFE_SAVE_ERROR);
+                schedulePerform(delay);
+                return;
+            }
             settledVersion = Math.max(settledVersion, requestVersion);
             setStatus("problem", SAFE_SAVE_ERROR);
         }).finally(function() {
@@ -365,10 +450,14 @@ export function createAccountPreferencesStore({
             if (disposed || !source.enabled)
                 return false;
             const document = canonicalPatch(source.document, value);
-            if (JSON.stringify(document) === JSON.stringify(source.document))
+            const unchanged = JSON.stringify(document) === JSON.stringify(source.document);
+            if (unchanged && status !== "problem")
                 return false;
-            source = {...source, document};
+            if (!unchanged)
+                source = {...source, document};
             version += 1;
+            retryAttempt = 0;
+            retryElapsed = 0;
             setStatus("saving");
             scheduleSave();
             return true;
@@ -378,9 +467,10 @@ export function createAccountPreferencesStore({
                 return false;
             const nextSource = normalizeInitialState(value);
             if (source.enabled && nextSource.enabled &&
-                source.storageGeneration === nextSource.storageGeneration &&
-                (nextSource.revision < source.revision ||
-                    (nextSource.revision === source.revision && version > settledVersion))) {
+                (nextSource.storageGeneration < source.storageGeneration ||
+                    (source.storageGeneration === nextSource.storageGeneration &&
+                        (nextSource.revision < source.revision ||
+                            (nextSource.revision === source.revision && version > settledVersion))))) {
                 return false;
             }
             epoch += 1;
@@ -388,6 +478,8 @@ export function createAccountPreferencesStore({
             ready = false;
             version = 0;
             settledVersion = 0;
+            retryAttempt = 0;
+            retryElapsed = 0;
             source = nextSource;
             setStatus(source.enabled ? "saved" : "disabled");
             return source.enabled;
@@ -445,9 +537,9 @@ export function readAccountPreferenceContext(document = globalThis.document) {
     try {
         const value = JSON.parse(element.textContent || "");
         const normalized = normalizeInitialState(value);
-        return normalized.enabled
+        return normalized.account
             ? {
-                enabled: true,
+                enabled: normalized.enabled,
                 payload: normalized.document,
                 revision: normalized.revision,
                 storageGeneration: normalized.storageGeneration

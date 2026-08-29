@@ -32,6 +32,14 @@ export function applySelectedColumns(cookie, statInfo) {
     });
 }
 
+export function accountPreferenceColumns(document, character, statInfo) {
+    const profileId = typeof character?.account?.id === "string" && character.account.id
+        ? character.account.id
+        : null;
+    const columns = (profileId && document?.builderColumns?.[profileId]) || document?.itemColumns;
+    return applySelectedColumns(columns, statInfo);
+}
+
 export function readBuilderPersistence({cookies = {}, storage = {}} = {}) {
     if (!cookies["cookie-consent"]) {
         return {

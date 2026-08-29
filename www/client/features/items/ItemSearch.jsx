@@ -45,8 +45,10 @@ export default function ItemSearch(props) {
         return () => window.removeEventListener("popstate", restoreFromHistory);
     }, []);
     function persistColumns(columns) {
-        if (preferenceStoreRef.current?.get?.().enabled) {
-            preferenceStoreRef.current.patch({itemColumns: columns});
+        const preferences = preferenceStoreRef.current?.get?.();
+        if (preferences?.account) {
+            if (preferences.enabled)
+                preferenceStoreRef.current.patch({itemColumns: columns});
             return;
         }
         if (parseCookieHeader(document.cookie)["cookie-consent"] !== "true") return;

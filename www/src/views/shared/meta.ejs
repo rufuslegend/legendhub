@@ -8,7 +8,7 @@
 <meta property="og:title" content="<%=title%>" />
 <meta property="theme-color" content="#0d1f30" />
 
-<%const accountTheme = locals.accountPreferenceContext?.enabled === true
+<%const accountTheme = locals.accountPreferenceContext?.payload
     ? locals.accountPreferenceContext.payload?.theme
     : null;
 const activeTheme = typeof locals.normalizeTheme === "function"

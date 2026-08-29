@@ -16,6 +16,7 @@ function createElement(attributes = {}) {
     const listeners = new Map();
     const values = new Map(Object.entries(attributes));
     const classes = new Set((attributes.class || "").split(" ").filter(Boolean));
+    const setCalls = [];
     return {
         addEventListener(type, listener) { listeners.set(type, listener); },
         classList: {
@@ -38,7 +39,8 @@ function createElement(attributes = {}) {
         getAttribute(name) { return values.get(name) ?? null; },
         hasAttribute(name) { return values.has(name); },
         removeAttribute(name) { values.delete(name); },
-        setAttribute(name, value) { values.set(name, String(value)); },
+        setAttribute(name, value) { setCalls.push([name, String(value)]); values.set(name, String(value)); },
+        setCalls,
         values
     };
 }
@@ -122,7 +124,7 @@ test("native theme menu patches account storage without changing anonymous theme
     const patches = [];
     const subscribers = [];
     const accountPreferencesStore = {
-        get() { return {enabled: true, document: {theme: "dark"}}; },
+        get() { return {account: true, enabled: true, document: {theme: "dark"}}; },
         patch(value) { patches.push(value); },
         subscribe(listener) { subscribers.push(listener); return function() {}; }
     };
@@ -138,6 +140,57 @@ test("native theme menu patches account storage without changing anonymous theme
     assert.match(menu.document.cookie, /theme=light/);
     assert.doesNotMatch(menu.document.cookie, /theme=solarized-dark/);
 
-    subscribers[0]({enabled: true, document: {theme: "high-contrast"}});
+    subscribers[0]({account: true, enabled: true, document: {theme: "high-contrast"}});
     assert.equal(menu.theme.getAttribute("href"), "/css/bootstrap-high-contrast.min.css");
+});
+
+// Catches optional verified bootstrap failure activating the anonymous theme
+// cookie path before the Builder runtime account state becomes available.
+test("unavailable verified theme state never writes the anonymous theme cookie", async function() {
+    const {initializeThemeMenu} = await loadModule();
+    const menu = createThemeDocument("cookie-consent=true; theme=light");
+    const patches = [];
+    const accountPreferencesStore = {
+        get() {
+            return {
+                account: true,
+                enabled: false,
+                document: {theme: "glass-blue"}
+            };
+        },
+        patch(value) { patches.push(value); },
+        subscribe() { return function() {}; }
+    };
+
+    initializeThemeMenu(menu.document, {accountPreferencesStore});
+    assert.equal(menu.theme.getAttribute("href"), "/css/bootstrap-glass-blue.min.css");
+    menu.solarizedDark.click();
+
+    assert.deepEqual(patches, []);
+    assert.match(menu.document.cookie, /theme=light/);
+    assert.doesNotMatch(menu.document.cookie, /theme=solarized-dark/);
+});
+
+// Catches account theme bootstrap dropping an asset cache-busting query or
+// needlessly reassigning the stylesheet when its canonical theme is unchanged.
+test("account theme changes preserve stylesheet versions and skip unchanged assignments", async function() {
+    const {initializeThemeMenu} = await loadModule();
+    const menu = createThemeDocument();
+    menu.theme.values.set("href", "/css/bootstrap-glass-blue.min.css?v=3.1.0");
+    const subscribers = [];
+    const accountPreferencesStore = {
+        get() { return {account: true, enabled: true, document: {theme: "glass-blue"}}; },
+        patch() {},
+        subscribe(listener) { subscribers.push(listener); return function() {}; }
+    };
+
+    initializeThemeMenu(menu.document, {accountPreferencesStore});
+    assert.equal(menu.theme.setCalls.filter(([name]) => name === "href").length, 0);
+
+    menu.solarizedDark.click();
+    assert.equal(menu.theme.getAttribute("href"), "/css/bootstrap-solarized-dark.min.css?v=3.1.0");
+    assert.equal(menu.theme.setCalls.filter(([name]) => name === "href").length, 1);
+
+    subscribers[0]({account: true, enabled: true, document: {theme: "solarized-dark"}});
+    assert.equal(menu.theme.setCalls.filter(([name]) => name === "href").length, 1);
 });

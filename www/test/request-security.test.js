@@ -299,7 +299,7 @@ test("authentication locals expose only validated account preference bootstrap s
         postAsync: async function(query, _ip, variables) {
             apiRequests.push({query, variables});
             if (query.includes("AccountPreferenceBootstrap")) {
-                return {getBuilderAccountState: {
+                return {getBuilderAccountPreferences: {
                     preferences: JSON.stringify({
                         version: 1,
                         theme: "dark",
@@ -345,6 +345,10 @@ test("authentication locals expose only validated account preference bootstrap s
         request.query.includes("AccountPreferenceBootstrap")).variables, {
         authToken: "session-token"
     });
+    const bootstrapQuery = apiRequests.find(request =>
+        request.query.includes("AccountPreferenceBootstrap")).query;
+    assert.match(bootstrapQuery, /getBuilderAccountPreferences/);
+    assert.doesNotMatch(bootstrapQuery, /profiles|usedBytes|quotaBytes|payloadBytes|FOR UPDATE/i);
     const serialized = JSON.stringify(res.locals.accountPreferenceContext);
     for (const privateValue of [
         "verified@example.test", "private-storage-namespace", "private-token",
@@ -356,7 +360,65 @@ test("authentication locals expose only validated account preference bootstrap s
         preferences: "{private malformed json",
         preferenceRevision: 2,
         storageGeneration: 1
-    }), {enabled: false, payload: null, revision: 0, storageGeneration: 0});
+    }), {
+        enabled: false,
+        payload: {
+            version: 1,
+            theme: "glass-blue",
+            itemsPerPage: 20,
+            itemColumns: [],
+            builderColumns: {},
+            selectedProfileId: null,
+            selectedVariant: null
+        },
+        revision: 0,
+        storageGeneration: 0
+    });
+});
+
+// Catches an authenticated verified request whose optional preference read
+// failed becoming indistinguishable from anonymous preference mode.
+test("verified bootstrap failure exposes disabled safe account defaults", async function() {
+    const middleware = loadAuthRoute({
+        authToken: async function() {
+            return {
+                memberId: 7,
+                username: "VerifiedMember",
+                email: "verified@example.test",
+                emailVerified: true
+            };
+        },
+        getPermissions: async function() { return {}; },
+        postAsync: async function(query) {
+            if (query.includes("AccountPreferenceBootstrap"))
+                throw new Error("private temporary database diagnostic");
+            return {getNotifications: {moreResults: false, results: []}};
+        }
+    });
+    const res = {locals: {}};
+
+    await middleware({
+        cookies: {loginToken: "session-token"},
+        ip: "192.0.2.7"
+    }, res, function(error) {
+        if (error) throw error;
+    });
+
+    assert.deepEqual(res.locals.accountPreferenceContext, {
+        enabled: false,
+        payload: {
+            version: 1,
+            theme: "glass-blue",
+            itemsPerPage: 20,
+            itemColumns: [],
+            builderColumns: {},
+            selectedProfileId: null,
+            selectedVariant: null
+        },
+        revision: 0,
+        storageGeneration: 0
+    });
+    assert.equal(JSON.stringify(res.locals).includes("private temporary database diagnostic"), false);
 });
 
 // Catches registration reaching GraphQL without an address, dropping entered

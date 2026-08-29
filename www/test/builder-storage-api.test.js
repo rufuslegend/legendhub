@@ -190,6 +190,7 @@ test("production schema exposes every Builder storage operation", function() {
     const mutations = schema.getMutationType().getFields();
 
     assert.ok(queries.getBuilderAccountState);
+    assert.ok(queries.getBuilderAccountPreferences);
     assert.ok(queries.exportBuilderData);
     for (const name of [
         "createBuilderProfile",
@@ -208,6 +209,7 @@ test("production schema exposes every Builder storage operation", function() {
 test("production storage schema keeps its exact recursive bounded contract", function() {
     const schema = loadApiRouter().schema;
     const operations = {
+        getBuilderAccountPreferences: ["BuilderAccountPreferences!", {authToken: "String!"}],
         getBuilderAccountState: ["BuilderAccountState!", {authToken: "String!"}],
         exportBuilderData: ["String!", {authToken: "String!"}],
         createBuilderProfile: ["BuilderProfileResult!", {
@@ -233,6 +235,10 @@ test("production storage schema keeps its exact recursive bounded contract", fun
         }]
     };
     const expectedTypes = {
+        BuilderAccountPreferences: {
+            preferences: "String!", preferenceRevision: "Int!",
+            storageGeneration: "Int!"
+        },
         BuilderProfile: {
             id: "String!", name: "String!", payload: "String", payloadVersion: "Int",
             payloadBytes: "Int!", revision: "Int!", createdOn: "DateTime!",
@@ -329,6 +335,36 @@ test("account state returns a canonical preference string and typed quota metada
     assert.equal(Object.hasOwn(result.profiles[0], "memberId"), false);
 });
 
+// Catches the preference-only resolver delegating to full account state or
+// widening its response with profiles, usage, identity, or raw payload data.
+test("account preference bootstrap returns only canonical preference metadata", async function() {
+    const fields = createBuilderStorageFields({
+        authenticate: async () => AUTH,
+        storageService: {
+            async readPreferences() {
+                return {
+                    preferences: state().preferences,
+                    storageGeneration: 2,
+                    profiles: [{payload: "private-profile-payload"}],
+                    usedBytes: 417
+                };
+            }
+        }
+    });
+
+    const result = await fields.queryFields.getBuilderAccountPreferences.resolve(
+        null, {authToken: "selector-validator"}, {ip: "request"}
+    );
+
+    assert.deepEqual(result, {
+        preferences: JSON.stringify(state().preferences.payload),
+        preferenceRevision: 3,
+        storageGeneration: 2
+    });
+    assert.equal(JSON.stringify(result).includes("private-profile-payload"), false);
+    assert.equal(Object.hasOwn(result, "usedBytes"), false);
+});
+
 // Catches a fresh seed or an older empty preference row exposing `{}` at any
 // point from SQL persistence through the authenticated GraphQL response.
 test("fresh and migrated-empty accounts expose the complete canonical preference document", async function(t) {
@@ -417,6 +453,12 @@ test("profile conflict returns both safe copies and no raw database error", asyn
 test("every storage resolver authenticates without renewal then calls one service operation", async function(t) {
     const request = {ip: "request"};
     const scenarios = [
+        ["queryFields", "getBuilderAccountPreferences", "readPreferences", {
+            authToken: "preference-read-token"
+        }, {
+            preferences: state().preferences,
+            storageGeneration: 2
+        }],
         ["queryFields", "getBuilderAccountState", "readState", {
             authToken: "read-token"
         }, state()],

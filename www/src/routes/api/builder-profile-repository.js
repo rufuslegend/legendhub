@@ -49,11 +49,31 @@ function profileFromRow(row) {
     };
 }
 
+function preferencesFromRow(row) {
+    if (!row)
+        return null;
+    return {
+        documentVersion: numberValue(row.DocumentVersion),
+        payload: parseStoredJson(row.Payload, "preference"),
+        revision: numberValue(row.Revision),
+        storageGeneration: numberValue(row.StorageGeneration),
+        updatedOn: row.UpdatedOn
+    };
+}
+
 function createBuilderProfileRepository({pool}) {
     if (!pool)
         throw new TypeError("A database pool is required.");
 
     return {
+        async readPreferences(memberId, {executor = pool} = {}) {
+            const rows = await query(executor, `
+                SELECT DocumentVersion, Payload, Revision, StorageGeneration, UpdatedOn
+                FROM AccountPreferences
+                WHERE MemberId = ?`, [memberId]);
+            return preferencesFromRow(rows[0]);
+        },
+
         async list(memberId, {executor = pool} = {}) {
             const rows = await query(executor, `
                 SELECT ${PROFILE_COLUMNS}
@@ -166,13 +186,11 @@ function createBuilderProfileRepository({pool}) {
                 documentVersion = 1;
                 payload = JSON.parse(DEFAULT_PREFERENCES_JSON);
             }
-            return {
-                documentVersion,
-                payload,
-                revision: numberValue(rows[0].Revision),
-                storageGeneration: numberValue(rows[0].StorageGeneration),
-                updatedOn: rows[0].UpdatedOn
-            };
+            return preferencesFromRow({
+                ...rows[0],
+                DocumentVersion: documentVersion,
+                Payload: payload
+            });
         },
 
         async writePreferences(memberId, preferences, {executor = pool} = {}) {

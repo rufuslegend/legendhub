@@ -106,6 +106,14 @@ function accountStateResult(state) {
     };
 }
 
+function accountPreferencesResult(state) {
+    return {
+        preferences: canonicalJson(state.preferences.payload),
+        preferenceRevision: state.preferences.revision,
+        storageGeneration: state.storageGeneration
+    };
+}
+
 function profileResult(result) {
     return {
         status: result.status,
@@ -195,6 +203,15 @@ const builderAccountStateType = new gql.GraphQLObjectType({
     })
 });
 
+const builderAccountPreferencesType = new gql.GraphQLObjectType({
+    name: "BuilderAccountPreferences",
+    fields: () => ({
+        preferences: {type: new gql.GraphQLNonNull(gql.GraphQLString)},
+        preferenceRevision: {type: new gql.GraphQLNonNull(gql.GraphQLInt)},
+        storageGeneration: {type: new gql.GraphQLNonNull(gql.GraphQLInt)}
+    })
+});
+
 const builderProfileResultType = new gql.GraphQLObjectType({
     name: "BuilderProfileResult",
     fields: () => ({
@@ -258,6 +275,20 @@ function createBuilderStorageFields({
     storageService: service = storageService
 } = {}) {
     const queryFields = {
+        getBuilderAccountPreferences: {
+            type: new gql.GraphQLNonNull(builderAccountPreferencesType),
+            args: {...authTokenArgument},
+            resolve: function(_, {authToken}, req) {
+                return authenticatedRequest({
+                    authenticate,
+                    req,
+                    authToken,
+                    operation: async authenticated => accountPreferencesResult(
+                        await service.readPreferences(authenticated)
+                    )
+                });
+            }
+        },
         getBuilderAccountState: {
             type: new gql.GraphQLNonNull(builderAccountStateType),
             args: {...authTokenArgument},
@@ -453,6 +484,7 @@ module.exports = {
     mutationFields: fields.mutationFields,
     queryFields: fields.queryFields,
     types: {
+        builderAccountPreferencesType,
         builderAccountStateType,
         builderDeleteAllResultType,
         builderImportProfileInputType,

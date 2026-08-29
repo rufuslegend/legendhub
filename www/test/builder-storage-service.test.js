@@ -104,6 +104,12 @@ function createHarness(overrides = {}) {
     }
 
     const repository = {
+        async readPreferences(memberId) {
+            state.calls.push(["readPreferences", memberId]);
+            if (overrides.readPreferencesError)
+                throw overrides.readPreferencesError;
+            return state.preferences && {...state.preferences};
+        },
         async readPreferencesForUpdate(memberId, options) {
             requireConnection(options);
             state.calls.push(["preferences", memberId]);
@@ -386,6 +392,7 @@ test("unverified member cannot read or mutate account storage", async function()
     const {service, state} = createHarness();
     const unverified = {...auth, emailVerified: false};
     const operations = [
+        () => service.readPreferences(unverified),
         () => service.readState(unverified),
         () => service.exportAll(unverified),
         () => service.createProfile(unverified, {}),
@@ -399,6 +406,53 @@ test("unverified member cannot read or mutate account storage", async function()
     for (const operation of operations)
         await assert.rejects(operation(), error => error.extensions.code === 403);
     assert.deepEqual(state.calls, []);
+});
+
+// Catches server-render bootstrap using the full transactional Builder state
+// path, which reads every profile payload, usage totals, and a write lock.
+test("preference bootstrap reads only canonical preferences without a transaction", async function() {
+    const {service, state, events} = createHarness({
+        profiles: [profile({payload: "private-profile-payload"})],
+        preferences: {
+            payload: {
+                version: 1,
+                theme: "dark",
+                itemsPerPage: 50,
+                itemColumns: ["Name"],
+                builderColumns: {"profile-id": ["Rent"]},
+                selectedProfileId: "profile-id",
+                selectedVariant: "Tank",
+                unknown: "private-unknown"
+            },
+            revision: 7,
+            storageGeneration: 3
+        }
+    });
+
+    const result = await service.readPreferences(auth);
+
+    assert.deepEqual(result, {
+        preferences: {
+            documentVersion: 1,
+            payload: {
+                version: 1,
+                theme: "dark",
+                itemsPerPage: 50,
+                itemColumns: ["Name"],
+                builderColumns: {"profile-id": ["Rent"]},
+                selectedProfileId: "profile-id",
+                selectedVariant: "Tank"
+            },
+            revision: 7,
+            storageGeneration: 3,
+            updatedOn: NOW
+        },
+        storageGeneration: 3
+    });
+    assert.deepEqual(state.calls, [["readPreferences", auth.memberId]]);
+    assert.deepEqual(events, []);
+    assert.equal(JSON.stringify(result).includes("private-profile-payload"), false);
+    assert.equal(JSON.stringify(result).includes("private-unknown"), false);
 });
 
 // Catches active-byte totals being computed from caller input or including

@@ -197,6 +197,39 @@ test("preferences and import receipts are locked and scoped to their member", as
         !sql.includes("idem-key") && !sql.includes("theme\":\"light")), true);
 });
 
+// Catches ordinary page bootstrap acquiring a write lock, initializing rows,
+// or touching profile payload/quota tables to read three preference fields.
+test("ordinary preference bootstrap is one member-scoped lock-free read", async function() {
+    const executor = createExecutor(function(sql) {
+        if (!sql.includes("FROM AccountPreferences"))
+            throw new Error("Preference bootstrap touched an unrelated table.");
+        return [{
+            DocumentVersion: 1,
+            Payload: '{"version":1,"theme":"dark"}',
+            Revision: "7",
+            StorageGeneration: "3",
+            UpdatedOn: NOW
+        }];
+    });
+    const repository = createBuilderProfileRepository({pool: executor});
+
+    const preferences = await repository.readPreferences(73);
+
+    assert.deepEqual(preferences, {
+        documentVersion: 1,
+        payload: {version: 1, theme: "dark"},
+        revision: 7,
+        storageGeneration: 3,
+        updatedOn: NOW
+    });
+    assert.equal(executor.calls.length, 1);
+    assert.match(executor.calls[0].sql, /FROM\s+AccountPreferences/i);
+    assert.match(executor.calls[0].sql, /MemberId\s*=\s*\?/i);
+    assert.doesNotMatch(executor.calls[0].sql, /FOR\s+UPDATE/i);
+    assert.doesNotMatch(executor.calls[0].sql, /BuilderProfiles|PayloadBytes|SUM\s*\(/i);
+    assert.deepEqual(executor.calls[0].values, [73]);
+});
+
 // Catches repository-side normalization or case folding defeating the binary
 // SQL collation and making two opaque idempotency keys share one receipt.
 test("import receipt keys preserve exact ASCII case at the repository boundary", async function() {

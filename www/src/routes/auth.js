@@ -1,7 +1,7 @@
 let express = require("express");
 let authApi = require("./api/auth");
 let apiUtils = require("./api/utils");
-let {validatePreferences} = require("./api/builder-preferences");
+let {DEFAULT_PREFERENCES, validatePreferences} = require("./api/builder-preferences");
 let url = require("url");
 
 const DISABLED_ACCOUNT_PREFERENCE_CONTEXT = Object.freeze({
@@ -15,12 +15,21 @@ function disabledAccountPreferenceContext() {
     return {...DISABLED_ACCOUNT_PREFERENCE_CONTEXT};
 }
 
+function unavailableAccountPreferenceContext() {
+    return {
+        enabled: false,
+        payload: validatePreferences(DEFAULT_PREFERENCES),
+        revision: 0,
+        storageGeneration: 0
+    };
+}
+
 function createAccountPreferenceContext(state) {
     if (!state || typeof state !== "object" || Array.isArray(state) ||
         typeof state.preferences !== "string" ||
         !Number.isSafeInteger(state.preferenceRevision) || state.preferenceRevision < 1 ||
         !Number.isSafeInteger(state.storageGeneration) || state.storageGeneration < 1) {
-        return disabledAccountPreferenceContext();
+        return unavailableAccountPreferenceContext();
     }
     try {
         return {
@@ -31,7 +40,7 @@ function createAccountPreferenceContext(state) {
         };
     }
     catch {
-        return disabledAccountPreferenceContext();
+        return unavailableAccountPreferenceContext();
     }
 }
 
@@ -83,10 +92,11 @@ var authFunc = async function(req, res, next) {
             res.locals.user.canUseAccountStorage = canUseAccountStorage;
 
             if (canUseAccountStorage) {
+                res.locals.accountPreferenceContext = unavailableAccountPreferenceContext();
                 try {
                     const preferenceQuery = `
                     query AccountPreferenceBootstrap($authToken: String!) {
-                        getBuilderAccountState(authToken: $authToken) {
+                        getBuilderAccountPreferences(authToken: $authToken) {
                             preferences
                             preferenceRevision
                             storageGeneration
@@ -99,7 +109,7 @@ var authFunc = async function(req, res, next) {
                         {authToken: req.cookies.loginToken}
                     );
                     res.locals.accountPreferenceContext = createAccountPreferenceContext(
-                        preferenceResponse.getBuilderAccountState
+                        preferenceResponse.getBuilderAccountPreferences
                     );
                 }
                 catch {

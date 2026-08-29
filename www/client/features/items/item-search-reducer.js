@@ -54,7 +54,7 @@ export function createInitialItemSearchState(props) {
         sortAsc: query.sortAsc === "true",
         page: Math.max(1, Number(query.page) || 1)
     };
-    const accountColumns = props.accountPreferences?.enabled === true &&
+    const accountColumns = props.accountPreferences?.account === true &&
         Array.isArray(props.accountPreferences.document?.itemColumns)
         ? props.accountPreferences.document.itemColumns
         : null;

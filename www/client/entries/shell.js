@@ -5,6 +5,7 @@ import {initializeThemeMenu} from "../lib/theme-menu.js";
 import {
     createAccountPreferencesStore,
     readAccountPreferenceContext,
+    renderAccountPreferenceStatus,
     setPageAccountPreferencesStore
 } from "../lib/account-preferences-store.js";
 import {updateAccountPreferences} from "../features/builder/builder-account-api.js";
@@ -15,10 +16,13 @@ const accountPreferencesStore = createAccountPreferencesStore({
         preferences: JSON.stringify(request.document),
         storageGeneration: request.storageGeneration
     }),
-    onStatus: detail => document.dispatchEvent(new CustomEvent(
-        "legendhub:account-preferences-status",
-        {detail}
-    ))
+    onStatus: detail => {
+        renderAccountPreferenceStatus(document, detail);
+        document.dispatchEvent(new CustomEvent(
+            "legendhub:account-preferences-status",
+            {detail}
+        ));
+    }
 });
 setPageAccountPreferencesStore(accountPreferencesStore);
 

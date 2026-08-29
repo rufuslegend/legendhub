@@ -9,7 +9,7 @@ const {
     validateBuilderProfile
 } = require("./builder-payload");
 const {classifyImport} = require("./builder-import");
-const {validatePreferences} = require("./builder-preferences");
+const {DEFAULT_PREFERENCES, validatePreferences} = require("./builder-preferences");
 const {
     BadRequestError,
     ConflictError,
@@ -206,6 +206,36 @@ function createBuilderStorageService({
 }) {
     if (!pool)
         throw new TypeError("A database pool is required.");
+
+    async function readPreferences(auth) {
+        const memberId = requireVerifiedMember(auth);
+        try {
+            const stored = await repository.readPreferences(memberId);
+            const source = stored || {
+                documentVersion: 1,
+                payload: DEFAULT_PREFERENCES,
+                revision: 1,
+                storageGeneration: 1,
+                updatedOn: null
+            };
+            if (source.documentVersion !== 1 ||
+                !Number.isSafeInteger(source.revision) || source.revision < 1 ||
+                !Number.isSafeInteger(source.storageGeneration) || source.storageGeneration < 1) {
+                throw new Error("Stored preference metadata is invalid.");
+            }
+            const preferences = {
+                ...source,
+                payload: validatePreferences(source.payload)
+            };
+            return {
+                preferences,
+                storageGeneration: preferences.storageGeneration
+            };
+        }
+        catch {
+            throw new gql.GraphQLError("The request could not be completed.");
+        }
+    }
 
     async function readState(auth) {
         const memberId = requireVerifiedMember(auth);
@@ -607,6 +637,7 @@ function createBuilderStorageService({
     }
 
     return {
+        readPreferences,
         readState,
         exportAll,
         createProfile,

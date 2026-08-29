@@ -197,6 +197,40 @@ test("builder account preference patch uses stable profile identity", async func
     });
 });
 
+// Catches a reducer-driven profile deletion/conflict carrying the deleted
+// profile's visible columns into the newly selected stable account profile.
+test("account profile identity changes load the new profile columns before patching", async function() {
+    const {
+        accountPreferenceColumns,
+        createBuilderAccountPreferencePatch
+    } = await loadPersistence();
+    const statInfo = [
+        {short: "Name", showColumnDefault: true},
+        {short: "Rent", showColumnDefault: false}
+    ];
+    const document = {
+        itemColumns: [],
+        builderColumns: {
+            "deleted-profile": ["Rent"],
+            "fallback-profile": ["Name"]
+        }
+    };
+    const fallback = {name: "Scout", account: {id: "fallback-profile"}};
+    const visible = accountPreferenceColumns(document, fallback, statInfo);
+
+    assert.deepEqual(visible.map(stat => stat.showColumn), [true, false]);
+    assert.deepEqual(createBuilderAccountPreferencePatch({
+        document,
+        character: fallback,
+        variant: {name: "Original"},
+        itemsPerPage: 20,
+        selectedColumns: visible.filter(stat => stat.showColumn).map(stat => stat.short)
+    }).builderColumns, {
+        "deleted-profile": ["Rent"],
+        "fallback-profile": ["Name"]
+    });
+});
+
 // Catches the account separation guard changing even one anonymous key, value,
 // removal, or cookie option when the caller supplies the explicit mode.
 test("explicit anonymous mode remains byte-compatible with the deployed plan", async function() {

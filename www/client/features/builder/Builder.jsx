@@ -16,7 +16,7 @@ import {
 import {deriveItemRestrictions, deriveRuneCharmStats} from "./builder-derivations.js";
 import {decodeBuilderEntries, decodeBuilderLists, encodeBuilderLists, encodeBuilderVariant} from "./builder-encoding.js";
 import {buildImportRequest, classifyAnonymousData, defaultMigrationPreferencesChoice, fingerprintAnonymousData, migrationAcknowledgementKey, normalizeMigrationResult, shouldOfferMigration, writeMigrationAcknowledgement} from "./builder-migration.js";
-import {applyBuilderPersistencePlan, applySelectedColumns, calculateStorageSize, createBuilderAccountPreferencePatch, createBuilderPersistencePlan, formatStorageSize, readBuilderPersistence} from "./builder-persistence.js";
+import {accountPreferenceColumns, applyBuilderPersistencePlan, applySelectedColumns, calculateStorageSize, createBuilderAccountPreferencePatch, createBuilderPersistencePlan, formatStorageSize, readBuilderPersistence} from "./builder-persistence.js";
 import {builderReducer, createDefaultVariant, createInitialBuilderState, selectStatRestrictions, selectStatTotal} from "./builder-reducer.js";
 import {RUNE_CHARM_ID} from "./item-constants.js";
 import {createItemsBySlotQuery, createItemsInIdsQuery, hydrateBuilderVariant} from "./builder-api.js";
@@ -99,12 +99,30 @@ export default function Builder({
     const hydrated = useRef(false);
     const syncControllerRef = useRef(null);
     const preferenceStoreRef = useRef(getPageAccountPreferencesStore());
+    const selectedAccountPreferenceIdentityRef = useRef(undefined);
     const syncBaselinesRef = useRef(new Map());
     const syncLocalKeysRef = useRef(new WeakMap());
     const nextSyncLocalKeyRef = useRef(1);
     const latestStateRef = useRef(state);
     latestStateRef.current = state;
     const selected = state.selectedList;
+    const selectedCharacter = state.allLists[state.selectedListIndex] || null;
+    const selectedAccountPreferenceIdentity = state.storageMode === "account" && selectedCharacter?.account
+        ? (selectedCharacter.account.id || selectedCharacter.account)
+        : null;
+    const selectedAccountPreferenceIdentityChanged = state.storageMode === "account" &&
+        state.initialized && selectedAccountPreferenceIdentity !== null &&
+        selectedAccountPreferenceIdentityRef.current !== selectedAccountPreferenceIdentity;
+    const selectedAccountPreferenceStatInfo = selectedAccountPreferenceIdentityChanged
+        ? accountPreferenceColumns(
+            preferenceStoreRef.current?.get?.().document,
+            selectedCharacter,
+            state.defaultStatInfo
+        )
+        : null;
+    const selectedAccountPreferenceColumnsChanged = selectedAccountPreferenceStatInfo !== null &&
+        selectedAccountPreferenceStatInfo.some((stat, index) =>
+            Boolean(stat.showColumn) !== Boolean(state.statInfo[index]?.showColumn));
     const totals = useMemo(() => Object.fromEntries(state.statInfo.map(stat => [stat.var, selected && (stat.type === "int" || stat.var === "alignRestriction") ? selectStatTotal({selectedList: selected}, stat.var) : ""])), [state.statInfo, selected]);
     const statRestrictions = useMemo(() => Object.fromEntries(state.statInfo.map(stat => [stat.var, selected && (stat.type === "int" || stat.var === "alignRestriction") ? selectStatRestrictions({selectedList: selected}, stat.var) : []])), [state.statInfo, selected]);
     const restrictions = useMemo(() => selected ? deriveItemRestrictions({items: selected.items, strength: totals.strength || 0}) : [], [selected, totals.strength]);
@@ -227,9 +245,25 @@ export default function Builder({
     }, [state.allLists, state.selectedListIndex, state.selectedListVariantIndex, selected, state.statInfo, state.itemsPerPage, state.exceptionEncountered, state.storageMode]);
 
     useEffect(function() {
+        if (state.storageMode !== "account" || !state.initialized ||
+            selectedAccountPreferenceIdentity === null) {
+            selectedAccountPreferenceIdentityRef.current = undefined;
+            return;
+        }
+        if (!selectedAccountPreferenceIdentityChanged)
+            return;
+        selectedAccountPreferenceIdentityRef.current = selectedAccountPreferenceIdentity;
+        if (selectedAccountPreferenceColumnsChanged)
+            dispatch({type: "ui/patch", value: {statInfo: selectedAccountPreferenceStatInfo}});
+    }, [state.storageMode, state.initialized, selectedAccountPreferenceIdentity,
+        selectedAccountPreferenceIdentityChanged, selectedAccountPreferenceColumnsChanged,
+        selectedAccountPreferenceStatInfo]);
+
+    useEffect(function() {
         const store = preferenceStoreRef.current;
         if (state.storageMode !== "account" || !state.initialized || !selected ||
-            !state.accountState || !store?.get?.().enabled)
+            !state.accountState || !store?.get?.().enabled ||
+            (selectedAccountPreferenceIdentityChanged && selectedAccountPreferenceColumnsChanged))
             return;
         const character = state.allLists[state.selectedListIndex];
         store.patch(createBuilderAccountPreferencePatch({
@@ -239,7 +273,7 @@ export default function Builder({
             itemsPerPage: state.itemsPerPage,
             selectedColumns: state.statInfo.filter(stat => stat.showColumn).map(stat => stat.short)
         }));
-    }, [state.allLists, state.selectedListIndex, state.selectedListVariantIndex, selected, state.statInfo, state.itemsPerPage, state.storageMode, state.initialized, state.accountState]);
+    }, [state.allLists, state.selectedListIndex, state.selectedListVariantIndex, selected, state.statInfo, state.itemsPerPage, state.storageMode, state.initialized, state.accountState, selectedAccountPreferenceIdentityChanged, selectedAccountPreferenceColumnsChanged]);
 
     function accountSnapshot(character, storageGeneration) {
         const {account, ...profile} = character;
@@ -333,6 +367,21 @@ export default function Builder({
                     const currentKey = `id:${profile.account.id}`;
                     syncBaselinesRef.current.delete(previousKey);
                     syncBaselinesRef.current.set(currentKey, event.current.fingerprint);
+                    const currentState = latestStateRef.current;
+                    const currentCharacter = currentState.allLists[currentState.selectedListIndex];
+                    if (!event.previous.id && event.previous.localIdentity &&
+                        currentCharacter?.account === event.previous.localIdentity) {
+                        const store = preferenceStoreRef.current;
+                        store?.patch?.(createBuilderAccountPreferencePatch({
+                            document: store.get().document,
+                            character: {...currentCharacter, account: profile.account},
+                            variant: currentState.selectedList,
+                            itemsPerPage: currentState.itemsPerPage,
+                            selectedColumns: currentState.statInfo
+                                .filter(stat => stat.showColumn)
+                                .map(stat => stat.short)
+                        }));
+                    }
                     dispatch({
                         type: "account/profile-saved",
                         previous: {
@@ -431,15 +480,6 @@ export default function Builder({
             const characterName = state.allLists[value.listIndex].name;
             const cookieValues = cookies();
             dispatch({type: "ui/patch", value: {statInfo: applySelectedColumns(cookieValues[`sc-${characterName}`] || cookieValues.sc2, state.defaultStatInfo)}});
-        }
-        if (state.storageMode === "account" && value.type === "variant/select" &&
-            value.listIndex !== state.selectedListIndex) {
-            const nextCharacter = state.allLists[value.listIndex];
-            const document = preferenceStoreRef.current?.get?.().document;
-            const columns = document?.builderColumns?.[nextCharacter.account?.id] || document?.itemColumns;
-            dispatch({type: "ui/patch", value: {
-                statInfo: applySelectedColumns(columns, state.defaultStatInfo)
-            }});
         }
         dispatch(value);
     }
