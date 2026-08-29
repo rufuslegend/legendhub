@@ -505,6 +505,34 @@ test("Increased Potential raises attribute caps before dependent formulas", func
     }]);
 });
 
+test("Increased Potential is included in every visible attribute-cap total", function() {
+    const scope = createBuilderScope();
+    equipStats(scope, {
+        equipment: {
+            strengthCap: 1,
+            mindCap: 2,
+            dexterityCap: 3,
+            constitutionCap: 4,
+            perceptionCap: 5,
+            spiritCap: 6
+        },
+        other: {},
+        eraAbilities: {increasedPotential: 4}
+    });
+
+    assert.deepEqual(
+        [
+            "strengthCap",
+            "mindCap",
+            "dexterityCap",
+            "constitutionCap",
+            "perceptionCap",
+            "spiritCap"
+        ].map(statName => scope.getStatTotal(statName)),
+        [5, 6, 7, 8, 9, 10]
+    );
+});
+
 test("builder applies each quest bonus only to its matching resource", function() {
     const scope = createBuilderScope();
     equipStats(scope, {

@@ -37,7 +37,14 @@
             name: "Increased Potential",
             era: "Medieval",
             maxRank: 5,
-            effects: {}
+            effects: {
+                strengthCap: 1,
+                mindCap: 1,
+                dexterityCap: 1,
+                constitutionCap: 1,
+                perceptionCap: 1,
+                spiritCap: 1
+            }
         },
         {
             key: "physicalEnhancement",
