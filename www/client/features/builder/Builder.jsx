@@ -216,6 +216,7 @@ export default function Builder({
             revision: account?.revision || 0,
             storageGeneration,
             fingerprint: payload,
+            ...(!account?.id ? {localIdentity: account} : {}),
             ...(queueKey ? {queueKey} : {})
         };
     }
@@ -291,7 +292,11 @@ export default function Builder({
                     syncBaselinesRef.current.set(currentKey, event.current.fingerprint);
                     dispatch({
                         type: "account/profile-saved",
-                        previous: {id: event.previous.id, name: event.previous.name},
+                        previous: {
+                            id: event.previous.id,
+                            name: event.previous.name,
+                            localIdentity: event.previous.localIdentity
+                        },
                         current: {id: event.current.id, name: event.current.name},
                         profile,
                         storageGeneration: event.result.storageGeneration,

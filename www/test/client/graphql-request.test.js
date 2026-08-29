@@ -165,6 +165,30 @@ test("GraphQL request normalizes GraphQL and unexpected response errors", async 
     );
 });
 
+// Production break caught: non-2xx status is discarded, so Builder 409/413
+// application failures look like empty network errors and retry automatically.
+test("GraphQL request preserves safe non-2xx status codes without reading diagnostics", async function(t) {
+    const originalFetch = globalThis.fetch;
+    t.after(function() { globalThis.fetch = originalFetch; });
+    const {graphqlRequest, GraphQLRequestError} = await loadModule();
+
+    for (const code of [409, 413]) {
+        globalThis.fetch = async function() {
+            return response({errors: [{message: "private server diagnostic"}]}, code);
+        };
+        await assert.rejects(
+            graphqlRequest({query: "mutation { saveBuilder }"}),
+            function(error) {
+                assert.ok(error instanceof GraphQLRequestError);
+                assert.equal(error.message, "The request could not be completed.");
+                assert.equal(error.code, code);
+                assert.deepEqual(error.errors, []);
+                return true;
+            }
+        );
+    }
+});
+
 test("GraphQL request normalizes malformed JSON responses", async function(t) {
     const originalFetch = globalThis.fetch;
     t.after(function() { globalThis.fetch = originalFetch; });

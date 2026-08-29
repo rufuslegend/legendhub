@@ -7,14 +7,16 @@ export const BUILDER_SYNC_MESSAGES = Object.freeze({
     saved: "Saved to account",
     problem: "Sync problem. Changes are still in memory. Export them before reloading.",
     conflict: "A newer account copy was kept and your edits were saved as a conflict copy.",
+    revisionProblem: "Builder data changed on the server. Your edits are still in memory. Export them before reloading account data.",
+    quotaProblem: "Builder account storage is limited to 10 MB. Changes are still in memory. Export them before reloading.",
     generationChanged: "Synced Builder data changed in another session. Export your unsaved data before reloading."
 });
 
 function queueKey(snapshot) {
-    if (typeof snapshot?.queueKey === "string" && snapshot.queueKey)
-        return `local:${snapshot.queueKey}`;
     if (typeof snapshot?.id === "string" && snapshot.id)
         return `id:${snapshot.id}`;
+    if (typeof snapshot?.queueKey === "string" && snapshot.queueKey)
+        return `local:${snapshot.queueKey}`;
     return `name:${String(snapshot?.name || "")}`;
 }
 
@@ -32,8 +34,13 @@ function isGenerationFailure(error) {
     return details.code === 409 && details.message === "Account storage changed. Reload before saving.";
 }
 
-function isConflictFailure(error) {
-    return errorDetails(error).code === 409;
+function fixedProblemMessage(error) {
+    const code = errorDetails(error).code;
+    if (code === 409)
+        return BUILDER_SYNC_MESSAGES.revisionProblem;
+    if (code === 413)
+        return BUILDER_SYNC_MESSAGES.quotaProblem;
+    return BUILDER_SYNC_MESSAGES.problem;
 }
 
 function isRetryableNetworkFailure(error) {
@@ -98,8 +105,10 @@ export function createBuilderSyncController({
             notifyStatus("conflict", BUILDER_SYNC_MESSAGES.conflict);
             return;
         }
-        if ([...entries.values()].some(entry => entry.state === "problem" || entry.state === "retrying")) {
-            notifyStatus("problem", BUILDER_SYNC_MESSAGES.problem);
+        const problem = [...entries.values()].find(entry =>
+            entry.state === "problem" || entry.state === "retrying");
+        if (problem) {
+            notifyStatus("problem", problem.problemMessage || BUILDER_SYNC_MESSAGES.problem);
             return;
         }
         if ([...entries.values()].some(entry =>
@@ -180,17 +189,29 @@ export function createBuilderSyncController({
             return;
         }
 
+        const details = errorDetails(error);
+        if (details.code === 409 || details.code === 413) {
+            cancelTimer(entry);
+            entry.ready = false;
+            entry.removed = false;
+            entry.state = "problem";
+            entry.problemMessage = fixedProblemMessage(error);
+            await notifyResult({type: "problem", operation, snapshot: entry.latest}, activeEpoch);
+            publishStatus();
+            return;
+        }
+
         if (entry.version !== sentVersion) {
             if (entry.removed) {
                 if (entry.latest.id)
-                    void perform(entry);
+                    return perform(entry);
                 else {
                     entries.delete(entry.key);
                     publishStatus();
                 }
             }
             else if (!entry.removed && entry.ready && entry.timer === null)
-                void perform(entry);
+                return perform(entry);
             else
                 publishStatus();
             return;
@@ -209,14 +230,9 @@ export function createBuilderSyncController({
         }
 
         entry.removed = false;
-        entry.state = isConflictFailure(error) ? "conflict" : "problem";
-        if (entry.state === "conflict")
-            conflictNotice = true;
-        await notifyResult({
-            type: entry.state === "conflict" ? "conflict-error" : "problem",
-            operation,
-            snapshot: entry.latest
-        }, activeEpoch);
+        entry.state = "problem";
+        entry.problemMessage = fixedProblemMessage(error);
+        await notifyResult({type: "problem", operation, snapshot: entry.latest}, activeEpoch);
         publishStatus();
     }
 
@@ -282,13 +298,15 @@ export function createBuilderSyncController({
             }
 
             if (result?.status === "conflict") {
-                entry.lastCommittedFingerprint = sent.fingerprint;
+                const current = entry.latest;
+                cancelTimer(entry);
+                entries.delete(entry.key);
                 entry.state = "conflict";
                 conflictNotice = true;
                 await notifyResult({
                     type: "conflict",
                     previous: sent,
-                    current: entry.latest,
+                    current,
                     result
                 }, activeEpoch);
                 publishStatus();
@@ -318,13 +336,12 @@ export function createBuilderSyncController({
 
             if (entry.removed) {
                 entry.state = "pending";
-                void perform(entry);
-                return;
+                return perform(entry);
             }
             if (entry.latest.fingerprint !== sent.fingerprint) {
                 entry.state = "pending";
                 if (entry.ready && entry.timer === null)
-                    void perform(entry);
+                    return perform(entry);
                 else
                     publishStatus();
                 return;
@@ -355,6 +372,7 @@ export function createBuilderSyncController({
                 retryAttempt: 0,
                 retryElapsed: 0,
                 lastCommittedFingerprint: null,
+                problemMessage: null,
                 state: "idle"
             };
             entries.set(key, entry);
@@ -369,6 +387,7 @@ export function createBuilderSyncController({
         entry.ready = false;
         entry.retryAttempt = 0;
         entry.retryElapsed = 0;
+        entry.problemMessage = null;
         entry.state = "pending";
         scheduleEntry(entry, DEBOUNCE_MS);
         publishStatus();
@@ -392,6 +411,7 @@ export function createBuilderSyncController({
                 retryAttempt: 0,
                 retryElapsed: 0,
                 lastCommittedFingerprint: null,
+                problemMessage: null,
                 state: "idle"
             };
             entries.set(key, entry);
@@ -402,6 +422,7 @@ export function createBuilderSyncController({
         entry.ready = true;
         entry.retryAttempt = 0;
         entry.retryElapsed = 0;
+        entry.problemMessage = null;
         entry.state = "pending";
         cancelTimer(entry);
         if (!entry.inFlight)

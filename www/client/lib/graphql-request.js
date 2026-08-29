@@ -1,8 +1,10 @@
 export class GraphQLRequestError extends Error {
-    constructor(message, errors = []) {
+    constructor(message, errors = [], code) {
         super(message);
         this.name = "GraphQLRequestError";
         this.errors = errors;
+        if (typeof code === "number" || typeof code === "string")
+            this.code = code;
     }
 }
 
@@ -37,7 +39,7 @@ export async function graphqlRequest({query, variables, signal}) {
         throw new GraphQLRequestError("Authorization required.");
     }
     if (response.status < 200 || response.status >= 300)
-        throw new GraphQLRequestError("The request could not be completed.");
+        throw new GraphQLRequestError("The request could not be completed.", [], response.status);
 
     let body;
     try {

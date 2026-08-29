@@ -517,6 +517,46 @@ test("account create response attaches metadata to the current renamed unsaved r
     assert.equal(state.allLists[state.selectedListIndex].name, "Other Unsaved");
 });
 
+// Production break caught: a completed create attaches its server ID to a
+// different same-name row after the original local row was deleted.
+test("account create completion never falls back past its stable local identity", async function() {
+    const {builderReducer, createDefaultVariant, createInitialBuilderState} = await loadReducer();
+    const originalAccount = {id: null, revision: 0};
+    let state = builderReducer(createInitialBuilderState(), {
+        type: "source/loaded",
+        mode: "account",
+        profiles: [{
+            name: "Untitled",
+            variants: [createDefaultVariant("Original")],
+            account: originalAccount
+        }],
+        accountState: {storageGeneration: 1, usedBytes: 0, quotaBytes: 1000}
+    });
+    state = builderReducer(state, {
+        type: "character/delete",
+        fallbackVariant: createDefaultVariant("Original")
+    });
+    state = builderReducer(state, {
+        type: "stat/change", section: "baseStats", stat: "strength", value: 77
+    });
+    const replacement = state.allLists[0];
+
+    state = builderReducer(state, {
+        type: "account/profile-saved",
+        previous: {id: null, name: "Untitled", localIdentity: originalAccount},
+        current: {id: "old-created-id", name: "Untitled"},
+        profile: {
+            name: "Untitled",
+            variants: [createDefaultVariant("Original")],
+            account: {id: "old-created-id", revision: 1, updatedOn: "2026-08-28T12:00:00.000Z"}
+        }
+    });
+
+    assert.equal(state.allLists[0], replacement);
+    assert.deepEqual(state.allLists[0].account, {id: null, revision: 0, placeholder: true});
+    assert.equal(state.allLists[0].variants[0].baseStats.strength, 77);
+});
+
 // Catches the React page's transient UI state leaking into a second owner instead of the Builder reducer.
 test("builder reducer owns transient React dialog and request state", async function() {
     const {builderReducer, createInitialBuilderState} = await loadReducer();

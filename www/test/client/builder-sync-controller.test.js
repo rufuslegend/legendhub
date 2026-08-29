@@ -178,6 +178,78 @@ test("network retries are bounded to 30 seconds and validation never retries", a
     assert.deepEqual(boundedClock.delays, [750, 1000, 2000, 4000, 8000, 15000]);
 });
 
+// Production break caught: a thrown create-name or stale-delete 409 is not a
+// committed conflict response and must never claim that a conflict copy exists.
+test("thrown 409 failures stop without claiming a conflict copy", async function() {
+    const {createBuilderSyncController} = await loadController();
+    for (const operation of ["create", "delete"]) {
+        const clock = createClock();
+        const statuses = [];
+        const results = [];
+        let attempts = 0;
+        const fail = async function() {
+            attempts += 1;
+            throw applicationError(409, `private ${operation} diagnostic`);
+        };
+        const controller = createBuilderSyncController({
+            saveProfile: operation === "create" ? fail : async () => ({status: "saved"}),
+            deleteProfile: operation === "delete" ? fail : async () => ({status: "deleted"}),
+            schedule: clock.schedule,
+            cancel: clock.cancel,
+            onResult: value => results.push(value),
+            onStatus: value => statuses.push(value)
+        });
+        const value = operation === "create"
+            ? snapshot({id: null, revision: 0, queueKey: "local-create"})
+            : snapshot();
+
+        if (operation === "create")
+            controller.queue(value);
+        else
+            controller.remove(value);
+        await clock.runAll();
+        await clock.settle();
+
+        assert.equal(attempts, 1, operation);
+        assert.equal(results.at(-1).type, "problem", operation);
+        assert.deepEqual(statuses.at(-1), {
+            status: "problem",
+            message: "Builder data changed on the server. Your edits are still in memory. Export them before reloading account data."
+        }, operation);
+        assert.doesNotMatch(statuses.at(-1).message, /conflict copy|private/i, operation);
+    }
+});
+
+// Production break caught: quota rejection exposes a server diagnostic or
+// falls back to a generic message that never explains the fixed account limit.
+test("quota rejection uses the fixed 10 MB recovery message without retrying", async function() {
+    const {createBuilderSyncController} = await loadController();
+    const clock = createClock();
+    const statuses = [];
+    let attempts = 0;
+    const controller = createBuilderSyncController({
+        saveProfile: async function() {
+            attempts += 1;
+            throw applicationError(413, "private quota diagnostic");
+        },
+        deleteProfile: async () => ({status: "deleted"}),
+        schedule: clock.schedule,
+        cancel: clock.cancel,
+        onResult() {},
+        onStatus: value => statuses.push(value)
+    });
+
+    controller.queue(snapshot());
+    await clock.runAll();
+
+    assert.equal(attempts, 1);
+    assert.deepEqual(statuses.at(-1), {
+        status: "problem",
+        message: "Builder account storage is limited to 10 MB. Changes are still in memory. Export them before reloading."
+    });
+    assert.doesNotMatch(statuses.at(-1).message, /private/i);
+});
+
 // Production break caught: one failed profile owning a global queue blocks a
 // second profile, or a later edit is discarded when an earlier request ends.
 test("profiles queue independently and an in-flight save preserves the newest edit", async function() {
@@ -298,6 +370,75 @@ test("conflicts are committed once and retain a persistent recovery status", asy
     assert.equal(statuses.at(-1).status, "conflict");
 });
 
+// Production break caught: a newer edit keeps the original profile timer alive
+// after the server has already committed that edit under a conflict identity.
+test("structured conflict retires the original queue before transferring newer edits", async function() {
+    const {createBuilderSyncController} = await loadController();
+
+    for (const timing of ["before-debounce", "after-debounce"]) {
+        const clock = createClock();
+        const calls = [];
+        let releaseConflict;
+        let releaseResult;
+        const firstRequest = new Promise(resolve => { releaseConflict = resolve; });
+        const resultDelivery = new Promise(resolve => { releaseResult = resolve; });
+        let controller;
+        controller = createBuilderSyncController({
+            saveProfile: async value => {
+                calls.push(value);
+                if (calls.length === 1)
+                    return firstRequest;
+                return {status: "saved", profile: {
+                    ...value,
+                    revision: value.revision + 1,
+                    updatedOn: "2026-08-28T12:00:00.000Z"
+                }};
+            },
+            deleteProfile: async () => ({status: "deleted"}),
+            schedule: clock.schedule,
+            cancel: clock.cancel,
+            onResult: function(event) {
+                if (event.type !== "conflict" || event.current.fingerprint === event.previous.fingerprint)
+                    return;
+                controller.queue({
+                    ...event.current,
+                    id: event.result.conflictProfile.id,
+                    name: event.result.conflictProfile.name,
+                    revision: event.result.conflictProfile.revision,
+                    queueKey: undefined
+                });
+                return resultDelivery;
+            },
+            onStatus() {}
+        });
+
+        controller.queue(snapshot());
+        clock.tick(750);
+        await clock.settle();
+        controller.queue(snapshot({fingerprint: "newest", payload: "6*Hero~Original~newest*"}));
+        clock.tick(timing === "before-debounce" ? 749 : 750);
+        await clock.settle();
+        releaseConflict({
+            status: "conflict",
+            profile: {...snapshot(), revision: 5},
+            conflictProfile: {id: "conflict-id", name: "Hero Conflict", revision: 1}
+        });
+        await clock.settle();
+        if (timing === "before-debounce") {
+            clock.tick(1);
+            await clock.settle();
+        }
+        releaseResult();
+        await clock.settle();
+        await clock.runAll();
+
+        assert.deepEqual(calls.map(value => [value.id, value.fingerprint]), [
+            ["profile-1", "first"],
+            ["conflict-id", "newest"]
+        ], timing);
+    }
+});
+
 // Production break caught: generation rejection leaves other timers alive or
 // a completion from a disposed account session mutates the next session.
 test("generation change cancels every queue and dispose ignores stale completions", async function() {
@@ -412,6 +553,45 @@ test("a failed in-flight create settles after its unsaved row was deleted", asyn
     assert.equal(statuses.at(-1).status, "saved");
 });
 
+// Production break caught: a create commits after its original local row was
+// deleted but the newly created server row is never cleaned up.
+test("a committed in-flight create is deleted after its original row was removed", async function() {
+    const {createBuilderSyncController} = await loadController();
+    const clock = createClock();
+    const deletes = [];
+    let releaseCreate;
+    const pendingCreate = new Promise(resolve => { releaseCreate = resolve; });
+    const unsaved = snapshot({id: null, revision: 0, queueKey: "local-1"});
+    const controller = createBuilderSyncController({
+        saveProfile: async () => pendingCreate,
+        deleteProfile: async value => {
+            deletes.push(value);
+            return {status: "deleted"};
+        },
+        schedule: clock.schedule,
+        cancel: clock.cancel,
+        onResult() {},
+        onStatus() {}
+    });
+
+    controller.queue(unsaved);
+    clock.tick(750);
+    await clock.settle();
+    controller.remove(unsaved);
+    releaseCreate({status: "saved", profile: {
+        ...unsaved,
+        id: "old-created-id",
+        revision: 1,
+        updatedOn: "2026-08-28T12:00:00.000Z"
+    }});
+    await clock.settle();
+
+    assert.equal(deletes.length, 1);
+    assert.deepEqual({id: deletes[0].id, revision: deletes[0].revision}, {
+        id: "old-created-id", revision: 1
+    });
+});
+
 // Production break caught: flush leaves a debounce timer behind or resolves
 // before the queued server write has committed.
 test("flush commits every debounced profile immediately", async function() {
@@ -439,4 +619,47 @@ test("flush commits every debounced profile immediately", async function() {
 
     assert.deepEqual(saves, ["profile-1", "profile-2"]);
     assert.equal(clock.pending(), 0);
+});
+
+// Production break caught: flush resolves with a successor write still in
+// flight when that successor starts only after the predecessor commits.
+test("flush waits for the queued successor of an in-flight save", async function() {
+    const {createBuilderSyncController} = await loadController();
+    const clock = createClock();
+    const calls = [];
+    let releaseFirst;
+    let releaseSecond;
+    const firstRequest = new Promise(resolve => { releaseFirst = resolve; });
+    const secondRequest = new Promise(resolve => { releaseSecond = resolve; });
+    const controller = createBuilderSyncController({
+        saveProfile: async value => {
+            calls.push(value);
+            return calls.length === 1 ? firstRequest : secondRequest;
+        },
+        deleteProfile: async () => ({status: "deleted"}),
+        schedule: clock.schedule,
+        cancel: clock.cancel,
+        onResult() {},
+        onStatus() {}
+    });
+
+    controller.queue(snapshot());
+    clock.tick(750);
+    await clock.settle();
+    controller.queue(snapshot({fingerprint: "newest", payload: "6*Hero~Original~newest*"}));
+    let flushed = false;
+    const flushing = controller.flush().then(function() { flushed = true; });
+
+    releaseFirst({status: "saved", profile: {
+        ...snapshot(), revision: 5, updatedOn: "2026-08-28T12:00:00.000Z"
+    }});
+    await clock.settle();
+    assert.equal(calls.length, 2);
+    assert.equal(flushed, false);
+
+    releaseSecond({status: "saved", profile: {
+        ...calls[1], revision: 6, updatedOn: "2026-08-28T12:01:00.000Z"
+    }});
+    await flushing;
+    assert.equal(flushed, true);
 });

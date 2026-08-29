@@ -452,6 +452,75 @@ test("Builder stops autosave and offers export on storage generation change", as
     expect(updateAttempts).toBe(1);
 });
 
+// Catches a thrown revision/name/delete 409 being presented as if the server
+// had already preserved the edit in a conflict copy.
+test("Builder Sync problem reports thrown 409 without claiming a conflict copy", async function({context, page}) {
+    await context.addCookies([{name: "loginToken", value: "sync-thrown-conflict-account", url: baseUrl}]);
+    let updateAttempts = 0;
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (request.query.includes("GetBuilderAccountState")) {
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({
+                data: {getBuilderAccountState: accountBuilderState()}
+            })});
+        }
+        if (!request.query.includes("UpdateBuilderProfile"))
+            return route.fallback();
+        updateAttempts += 1;
+        return route.fulfill({status: 409, contentType: "application/json", body: JSON.stringify({
+            errors: [{
+                message: "private stale revision diagnostic",
+                extensions: {code: 409}
+            }]
+        })});
+    });
+
+    await page.goto(`${baseUrl}/builder/`);
+    await page.locator("#strInput").fill("44");
+    const problem = page.getByRole("status").filter({hasText: "Builder data changed on the server."});
+    await expect(problem).toBeVisible({timeout: 2500});
+    await expect(problem).not.toContainText(/conflict copy|private/i);
+    await expect(problem.getByRole("button", {name: "Export Builder data"})).toBeVisible();
+    await expect(problem.getByRole("button", {name: "Reload account data"})).toBeVisible();
+    await expect(page.locator("#strInput")).toHaveValue("44");
+    await page.waitForTimeout(1000);
+    expect(updateAttempts).toBe(1);
+});
+
+// Catches quota rejection leaking server text or omitting the fixed account
+// limit and an export path while the unsaved edit remains in memory.
+test("Builder Sync problem explains the 10 MB account storage limit", async function({context, page}) {
+    await context.addCookies([{name: "loginToken", value: "sync-quota-account", url: baseUrl}]);
+    let updateAttempts = 0;
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (request.query.includes("GetBuilderAccountState")) {
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({
+                data: {getBuilderAccountState: accountBuilderState()}
+            })});
+        }
+        if (!request.query.includes("UpdateBuilderProfile"))
+            return route.fallback();
+        updateAttempts += 1;
+        return route.fulfill({status: 413, contentType: "application/json", body: JSON.stringify({
+            errors: [{
+                message: "private quota diagnostic",
+                extensions: {code: 413}
+            }]
+        })});
+    });
+
+    await page.goto(`${baseUrl}/builder/`);
+    await page.locator("#strInput").fill("44");
+    const problem = page.getByRole("status").filter({hasText: "Builder account storage is limited to 10 MB."});
+    await expect(problem).toBeVisible({timeout: 2500});
+    await expect(problem).not.toContainText("private quota diagnostic");
+    await expect(problem.getByRole("button", {name: "Export Builder data"})).toBeVisible();
+    await expect(page.locator("#strInput")).toHaveValue("44");
+    await page.waitForTimeout(1000);
+    expect(updateAttempts).toBe(1);
+});
+
 // Catches an unsaved first edit using update, a completed create losing its ID
 // before the next edit, or internal queue metadata crossing the API boundary.
 test("Builder creates an empty-account profile once and updates it thereafter", async function({context, page}) {

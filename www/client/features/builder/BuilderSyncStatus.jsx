@@ -20,6 +20,9 @@ export default function BuilderSyncStatus({mode, status, message, onExport, onRe
     return <div className={status === "problem" ? "small text-warning text-right" : "small text-muted text-nowrap"}
         role="status" aria-live="polite">
         <span>{text}</span>
-        {status === "problem" && <button type="button" className="btn btn-sm btn-link ml-2" onClick={onExport}>Export Builder data</button>}
+        {status === "problem" && <span>
+            <button type="button" className="btn btn-sm btn-link ml-2" onClick={onExport}>Export Builder data</button>
+            <button type="button" className="btn btn-sm btn-link ml-2" onClick={onReload}>Reload account data</button>
+        </span>}
     </div>;
 }

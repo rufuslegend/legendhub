@@ -66,13 +66,18 @@ function actionIdentity(action, phase) {
     const identity = action[phase] || {};
     return {
         id: identity.id ?? action[`${phase}Id`],
-        name: identity.name ?? action[`${phase}Name`]
+        name: identity.name ?? action[`${phase}Name`],
+        localIdentity: identity.localIdentity
     };
 }
 
 function savedProfileIndex(allLists, action, metadata) {
     const current = actionIdentity(action, "current");
     const previous = actionIdentity(action, "previous");
+    const localIdentities = [current.localIdentity, previous.localIdentity]
+        .filter(identity => identity && typeof identity === "object");
+    if (localIdentities.length > 0)
+        return allLists.findIndex(character => localIdentities.includes(character.account));
     for (const id of [current.id, previous.id, metadata?.id]) {
         if (typeof id !== "string")
             continue;
