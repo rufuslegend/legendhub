@@ -25,6 +25,7 @@ with version 2.6.0.
 - Hardened verification and password-reset transitions so copied action links, concurrent password changes, and older pending actions cannot retain unintended account access.
 - Added an accessible 60-second countdown after successful or rate-limited verification resends, and kept verification/reset result navigation in sync with the current sign-in state.
 - Preserved both versions of a Builder character when devices edit the same profile, saving the attempted edit as a clearly named conflict copy instead of overwriting either version.
+- Restored the Builder item-name cell as a full-size click target while keeping the item name and separate details link keyboard accessible.
 
 ## [3.0.0] - 2026-08-26
 

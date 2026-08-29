@@ -259,11 +259,18 @@ export default function EquipmentPanel({
                       />
                     </button>
                   </td>
-                  <th scope="row" className="py-1 py-lg-0">
+                  <th
+                    scope="row"
+                    className="clickable py-1 py-lg-0"
+                    onClick={() => onOpen(index)}
+                  >
                     <button
                       type="button"
                       className="btn btn-link p-0 text-reset font-weight-bold builder-table-action"
-                      onClick={() => onOpen(index)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onOpen(index);
+                      }}
                     >
                       {item.name || "-"}
                     </button>

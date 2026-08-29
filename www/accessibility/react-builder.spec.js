@@ -1610,6 +1610,20 @@ test("Builder equipment footer repeats totals and stat cells use real controls",
     await expect(page.getByRole("dialog", {name: "Choose Item"})).toBeVisible();
 });
 
+// The legacy Builder opened the item picker from the whole Name cell, not only
+// from the visible item-name text. Keep the larger pointer target while using a
+// real button for keyboard and assistive-technology semantics.
+test("Builder item name cells remain clickable across the whole cell", async function({page}) {
+    await page.goto(`${baseUrl}/builder/`);
+    const itemRow = equipmentTable(page).locator("tbody tr").nth(1);
+    const nameCell = itemRow.getByRole("rowheader");
+    const bounds = await nameCell.boundingBox();
+    expect(bounds).not.toBeNull();
+
+    await nameCell.click({position: {x: bounds.width - 40, y: bounds.height / 2}});
+    await expect(page.getByRole("dialog", {name: "Choose Item"})).toBeVisible();
+});
+
 // Catches the React table dropping the centered alignment used by the legacy
 // Builder for both repeated header rows and both repeated total rows.
 test("Builder centers repeated equipment headers and totals", async function({page}) {
