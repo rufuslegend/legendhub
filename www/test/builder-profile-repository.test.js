@@ -149,6 +149,50 @@ test("usedBytes sums only active encoded payload bytes for one member", async fu
     assert.deepEqual(executor.calls[0].values, [73]);
 });
 
+// Catches Account settings selecting profile/preference payloads, acquiring a
+// write lock, or issuing a second usage query instead of one safe projection.
+test("account storage summary is one payload-free nonlocking projection", async function() {
+    const executor = createExecutor(() => [{
+        PublicId: "active-id",
+        Name: "Hero",
+        Revision: "3",
+        UpdatedOn: NOW,
+        StorageGeneration: "7",
+        UsedBytes: "10485700"
+    }]);
+    const repository = createBuilderProfileRepository({pool: executor});
+
+    const summary = await repository.readStorageSummary(73);
+
+    assert.deepEqual(summary, {
+        profiles: [{
+            id: "active-id",
+            name: "Hero",
+            revision: 3,
+            updatedOn: NOW
+        }],
+        profileCount: 1,
+        storageGeneration: 7,
+        usedBytes: 10_485_700
+    });
+    assert.equal(executor.calls.length, 1);
+    const [{sql, values}] = executor.calls;
+    assert.match(sql, /AccountPreferences/i);
+    assert.match(sql, /BuilderProfiles/i);
+    assert.match(sql, /PayloadBytes/i);
+    assert.match(sql, /DeletedOn\s+IS\s+NULL/i);
+    assert.doesNotMatch(sql, /(?:^|[\s,])Payload(?:[\s,]|$)/i);
+    assert.doesNotMatch(sql, /\b(?:FOR\s+UPDATE|INSERT|UPDATE|DELETE)\b/i);
+    assert.deepEqual(values, [73]);
+});
+
+test("account storage summary defaults safely when preferences are absent", async function() {
+    const executor = createExecutor(() => []);
+    const repository = createBuilderProfileRepository({pool: executor});
+
+    assert.equal(await repository.readStorageSummary(73), null);
+});
+
 // Catches generation reads without a row lock, non-parameterized ownership,
 // or JSON result documents leaking through as driver-specific strings.
 test("preferences and import receipts are locked and scoped to their member", async function() {
@@ -257,4 +301,18 @@ test("import receipt keys preserve exact ASCII case at the repository boundary",
     assert.deepEqual(executor.calls.map(call => call.values[1]), [
         "ImportKey", "importkey", "ImportKey", "importkey"
     ]);
+});
+
+// Catches delete-all retaining payload-bearing idempotency receipts or deleting
+// another member's receipts outside the surrounding storage transaction.
+test("import receipt cleanup is member-scoped and uses the supplied transaction", async function() {
+    const executor = createExecutor(() => ({affectedRows: 3}));
+    const repository = createBuilderProfileRepository({pool: executor});
+
+    assert.equal(await repository.deleteImportReceipts(73, {executor}), 3);
+    assert.equal(executor.calls.length, 1);
+    assert.match(executor.calls[0].sql,
+        /^\s*DELETE\s+FROM\s+BuilderImportReceipts/i);
+    assert.match(executor.calls[0].sql, /WHERE\s+MemberId\s*=\s*\?/i);
+    assert.deepEqual(executor.calls[0].values, [73]);
 });

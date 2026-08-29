@@ -490,7 +490,7 @@ test("account route renders all notification settings", async function() {
                 pendingEmail: null,
                 canUseAccountStorage: true
             },
-            getBuilderAccountState: {
+            getBuilderAccountSummary: {
                 profiles: [{
                     id: "profile-1",
                     name: "Hero",
@@ -501,7 +501,6 @@ test("account route renders all notification settings", async function() {
                 usedBytes: 4096,
                 quotaBytes: 10_485_760,
                 storageGeneration: 7,
-                preferences: "{\"private\":true}",
                 memberId: 7,
                 storageNamespace: "private-namespace"
             }
@@ -554,9 +553,11 @@ test("account route renders all notification settings", async function() {
     for (const field of ["email", "verified", "pendingEmail", "canUseAccountStorage"])
         assert.match(captured.query, new RegExp(`\\b${field}\\b`));
     for (const field of ["id", "name", "revision", "updatedOn", "usedBytes",
-        "quotaBytes", "storageGeneration"]) {
+        "quotaBytes", "storageGeneration", "profileCount"]) {
         assert.match(captured.query, new RegExp(`\\b${field}\\b`));
     }
+    assert.match(captured.query, /getBuilderAccountSummary/);
+    assert.doesNotMatch(captured.query, /getBuilderAccountState/);
     assert.doesNotMatch(captured.query,
         /\b(payload|preferences|memberId|storageNamespace)\b/);
     assert.doesNotMatch(captured.query, /account-token/);

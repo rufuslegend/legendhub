@@ -83,7 +83,7 @@ router.get(["/", "/index.html"], async function(req, res, next) {
             pendingEmail
             canUseAccountStorage
         }
-        getBuilderAccountState(authToken: $authToken)
+        getBuilderAccountSummary(authToken: $authToken)
             @include(if: $includeBuilderStorage) {
             profiles {
                 id
@@ -94,6 +94,7 @@ router.get(["/", "/index.html"], async function(req, res, next) {
             usedBytes
             quotaBytes
             storageGeneration
+            profileCount
         }
     }
     `;
@@ -112,7 +113,7 @@ router.get(["/", "/index.html"], async function(req, res, next) {
         emailStatus: data.getAccountEmailStatus,
         builderStorage: builderStorageViewModel(
             res.locals.user,
-            data.getBuilderAccountState
+            data.getBuilderAccountSummary
         )
     };
     res.render("account/index", {title: "Account", vm});

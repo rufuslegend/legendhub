@@ -117,6 +117,28 @@ function createHarness(overrides = {}) {
                 throw overrides.readPreferencesError;
             return state.preferences && {...state.preferences};
         },
+        async readStorageSummary(memberId) {
+            state.calls.push(["readStorageSummary", memberId]);
+            if (overrides.readSummaryError)
+                throw overrides.readSummaryError;
+            if (memberId !== state.ownerMemberId || !state.preferences)
+                return null;
+            const profiles = state.profiles.filter(value => !value.deletedOn).map(value => ({
+                id: value.id,
+                name: value.name,
+                revision: value.revision,
+                updatedOn: value.updatedOn
+            }));
+            return {
+                profiles,
+                profileCount: profiles.length,
+                storageGeneration: state.preferences.storageGeneration,
+                usedBytes: profiles.reduce((total, value) => {
+                    const stored = state.profiles.find(profileValue => profileValue.id === value.id);
+                    return total + stored.payloadBytes;
+                }, 0)
+            };
+        },
         async writePreferences(memberId, value, options) {
             requireConnection(options);
             state.calls.push(["writePreferences", memberId, value]);
@@ -191,8 +213,16 @@ function createHarness(overrides = {}) {
         async readImportReceipt(memberId, idempotencyKey, options) {
             requireConnection(options);
             state.calls.push(["readImportReceipt", memberId, idempotencyKey]);
-            const result = state.receipts.get(`${memberId}:${idempotencyKey}`);
-            return result && {result: structuredClone(result), createdOn: NOW};
+            const stored = state.receipts.get(`${memberId}:${idempotencyKey}`);
+            if (!stored)
+                return null;
+            const result = stored.result || stored;
+            return {
+                result: structuredClone(result),
+                storageGeneration: stored.storageGeneration ??
+                    result.state?.storageGeneration,
+                createdOn: NOW
+            };
         },
         async writeImportReceipt(memberId, idempotencyKey, result, createdOn, options) {
             requireConnection(options);
@@ -201,8 +231,25 @@ function createHarness(overrides = {}) {
             ]);
             if (overrides.writeReceiptError)
                 throw overrides.writeReceiptError;
-            state.receipts.set(`${memberId}:${idempotencyKey}`, structuredClone(result));
+            state.receipts.set(`${memberId}:${idempotencyKey}`, {
+                result: structuredClone(result),
+                storageGeneration: result.state.storageGeneration
+            });
             return 1;
+        },
+        async deleteImportReceipts(memberId, options) {
+            requireConnection(options);
+            state.calls.push(["deleteImportReceipts", memberId]);
+            if (overrides.deleteReceiptsError)
+                throw overrides.deleteReceiptsError;
+            let removed = 0;
+            for (const key of [...state.receipts.keys()]) {
+                if (key.startsWith(`${memberId}:`)) {
+                    state.receipts.delete(key);
+                    removed += 1;
+                }
+            }
+            return removed;
         }
     };
     const validated = overrides.validated || {};
@@ -393,6 +440,7 @@ test("unverified member cannot read or mutate account storage", async function()
     const unverified = {...auth, emailVerified: false};
     const operations = [
         () => service.readPreferences(unverified),
+        () => service.readSummary(unverified),
         () => service.readState(unverified),
         () => service.exportAll(unverified),
         () => service.createProfile(unverified, {}),
@@ -406,6 +454,37 @@ test("unverified member cannot read or mutate account storage", async function()
     for (const operation of operations)
         await assert.rejects(operation(), error => error.extensions.code === 403);
     assert.deepEqual(state.calls, []);
+});
+
+// Catches Account settings falling back to the transactional/full-state path,
+// or allowing profile/preference payloads into the summary result.
+test("account storage summary is payload-free and does not open a transaction", async function() {
+    const {service, state, events} = createHarness({
+        profiles: [profile({payload: "private-profile-payload", payloadBytes: 23})],
+        preferences: {
+            payload: {theme: "private-preference"},
+            storageGeneration: 7
+        }
+    });
+
+    const result = await service.readSummary(auth);
+
+    assert.deepEqual(result, {
+        profiles: [{
+            id: "profile-id",
+            name: "Hero",
+            revision: 4,
+            updatedOn: NOW
+        }],
+        profileCount: 1,
+        storageGeneration: 7,
+        usedBytes: 23,
+        quotaBytes: QUOTA_BYTES
+    });
+    assert.deepEqual(state.calls, [["readStorageSummary", auth.memberId]]);
+    assert.deepEqual(events, []);
+    assert.equal(JSON.stringify(result).includes("private-profile-payload"), false);
+    assert.equal(JSON.stringify(result).includes("private-preference"), false);
 });
 
 // Catches server-render bootstrap using the full transactional Builder state
@@ -821,6 +900,10 @@ test("delete-all tombstones every active row and bumps generation in one transac
     const second = profile({id: "two", revision: 7, payloadBytes: 30});
     const {service, state, events} = createHarness({
         profiles: [first, second],
+        receipts: [[`${auth.memberId}:old-import`, {
+            result: {state: {profiles: [{payload: "private-receipt-payload"}]}},
+            storageGeneration: 1
+        }]],
         preferences: {
             payload: {
                 version: 1,
@@ -844,8 +927,10 @@ test("delete-all tombstones every active row and bumps generation in one transac
     assert.equal(state.profiles.every(value => value.deletedOn === NOW), true);
     assert.deepEqual(state.profiles.map(value => value.revision), [3, 8]);
     assert.deepEqual(state.calls.map(call => call[0]), [
-        "preferences", "list", "markDeleted", "markDeleted", "writePreferences"
+        "preferences", "list", "markDeleted", "markDeleted", "writePreferences",
+        "deleteImportReceipts"
     ]);
+    assert.equal(state.receipts.size, 0);
     assert.equal(state.preferences.storageGeneration, 2);
     assert.equal(state.preferences.revision, 3);
     assert.deepEqual(state.preferences.payload, {
@@ -858,6 +943,32 @@ test("delete-all tombstones every active row and bumps generation in one transac
         selectedVariant: null
     });
     assert.deepEqual(events, ["begin", "commit", "release"]);
+});
+
+// Catches receipt cleanup committing separately from profile tombstones and
+// generation rotation. A failure must restore both data and replay receipts.
+test("delete-all rolls back receipt cleanup with the account deletion", async function() {
+    const current = profile({id: "one", payload: "private-profile"});
+    const receiptKey = `${auth.memberId}:old-import`;
+    const receipt = {
+        result: {state: {profiles: [{payload: "private-receipt"}]}},
+        storageGeneration: 1
+    };
+    const {service, state, events} = createHarness({
+        profiles: [current],
+        receipts: [[receiptKey, receipt]],
+        deleteReceiptsError: new Error("receipt cleanup failed")
+    });
+
+    await assert.rejects(
+        service.deleteAll(auth, {storageGeneration: 1}),
+        error => error.message === "The request could not be completed."
+    );
+
+    assert.deepEqual(state.profiles, [current]);
+    assert.equal(state.preferences.storageGeneration, 1);
+    assert.deepEqual(state.receipts.get(receiptKey), receipt);
+    assert.deepEqual(events, ["begin", "rollback", "release"]);
 });
 
 // Catches batch validation occurring under locks, raw invalid payloads leaking
@@ -919,8 +1030,8 @@ test("batch import validates independently then classifies and commits one resul
         "begin", "validate:Same", "validate:Hero", "validate:Fresh", "validate:Broken",
         "begin"
     ]);
-    assert.deepEqual(state.calls.slice(0, 4).map(call => call[0]), [
-        "readImportReceipt", "preferences", "readImportReceipt", "list"
+    assert.deepEqual(state.calls.slice(0, 5).map(call => call[0]), [
+        "preferences", "readImportReceipt", "preferences", "readImportReceipt", "list"
     ]);
     const firstInsert = state.calls.findIndex(call => call[0] === "insert");
     assert.ok(state.calls.findIndex(call => call[0] === "usedBytes") < firstInsert);
@@ -956,9 +1067,69 @@ test("repeating an import key returns the stored result without new rows", async
     const second = await service.importProfiles(auth, input);
 
     assert.deepEqual(second, first);
+    assert.equal(state.receipts.get(`${auth.memberId}:repeat-key`).storageGeneration, 1);
     assert.equal(state.insertCount, first.copied.length + first.renamed.length);
-    assert.equal(state.calls.filter(call => call[0] === "preferences").length, 1);
+    assert.equal(state.calls.filter(call => call[0] === "preferences").length, 3);
     assert.equal(state.calls.filter(call => call[0] === "readImportReceipt").length, 3);
+});
+
+// Catches a payload-bearing receipt surviving generation rotation. Once
+// delete-all commits, the old key must neither disclose its state nor recreate
+// any profile when retried with the old generation.
+test("delete-all makes a prior import receipt unreplayable without recreating data", async function() {
+    const {service, state} = createHarness();
+    const input = {
+        idempotencyKey: "delete-replay-key",
+        storageGeneration: 1,
+        replacePreferences: false,
+        profiles: [{name: "Private", payload: "private-import-payload"}]
+    };
+    const imported = await service.importProfiles(auth, input);
+    assert.equal(JSON.stringify(imported).includes("private-import-payload"), true);
+    assert.equal(state.receipts.size, 1);
+
+    await service.deleteAll(auth, {storageGeneration: 1});
+    assert.equal(state.receipts.size, 0);
+    const insertCount = state.insertCount;
+
+    await assert.rejects(
+        service.importProfiles(auth, input),
+        error => error.extensions.code === 409
+    );
+    assert.equal(state.insertCount, insertCount);
+    assert.equal(state.profiles.filter(value => !value.deletedOn).length, 0);
+    assert.equal(JSON.stringify([...state.receipts.values()])
+        .includes("private-import-payload"), false);
+});
+
+// Catches a stale receipt that escaped cleanup being treated as authoritative
+// after the member generation changed.
+test("receipt replay is accepted only for the current storage generation", async function() {
+    const staleResult = {
+        copied: ["Private"],
+        state: {
+            profiles: [{payload: "private-stale-receipt"}],
+            storageGeneration: 1
+        }
+    };
+    const {service, state} = createHarness({
+        preferences: {storageGeneration: 2},
+        receipts: [[`${auth.memberId}:stale-receipt-key`, {
+            result: staleResult,
+            storageGeneration: 1
+        }]]
+    });
+
+    await assert.rejects(service.importProfiles(auth, {
+        idempotencyKey: "stale-receipt-key",
+        storageGeneration: 1,
+        replacePreferences: false,
+        profiles: [{name: "Private", payload: "private-stale-receipt"}]
+    }), error => error.extensions.code === 409);
+
+    assert.equal(state.insertCount, 0);
+    assert.equal(state.calls.filter(call => call[0] === "preferences").length, 2);
+    assert.equal(state.calls.filter(call => call[0] === "readImportReceipt").length, 2);
 });
 
 // Catches a completed key being coupled to a changed retry body. Authentication
@@ -983,7 +1154,7 @@ test("receipt replay ignores malformed changed import body fields", async functi
     assert.deepEqual(replay, first);
     assert.equal(validateCalls.length, 1);
     assert.equal(state.insertCount, 1);
-    assert.equal(state.calls.filter(call => call[0] === "preferences").length, 1);
+    assert.equal(state.calls.filter(call => call[0] === "preferences").length, 3);
 });
 
 test("receipt replay still requires verified auth and a valid key shape", async function() {
@@ -1080,10 +1251,17 @@ test("simultaneous import misses lock member state before receipt recheck", asyn
             else
                 assert.deepEqual(results.map(result => result.copied).sort(), [["First"], ["Second"]]);
 
-            const writeConnections = [...new Set(trace.filter(([, operation]) =>
+            const memberLockedConnections = [...new Set(trace.filter(([, operation]) =>
                 operation === "preferences").map(([idValue]) => idValue))];
-            assert.equal(writeConnections.length, 2);
-            for (const idValue of writeConnections) {
+            assert.equal(memberLockedConnections.length, 4);
+            for (const [idValue, operation] of trace.filter(([, value]) =>
+                value === "receipt")) {
+                const receiptIndex = trace.findIndex(entry =>
+                    entry[0] === idValue && entry[1] === operation);
+                assert.ok(trace.slice(0, receiptIndex).some(entry =>
+                    entry[0] === idValue && entry[1] === "preferences"));
+            }
+            for (const idValue of memberLockedConnections) {
                 assert.deepEqual(trace.filter(([traceId, operation]) =>
                     traceId === idValue && ["preferences", "receipt"].includes(operation))
                     .map(([, operation]) => operation), ["preferences", "receipt"]);
@@ -1275,7 +1453,7 @@ test("batch import locks member state then receipt and rejects stale generation 
 
     assert.deepEqual(trace, ["begin", "validate:One", "validate:Two", "begin"]);
     assert.deepEqual(state.calls.map(call => call[0]), [
-        "readImportReceipt", "preferences", "readImportReceipt"
+        "preferences", "readImportReceipt", "preferences", "readImportReceipt"
     ]);
     assert.equal(state.insertAttempts, 0);
 });

@@ -8,7 +8,7 @@ import {formatBuilderStorageUsage} from "./account-reducer.js";
 
 const EXPORT_ERROR = "Builder data could not be exported. Try again.";
 const DELETE_ERROR =
-    "Synced Builder data could not be deleted. Nothing was removed. Try again.";
+    "Deletion could not be confirmed. Reload this page and check your synced Builder data before trying again.";
 
 function exportFilename(date = new Date()) {
     return `legendhub-builder-${date.toISOString().slice(0, 10)}.txt`;
@@ -77,14 +77,23 @@ function DeleteAllDialog({storage, dispatch, requestPendingRef}) {
                 </p>
                 <p><strong>This action cannot be undone.</strong></p>
                 {storage.deleteError && (
-                    <p
-                        ref={errorRef}
-                        className="text-danger"
-                        role="alert"
-                        tabIndex="-1"
-                    >
-                        {DELETE_ERROR}
-                    </p>
+                    <>
+                        <p
+                            ref={errorRef}
+                            className="text-danger"
+                            role="alert"
+                            tabIndex="-1"
+                        >
+                            {DELETE_ERROR}
+                        </p>
+                        <button
+                            type="button"
+                            className="btn btn-primary mb-3"
+                            onClick={() => window.location.reload()}
+                        >
+                            Reload and check synced data
+                        </button>
+                    </>
                 )}
                 {deleting && (
                     <p role="status" aria-live="polite">

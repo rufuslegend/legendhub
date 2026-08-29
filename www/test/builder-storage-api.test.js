@@ -190,6 +190,7 @@ test("production schema exposes every Builder storage operation", function() {
     const mutations = schema.getMutationType().getFields();
 
     assert.ok(queries.getBuilderAccountState);
+    assert.ok(queries.getBuilderAccountSummary);
     assert.ok(queries.getBuilderAccountPreferences);
     assert.ok(queries.exportBuilderData);
     for (const name of [
@@ -210,6 +211,7 @@ test("production storage schema keeps its exact recursive bounded contract", fun
     const schema = loadApiRouter().schema;
     const operations = {
         getBuilderAccountPreferences: ["BuilderAccountPreferences!", {authToken: "String!"}],
+        getBuilderAccountSummary: ["BuilderAccountSummary!", {authToken: "String!"}],
         getBuilderAccountState: ["BuilderAccountState!", {authToken: "String!"}],
         exportBuilderData: ["String!", {authToken: "String!"}],
         createBuilderProfile: ["BuilderProfileResult!", {
@@ -238,6 +240,13 @@ test("production storage schema keeps its exact recursive bounded contract", fun
         BuilderAccountPreferences: {
             preferences: "String!", preferenceRevision: "Int!",
             storageGeneration: "Int!"
+        },
+        BuilderProfileSummary: {
+            id: "String!", name: "String!", revision: "Int!", updatedOn: "DateTime!"
+        },
+        BuilderAccountSummary: {
+            profiles: "[BuilderProfileSummary!]!", profileCount: "Int!",
+            storageGeneration: "Int!", usedBytes: "Int!", quotaBytes: "Int!"
         },
         BuilderProfile: {
             id: "String!", name: "String!", payload: "String", payloadVersion: "Int",
@@ -304,6 +313,52 @@ test("production storage schema keeps its exact recursive bounded contract", fun
         for (const argument of roots[name].args)
             assertBounded(argument.type);
     }
+});
+
+// Catches the Account settings resolver delegating to the full payload-bearing
+// state path or widening the protected summary projection.
+test("account storage summary exposes metadata only", async function() {
+    const fields = createBuilderStorageFields({
+        authenticate: async () => AUTH,
+        storageService: {
+            async readSummary() {
+                return {
+                    profiles: [{
+                        id: "profile-id",
+                        name: "Hero",
+                        revision: 4,
+                        updatedOn: NOW,
+                        payload: "private-profile-payload",
+                        memberId: 73
+                    }],
+                    profileCount: 1,
+                    storageGeneration: 2,
+                    usedBytes: 417,
+                    quotaBytes: 10_485_760,
+                    preferences: {payload: {theme: "private-preference"}}
+                };
+            }
+        }
+    });
+
+    const result = await fields.queryFields.getBuilderAccountSummary.resolve(
+        null, {authToken: "summary-token"}, {ip: "request"}
+    );
+
+    assert.deepEqual(result, {
+        profiles: [{
+            id: "profile-id",
+            name: "Hero",
+            revision: 4,
+            updatedOn: NOW
+        }],
+        profileCount: 1,
+        storageGeneration: 2,
+        usedBytes: 417,
+        quotaBytes: 10_485_760
+    });
+    assert.equal(JSON.stringify(result).includes("private-profile-payload"), false);
+    assert.equal(JSON.stringify(result).includes("private-preference"), false);
 });
 
 // Catches preference documents being exposed as mutable server objects or
@@ -458,6 +513,12 @@ test("every storage resolver authenticates without renewal then calls one servic
         }, {
             preferences: state().preferences,
             storageGeneration: 2
+        }],
+        ["queryFields", "getBuilderAccountSummary", "readSummary", {
+            authToken: "summary-token"
+        }, {
+            profiles: [], profileCount: 0, storageGeneration: 2,
+            usedBytes: 0, quotaBytes: 10_485_760
         }],
         ["queryFields", "getBuilderAccountState", "readState", {
             authToken: "read-token"

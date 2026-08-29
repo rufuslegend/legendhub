@@ -83,6 +83,35 @@ function createBuilderProfileRepository({pool}) {
             return rows.map(profileFromRow);
         },
 
+        async readStorageSummary(memberId, {executor = pool} = {}) {
+            const rows = await query(executor, `
+                SELECT BP.PublicId, BP.Name, BP.Revision, BP.UpdatedOn,
+                    AP.StorageGeneration,
+                    (SELECT COALESCE(SUM(UsageBP.PayloadBytes), 0)
+                     FROM BuilderProfiles AS UsageBP
+                     WHERE UsageBP.MemberId = AP.MemberId
+                         AND UsageBP.DeletedOn IS NULL) AS UsedBytes
+                FROM AccountPreferences AS AP
+                LEFT JOIN BuilderProfiles AS BP
+                    ON BP.MemberId = AP.MemberId AND BP.DeletedOn IS NULL
+                WHERE AP.MemberId = ?
+                ORDER BY BP.UpdatedOn, BP.Id`, [memberId]);
+            if (!rows[0])
+                return null;
+            const profiles = rows.filter(row => row.PublicId !== null).map(row => ({
+                id: row.PublicId,
+                name: row.Name,
+                revision: numberValue(row.Revision),
+                updatedOn: row.UpdatedOn
+            }));
+            return {
+                profiles,
+                profileCount: profiles.length,
+                storageGeneration: numberValue(rows[0].StorageGeneration),
+                usedBytes: numberValue(rows[0].UsedBytes || 0)
+            };
+        },
+
         async findByPublicIdForUpdate(memberId, publicId, {executor = pool} = {}) {
             const rows = await query(executor, `
                 SELECT ${PROFILE_COLUMNS}
@@ -240,6 +269,13 @@ function createBuilderProfileRepository({pool}) {
                 createdOn
             ]);
             return write.insertId;
+        },
+
+        async deleteImportReceipts(memberId, {executor = pool} = {}) {
+            const result = await query(executor, `
+                DELETE FROM BuilderImportReceipts
+                WHERE MemberId = ?`, [memberId]);
+            return numberValue(result.affectedRows);
         }
     };
 }

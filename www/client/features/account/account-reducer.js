@@ -190,7 +190,7 @@ export function accountReducer(state, action) {
                     builderStorage: {
                         ...state.builderStorage,
                         deleteStatus: "idle",
-                        deleteError: "delete-failed",
+                        deleteError: "delete-unconfirmed",
                         announcement: null
                     }
                 };
@@ -218,7 +218,7 @@ export function accountReducer(state, action) {
                 builderStorage: {
                     ...state.builderStorage,
                     deleteStatus: "idle",
-                    deleteError: "delete-failed",
+                    deleteError: "delete-unconfirmed",
                     announcement: null
                 }
             };

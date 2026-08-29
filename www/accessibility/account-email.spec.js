@@ -68,8 +68,8 @@ function loadAppWithAccountJourneys() {
                         pendingEmail: null,
                         canUseAccountStorage: emailVerified
                     },
-                    ...(query.includes("getBuilderAccountState") && emailVerified
-                        ? {getBuilderAccountState: builderStorageState}
+                    ...(query.includes("getBuilderAccountSummary") && emailVerified
+                        ? {getBuilderAccountSummary: builderStorageState}
                         : {})
                 };
             }
@@ -324,24 +324,17 @@ test("Builder storage exports fresh data and separately confirms generation-safe
 
 // Catches optimistic deletion or raw server diagnostics reaching the dialog;
 // the account snapshot and independent export recovery must remain available.
-test("Builder storage delete failure retains data and focuses a fixed safe error", async function({page}) {
+test("lost Builder delete response keeps a snapshot until reload confirms server state", async function({page}) {
     emailVerified = true;
     let exportCalls = 0;
     let deleteCalls = 0;
+    let deletionCommitted = false;
     await page.route(`${baseUrl}/api`, async function(route) {
         const body = route.request().postDataJSON();
         if (body.query.includes("DeleteAllBuilderData")) {
             deleteCalls += 1;
-            return route.fulfill({
-                contentType: "application/json",
-                body: JSON.stringify({
-                    data: {deleteAllBuilderData: null},
-                    errors: [{
-                        message: "private database diagnostic 6*secret-payload*",
-                        code: 500
-                    }]
-                })
-            });
+            deletionCommitted = true;
+            return route.abort("connectionreset");
         }
         if (body.query.includes("ExportBuilderData")) {
             exportCalls += 1;
@@ -368,14 +361,28 @@ test("Builder storage delete failure retains data and focuses a fixed safe error
     const error = dialog.getByRole("alert");
     await expect(error).toBeFocused();
     await expect(error).toHaveText(
-        "Synced Builder data could not be deleted. Nothing was removed. Try again."
+        "Deletion could not be confirmed. Reload this page and check your synced Builder data before trying again."
     );
-    await expect(dialog).not.toContainText("private database diagnostic");
     await expect(page.getByText("4 KB of 10 MB used", {exact: true})).toBeAttached();
     await expect(page.getByText("1 synced Builder profile", {exact: true})).toBeAttached();
 
-    await dialog.getByRole("button", {name: "Cancel deletion"}).click();
-    await expect(deleteTrigger).toBeFocused();
+    builderStorageState = deletionCommitted ? {
+        profiles: [],
+        preferences: "privatePreferenceAfterDeletion",
+        preferenceRevision: 8,
+        preferencesUpdatedOn: "2026-08-28T01:00:00.000Z",
+        storageGeneration: 8,
+        usedBytes: 0,
+        quotaBytes: 10_485_760
+    } : builderStorageState;
+    await dialog.getByRole("button", {name: "Reload and check synced data"}).click();
+    await expect(page.getByText("0 B of 10 MB used", {exact: true})).toBeVisible();
+    await expect(page.getByText("0 synced Builder profiles", {exact: true})).toBeVisible();
+    await expect(page.getByText("Storage version: 8", {exact: true})).toBeVisible();
+    await expect(page.getByRole("dialog", {
+        name: "Delete all synced Builder data"
+    })).toHaveCount(0);
+
     await page.getByRole("button", {name: "Export all Builder data"}).click();
     await expect.poll(() => exportCalls).toBe(1);
     expect(deleteCalls).toBe(1);

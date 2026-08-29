@@ -107,9 +107,10 @@ test("Builder delete-all stays separate until confirmation and cannot close whil
     assert.equal(accountReducer(state, {type: "storage/delete-requested"}), pending);
 });
 
-// Catches a failed delete clearing the UI optimistically or surfacing private
-// diagnostics instead of a fixed safe error while leaving recovery available.
-test("Builder delete failure retains every displayed server value", async function() {
+// Catches a lost response or malformed success clearing the UI optimistically,
+// claiming no deletion occurred, or surfacing private diagnostics. A failure is
+// ambiguous until the account state is loaded again.
+test("Builder delete ambiguity retains the snapshot and requires a reload check", async function() {
     const {accountReducer, createInitialAccountState} = await loadReducer();
     const initialStorage = {
         enabled: true,
@@ -146,8 +147,18 @@ test("Builder delete failure retains every displayed server value", async functi
     });
     assert.equal(state.builderStorage.deleteDialogOpen, true);
     assert.equal(state.builderStorage.deleteStatus, "idle");
-    assert.equal(state.builderStorage.deleteError, "delete-failed");
+    assert.equal(state.builderStorage.deleteError, "delete-unconfirmed");
     assert.equal(JSON.stringify(state).includes("private database diagnostic"), false);
+
+    state = accountReducer({
+        ...state,
+        builderStorage: {...state.builderStorage, deleteStatus: "deleting"}
+    }, {
+        type: "storage/delete-succeeded",
+        result: {status: "deleted"}
+    });
+    assert.equal(state.builderStorage.deleteError, "delete-unconfirmed");
+    assert.deepEqual(state.builderStorage.profiles, initialStorage.profiles);
 });
 
 // Catches successful deletion retaining account rows, accepting a stale or
@@ -178,7 +189,7 @@ test("Builder delete success clears account rows and adopts only a newer generat
             quotaBytes: 10_485_760
         }
     });
-    assert.equal(staleResult.builderStorage.deleteError, "delete-failed");
+    assert.equal(staleResult.builderStorage.deleteError, "delete-unconfirmed");
     assert.equal(staleResult.builderStorage.profiles.length, 1);
 
     state = accountReducer(state, {

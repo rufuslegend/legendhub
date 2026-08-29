@@ -114,6 +114,21 @@ function accountPreferencesResult(state) {
     };
 }
 
+function accountSummaryResult(summary) {
+    return {
+        profiles: summary.profiles.map(profile => ({
+            id: profile.id,
+            name: profile.name,
+            revision: profile.revision,
+            updatedOn: profile.updatedOn
+        })),
+        profileCount: summary.profileCount,
+        storageGeneration: summary.storageGeneration,
+        usedBytes: summary.usedBytes,
+        quotaBytes: summary.quotaBytes
+    };
+}
+
 function profileResult(result) {
     return {
         status: result.status,
@@ -203,6 +218,31 @@ const builderAccountStateType = new gql.GraphQLObjectType({
     })
 });
 
+const builderProfileSummaryType = new gql.GraphQLObjectType({
+    name: "BuilderProfileSummary",
+    fields: () => ({
+        id: {type: new gql.GraphQLNonNull(gql.GraphQLString)},
+        name: {type: new gql.GraphQLNonNull(gql.GraphQLString)},
+        revision: {type: new gql.GraphQLNonNull(gql.GraphQLInt)},
+        updatedOn: {type: new gql.GraphQLNonNull(GraphQLDateTime)}
+    })
+});
+
+const builderAccountSummaryType = new gql.GraphQLObjectType({
+    name: "BuilderAccountSummary",
+    fields: () => ({
+        profiles: {
+            type: new gql.GraphQLNonNull(new gql.GraphQLList(
+                new gql.GraphQLNonNull(builderProfileSummaryType)
+            ))
+        },
+        profileCount: {type: new gql.GraphQLNonNull(gql.GraphQLInt)},
+        storageGeneration: {type: new gql.GraphQLNonNull(gql.GraphQLInt)},
+        usedBytes: {type: new gql.GraphQLNonNull(gql.GraphQLInt)},
+        quotaBytes: {type: new gql.GraphQLNonNull(gql.GraphQLInt)}
+    })
+});
+
 const builderAccountPreferencesType = new gql.GraphQLObjectType({
     name: "BuilderAccountPreferences",
     fields: () => ({
@@ -275,6 +315,20 @@ function createBuilderStorageFields({
     storageService: service = storageService
 } = {}) {
     const queryFields = {
+        getBuilderAccountSummary: {
+            type: new gql.GraphQLNonNull(builderAccountSummaryType),
+            args: {...authTokenArgument},
+            resolve: function(_, {authToken}, req) {
+                return authenticatedRequest({
+                    authenticate,
+                    req,
+                    authToken,
+                    operation: async authenticated => accountSummaryResult(
+                        await service.readSummary(authenticated)
+                    )
+                });
+            }
+        },
         getBuilderAccountPreferences: {
             type: new gql.GraphQLNonNull(builderAccountPreferencesType),
             args: {...authTokenArgument},
@@ -485,12 +539,14 @@ module.exports = {
     queryFields: fields.queryFields,
     types: {
         builderAccountPreferencesType,
+        builderAccountSummaryType,
         builderAccountStateType,
         builderDeleteAllResultType,
         builderImportProfileInputType,
         builderImportResultType,
         builderPreferencesResultType,
         builderProfileResultType,
+        builderProfileSummaryType,
         builderProfileType
     }
 };

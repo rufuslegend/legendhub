@@ -51,6 +51,11 @@ function assertGeneration(preferences, expected) {
         throw new ConflictError("Account storage changed. Reload before saving.");
 }
 
+function receiptMatchesGeneration(receipt, preferences) {
+    return Boolean(receipt && preferences &&
+        receipt.result?.state?.storageGeneration === preferences.storageGeneration);
+}
+
 function assertWithinQuota(usedBytes) {
     if (usedBytes > QUOTA_BYTES)
         throw new PayloadTooLargeError("Builder account storage is limited to 10 MB.");
@@ -254,6 +259,51 @@ function createBuilderStorageService({
                 quotaBytes: QUOTA_BYTES
             };
         });
+    }
+
+    async function readSummary(auth) {
+        const memberId = requireVerifiedMember(auth);
+        try {
+            const stored = await repository.readStorageSummary(memberId);
+            const summary = stored || {
+                profiles: [],
+                profileCount: 0,
+                storageGeneration: 1,
+                usedBytes: 0
+            };
+            if (!Array.isArray(summary.profiles) ||
+                summary.profileCount !== summary.profiles.length ||
+                !Number.isSafeInteger(summary.storageGeneration) ||
+                summary.storageGeneration < 1 ||
+                !Number.isSafeInteger(summary.usedBytes) || summary.usedBytes < 0 ||
+                summary.usedBytes > QUOTA_BYTES) {
+                throw new Error("Stored Builder summary metadata is invalid.");
+            }
+            const profiles = summary.profiles.map(profile => {
+                if (typeof profile?.id !== "string" || !profile.id ||
+                    typeof profile.name !== "string" || !profile.name ||
+                    !Number.isSafeInteger(profile.revision) || profile.revision < 1 ||
+                    !profile.updatedOn) {
+                    throw new Error("Stored Builder summary profile is invalid.");
+                }
+                return {
+                    id: profile.id,
+                    name: profile.name,
+                    revision: profile.revision,
+                    updatedOn: profile.updatedOn
+                };
+            });
+            return {
+                profiles,
+                profileCount: profiles.length,
+                storageGeneration: summary.storageGeneration,
+                usedBytes: summary.usedBytes,
+                quotaBytes: QUOTA_BYTES
+            };
+        }
+        catch {
+            throw new gql.GraphQLError("The request could not be completed.");
+        }
     }
 
     async function exportAll(auth) {
@@ -470,10 +520,16 @@ function createBuilderStorageService({
         requireObject(input);
         const idempotencyKey = requireIdempotencyKey(input.idempotencyKey);
         const replay = await runStorageTransaction(pool, async function(connection) {
-            const receipt = await repository.readImportReceipt(
-                memberId, idempotencyKey, {executor: connection}
+            const options = {executor: connection};
+            const currentPreferences = await repository.readPreferencesForUpdate(
+                memberId, options
             );
-            return receipt ? receipt.result : null;
+            const receipt = await repository.readImportReceipt(
+                memberId, idempotencyKey, options
+            );
+            return receiptMatchesGeneration(receipt, currentPreferences)
+                ? receipt.result
+                : null;
         });
         if (replay)
             return replay;
@@ -500,8 +556,10 @@ function createBuilderStorageService({
             const receipt = await repository.readImportReceipt(
                 memberId, idempotencyKey, options
             );
-            if (receipt)
+            if (receiptMatchesGeneration(receipt, currentPreferences))
                 return receipt.result;
+            if (receipt)
+                throw new ConflictError("Account storage changed. Reload before saving.");
 
             assertGeneration(currentPreferences, expectedGeneration);
             const accountProfiles = await repository.list(memberId, options);
@@ -627,6 +685,7 @@ function createBuilderStorageService({
                 updatedOn: deletedOn
             };
             await repository.writePreferences(memberId, preferences, options);
+            await repository.deleteImportReceipts(memberId, options);
             return {
                 status: "deleted",
                 storageGeneration: preferences.storageGeneration,
@@ -638,6 +697,7 @@ function createBuilderStorageService({
 
     return {
         readPreferences,
+        readSummary,
         readState,
         exportAll,
         createProfile,
