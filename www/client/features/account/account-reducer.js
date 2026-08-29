@@ -13,7 +13,72 @@ const emptyEmailStatus = {
     canUseAccountStorage: false
 };
 
-export function createInitialAccountState(notificationSettings, suppliedEmailStatus) {
+export const BUILDER_ACCOUNT_QUOTA_BYTES = 10 * 1024 * 1024;
+
+const emptyBuilderStorage = {
+    enabled: false,
+    profiles: [],
+    usedBytes: 0,
+    quotaBytes: 0,
+    storageGeneration: 0,
+    exportStatus: "idle",
+    exportError: null,
+    deleteDialogOpen: false,
+    deleteStatus: "idle",
+    deleteError: null,
+    announcement: null
+};
+
+function safeNonnegativeInteger(value, fallback = 0) {
+    return Number.isSafeInteger(value) && value >= 0 ? value : fallback;
+}
+
+function createInitialBuilderStorage(emailStatus, suppliedBuilderStorage) {
+    if (!emailStatus.canUseAccountStorage || suppliedBuilderStorage?.enabled !== true)
+        return {...emptyBuilderStorage};
+
+    return {
+        ...emptyBuilderStorage,
+        enabled: true,
+        profiles: Array.isArray(suppliedBuilderStorage.profiles)
+            ? suppliedBuilderStorage.profiles.map(profile => ({
+                id: profile.id,
+                name: profile.name,
+                revision: profile.revision,
+                updatedOn: profile.updatedOn
+            }))
+            : [],
+        usedBytes: safeNonnegativeInteger(suppliedBuilderStorage.usedBytes),
+        quotaBytes: suppliedBuilderStorage.quotaBytes === BUILDER_ACCOUNT_QUOTA_BYTES
+            ? suppliedBuilderStorage.quotaBytes
+            : BUILDER_ACCOUNT_QUOTA_BYTES,
+        storageGeneration: safeNonnegativeInteger(
+            suppliedBuilderStorage.storageGeneration
+        )
+    };
+}
+
+function formatBytes(value) {
+    const bytes = safeNonnegativeInteger(value);
+    if (bytes < 1024)
+        return `${bytes} B`;
+    if (bytes < 1024 * 1024) {
+        const kilobytes = bytes / 1024;
+        return `${Number(kilobytes.toFixed(1))} KB`;
+    }
+    const megabytes = bytes / (1024 * 1024);
+    return `${Number(megabytes.toFixed(1))} MB`;
+}
+
+export function formatBuilderStorageUsage(usedBytes) {
+    return `${formatBytes(usedBytes)} of 10 MB used`;
+}
+
+export function createInitialAccountState(
+    notificationSettings,
+    suppliedEmailStatus,
+    suppliedBuilderStorage
+) {
     const emailStatus = {...emptyEmailStatus, ...suppliedEmailStatus};
     return {
         notificationEditor: {
@@ -34,12 +99,140 @@ export function createInitialAccountState(notificationSettings, suppliedEmailSta
             error: null,
             announcement: null,
             resendCooldownSeconds: 0
-        }
+        },
+        builderStorage: createInitialBuilderStorage(
+            emailStatus,
+            suppliedBuilderStorage
+        )
     };
 }
 
 export function accountReducer(state, action) {
     switch (action.type) {
+        case "storage/export-requested":
+            if (!state.builderStorage.enabled ||
+                state.builderStorage.exportStatus === "exporting") {
+                return state;
+            }
+            return {
+                ...state,
+                builderStorage: {
+                    ...state.builderStorage,
+                    exportStatus: "exporting",
+                    exportError: null,
+                    announcement: null
+                }
+            };
+        case "storage/export-succeeded":
+            if (state.builderStorage.exportStatus !== "exporting")
+                return state;
+            return {
+                ...state,
+                builderStorage: {
+                    ...state.builderStorage,
+                    exportStatus: "idle",
+                    exportError: null,
+                    announcement: "exported"
+                }
+            };
+        case "storage/export-failed":
+            if (state.builderStorage.exportStatus !== "exporting")
+                return state;
+            return {
+                ...state,
+                builderStorage: {
+                    ...state.builderStorage,
+                    exportStatus: "idle",
+                    exportError: "export-failed",
+                    announcement: null
+                }
+            };
+        case "storage/dialog-opened":
+            if (!state.builderStorage.enabled ||
+                state.builderStorage.deleteStatus === "deleting") {
+                return state;
+            }
+            return {
+                ...state,
+                builderStorage: {
+                    ...state.builderStorage,
+                    deleteDialogOpen: true,
+                    deleteError: null,
+                    announcement: null
+                }
+            };
+        case "storage/delete-requested":
+            if (!state.builderStorage.enabled ||
+                !state.builderStorage.deleteDialogOpen ||
+                state.builderStorage.deleteStatus === "deleting") {
+                return state;
+            }
+            return {
+                ...state,
+                builderStorage: {
+                    ...state.builderStorage,
+                    deleteStatus: "deleting",
+                    deleteError: null,
+                    announcement: null
+                }
+            };
+        case "storage/delete-succeeded": {
+            const result = action.result;
+            const valid = state.builderStorage.deleteStatus === "deleting" &&
+                result?.status === "deleted" &&
+                result.storageGeneration ===
+                    state.builderStorage.storageGeneration + 1 &&
+                result.usedBytes === 0 &&
+                result.quotaBytes === BUILDER_ACCOUNT_QUOTA_BYTES;
+            if (!valid) {
+                return {
+                    ...state,
+                    builderStorage: {
+                        ...state.builderStorage,
+                        deleteStatus: "idle",
+                        deleteError: "delete-failed",
+                        announcement: null
+                    }
+                };
+            }
+            return {
+                ...state,
+                builderStorage: {
+                    ...state.builderStorage,
+                    profiles: [],
+                    usedBytes: result.usedBytes,
+                    quotaBytes: result.quotaBytes,
+                    storageGeneration: result.storageGeneration,
+                    deleteDialogOpen: false,
+                    deleteStatus: "idle",
+                    deleteError: null,
+                    announcement: "deleted"
+                }
+            };
+        }
+        case "storage/delete-failed":
+            if (state.builderStorage.deleteStatus !== "deleting")
+                return state;
+            return {
+                ...state,
+                builderStorage: {
+                    ...state.builderStorage,
+                    deleteStatus: "idle",
+                    deleteError: "delete-failed",
+                    announcement: null
+                }
+            };
+        case "storage/dialog-closed":
+            if (state.builderStorage.deleteStatus === "deleting")
+                return state;
+            return {
+                ...state,
+                builderStorage: {
+                    ...state.builderStorage,
+                    deleteDialogOpen: false,
+                    deleteError: null
+                }
+            };
         case "notification/edit":
             return {
                 ...state,

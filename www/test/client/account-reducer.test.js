@@ -58,8 +58,179 @@ test("initial state loads every route-provided notification setting", async func
             error: null,
             announcement: null,
             resendCooldownSeconds: 0
+        },
+        builderStorage: {
+            enabled: false,
+            profiles: [],
+            usedBytes: 0,
+            quotaBytes: 0,
+            storageGeneration: 0,
+            exportStatus: "idle",
+            exportError: null,
+            deleteDialogOpen: false,
+            deleteStatus: "idle",
+            deleteError: null,
+            announcement: null
         }
     });
+});
+
+// Catches the destructive trigger itself starting a request, losing the
+// server snapshot while merely opening the dialog, or allowing dialog closure
+// while the confirmed request is pending.
+test("Builder delete-all stays separate until confirmation and cannot close while pending", async function() {
+    const {accountReducer, createInitialAccountState} = await loadReducer();
+    const profiles = [{
+        id: "profile-1",
+        name: "Hero",
+        revision: 4,
+        updatedOn: "2026-08-28T00:00:00.000Z"
+    }];
+    let state = createInitialAccountState(notificationSettings, emailStatus, {
+        enabled: true,
+        profiles,
+        usedBytes: 2048,
+        quotaBytes: 10_485_760,
+        storageGeneration: 7
+    });
+
+    state = accountReducer(state, {type: "storage/dialog-opened"});
+    assert.equal(state.builderStorage.deleteDialogOpen, true);
+    assert.equal(state.builderStorage.deleteStatus, "idle");
+    assert.deepEqual(state.builderStorage.profiles, profiles);
+
+    state = accountReducer(state, {type: "storage/delete-requested"});
+    assert.equal(state.builderStorage.deleteStatus, "deleting");
+    assert.equal(state.builderStorage.deleteDialogOpen, true);
+    const pending = state;
+    assert.equal(accountReducer(state, {type: "storage/dialog-closed"}), pending);
+    assert.equal(accountReducer(state, {type: "storage/delete-requested"}), pending);
+});
+
+// Catches a failed delete clearing the UI optimistically or surfacing private
+// diagnostics instead of a fixed safe error while leaving recovery available.
+test("Builder delete failure retains every displayed server value", async function() {
+    const {accountReducer, createInitialAccountState} = await loadReducer();
+    const initialStorage = {
+        enabled: true,
+        profiles: [{
+            id: "profile-1",
+            name: "Hero",
+            revision: 4,
+            updatedOn: "2026-08-28T00:00:00.000Z"
+        }],
+        usedBytes: 2048,
+        quotaBytes: 10_485_760,
+        storageGeneration: 7
+    };
+    let state = createInitialAccountState(
+        notificationSettings, emailStatus, initialStorage
+    );
+    state = accountReducer(state, {type: "storage/dialog-opened"});
+    state = accountReducer(state, {type: "storage/delete-requested"});
+    state = accountReducer(state, {
+        type: "storage/delete-failed",
+        error: "private database diagnostic 6*secret-payload*"
+    });
+
+    assert.deepEqual({
+        profiles: state.builderStorage.profiles,
+        usedBytes: state.builderStorage.usedBytes,
+        quotaBytes: state.builderStorage.quotaBytes,
+        storageGeneration: state.builderStorage.storageGeneration
+    }, {
+        profiles: initialStorage.profiles,
+        usedBytes: initialStorage.usedBytes,
+        quotaBytes: initialStorage.quotaBytes,
+        storageGeneration: initialStorage.storageGeneration
+    });
+    assert.equal(state.builderStorage.deleteDialogOpen, true);
+    assert.equal(state.builderStorage.deleteStatus, "idle");
+    assert.equal(state.builderStorage.deleteError, "delete-failed");
+    assert.equal(JSON.stringify(state).includes("private database diagnostic"), false);
+});
+
+// Catches successful deletion retaining account rows, accepting a stale or
+// malformed generation, or dropping the server-owned fixed quota.
+test("Builder delete success clears account rows and adopts only a newer generation", async function() {
+    const {accountReducer, createInitialAccountState} = await loadReducer();
+    let state = createInitialAccountState(notificationSettings, emailStatus, {
+        enabled: true,
+        profiles: [{
+            id: "profile-1",
+            name: "Hero",
+            revision: 4,
+            updatedOn: "2026-08-28T00:00:00.000Z"
+        }],
+        usedBytes: 2048,
+        quotaBytes: 10_485_760,
+        storageGeneration: 7
+    });
+    state = accountReducer(state, {type: "storage/dialog-opened"});
+    state = accountReducer(state, {type: "storage/delete-requested"});
+
+    const staleResult = accountReducer(state, {
+        type: "storage/delete-succeeded",
+        result: {
+            status: "deleted",
+            storageGeneration: 7,
+            usedBytes: 0,
+            quotaBytes: 10_485_760
+        }
+    });
+    assert.equal(staleResult.builderStorage.deleteError, "delete-failed");
+    assert.equal(staleResult.builderStorage.profiles.length, 1);
+
+    state = accountReducer(state, {
+        type: "storage/delete-succeeded",
+        result: {
+            status: "deleted",
+            storageGeneration: 8,
+            usedBytes: 0,
+            quotaBytes: 10_485_760
+        }
+    });
+    assert.deepEqual(state.builderStorage.profiles, []);
+    assert.equal(state.builderStorage.usedBytes, 0);
+    assert.equal(state.builderStorage.quotaBytes, 10_485_760);
+    assert.equal(state.builderStorage.storageGeneration, 8);
+    assert.equal(state.builderStorage.deleteDialogOpen, false);
+    assert.equal(state.builderStorage.announcement, "deleted");
+});
+
+// Catches export failure mutating account rows/generation, opening deletion,
+// or preventing a later separately confirmed delete from being offered.
+test("Builder export failure remains isolated from destructive state", async function() {
+    const {accountReducer, createInitialAccountState} = await loadReducer();
+    const profiles = [{
+        id: "profile-1",
+        name: "Hero",
+        revision: 4,
+        updatedOn: "2026-08-28T00:00:00.000Z"
+    }];
+    let state = createInitialAccountState(notificationSettings, emailStatus, {
+        enabled: true,
+        profiles,
+        usedBytes: 2048,
+        quotaBytes: 10_485_760,
+        storageGeneration: 7
+    });
+    state = accountReducer(state, {type: "storage/export-requested"});
+    assert.equal(state.builderStorage.exportStatus, "exporting");
+    state = accountReducer(state, {
+        type: "storage/export-failed",
+        error: "private export payload 6*secret*"
+    });
+
+    assert.equal(state.builderStorage.exportError, "export-failed");
+    assert.equal(state.builderStorage.deleteDialogOpen, false);
+    assert.deepEqual(state.builderStorage.profiles, profiles);
+    assert.equal(state.builderStorage.storageGeneration, 7);
+    assert.equal(JSON.stringify(state).includes("private export payload"), false);
+
+    state = accountReducer(state, {type: "storage/dialog-opened"});
+    assert.equal(state.builderStorage.deleteDialogOpen, true);
+    assert.equal(state.builderStorage.deleteStatus, "idle");
 });
 
 test("notification editing tracks dirty values and cancel restores the saved snapshot", async function() {

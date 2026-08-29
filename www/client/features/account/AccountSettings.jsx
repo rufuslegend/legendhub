@@ -7,6 +7,7 @@ import {
     updatePassword
 } from "./account-api.js";
 import {accountReducer, createInitialAccountState} from "./account-reducer.js";
+import BuilderStorageManager from "./BuilderStorageManager.jsx";
 
 const notificationLabels = {
     itemAdded: "Item Added",
@@ -556,13 +557,18 @@ function PasswordEditor({editor, dispatch}) {
     );
 }
 
-export default function AccountSettings({notificationSettings, emailStatus}) {
+export default function AccountSettings({
+    notificationSettings,
+    emailStatus,
+    builderStorage
+}) {
     const [state, dispatch] = useReducer(
         accountReducer,
-        {notificationSettings, emailStatus},
+        {notificationSettings, emailStatus, builderStorage},
         initial => createInitialAccountState(
             initial.notificationSettings,
-            initial.emailStatus
+            initial.emailStatus,
+            initial.builderStorage
         )
     );
 
@@ -574,6 +580,7 @@ export default function AccountSettings({notificationSettings, emailStatus}) {
                 </div>
             </div>
             <EmailEditor editor={state.emailEditor} dispatch={dispatch} />
+            <BuilderStorageManager storage={state.builderStorage} dispatch={dispatch} />
             <NotificationEditor editor={state.notificationEditor} dispatch={dispatch} />
             <PasswordEditor editor={state.passwordEditor} dispatch={dispatch} />
         </main>

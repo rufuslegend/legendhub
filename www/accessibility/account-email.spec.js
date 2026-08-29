@@ -18,6 +18,7 @@ const notificationSettings = {
 };
 
 let baseUrl;
+let builderStorageState;
 let emailVerified;
 let restoreDependencies;
 let server;
@@ -66,7 +67,10 @@ function loadAppWithAccountJourneys() {
                         verified: emailVerified,
                         pendingEmail: null,
                         canUseAccountStorage: emailVerified
-                    }
+                    },
+                    ...(query.includes("getBuilderAccountState") && emailVerified
+                        ? {getBuilderAccountState: builderStorageState}
+                        : {})
                 };
             }
             throw new Error("No account-email accessibility fixture matches the GraphQL query.");
@@ -120,12 +124,324 @@ test.afterAll(async function() {
 
 test.beforeEach(async function({context, page}) {
     emailVerified = false;
+    builderStorageState = {
+        profiles: [{
+            id: "profile-1",
+            name: "Hero",
+            payload: "6*private-builder-payload*",
+            payloadVersion: 6,
+            payloadBytes: 4096,
+            revision: 4,
+            createdOn: "2026-08-26T00:00:00.000Z",
+            updatedOn: "2026-08-28T00:00:00.000Z",
+            deletedOn: null
+        }],
+        preferences: "{\"privatePreference\":\"must-not-render\"}",
+        preferenceRevision: 3,
+        preferencesUpdatedOn: "2026-08-28T00:00:00.000Z",
+        storageGeneration: 7,
+        usedBytes: 4096,
+        quotaBytes: 10_485_760,
+        memberId: 7,
+        storageNamespace: "private-storage-namespace"
+    };
     await context.addCookies([{name: "loginToken", value: "initial-session", url: baseUrl}]);
     await page.route(/^https?:\/\//, function(route) {
         if (route.request().url().startsWith(baseUrl))
             return route.continue();
         return fulfillLocalBrowserScript(route);
     });
+});
+
+// Catches stale-prop export, destructive action without a second explicit
+// confirmation, payload retention, broken modal focus, generation omission,
+// or delete-all modifying this browser's anonymous source/acknowledgement.
+test("Builder storage exports fresh data and separately confirms generation-safe deletion", async function({context, page}) {
+    emailVerified = true;
+    await context.addCookies([{
+        name: "anonymous-builder-preference",
+        value: "keep-cookie",
+        url: baseUrl
+    }]);
+    await page.addInitScript(function() {
+        localStorage.setItem("cln", "6*Anonymous~Original~keep-local*");
+        localStorage.setItem(
+            "legendhub-builder-import:private-storage-namespace",
+            "a".repeat(64)
+        );
+        window.__builderDownloadEvents = [];
+        window.URL.createObjectURL = function(blob) {
+            window.__builderDownloadEvents.push({
+                type: "create",
+                blobType: blob.type,
+                size: blob.size
+            });
+            return "blob:builder-export";
+        };
+        window.URL.revokeObjectURL = function(value) {
+            window.__builderDownloadEvents.push({type: "revoke", value});
+        };
+        const click = HTMLAnchorElement.prototype.click;
+        HTMLAnchorElement.prototype.click = function() {
+            if (this.download) {
+                window.__builderDownloadEvents.push({
+                    type: "click",
+                    download: this.download,
+                    href: this.href
+                });
+                return;
+            }
+            return click.call(this);
+        };
+    });
+
+    let deleteCalls = 0;
+    let exportCalls = 0;
+    let releaseDelete;
+    const requestBodies = [];
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const body = route.request().postDataJSON();
+        requestBodies.push(body);
+        if (body.query.includes("ExportBuilderData")) {
+            exportCalls += 1;
+            return route.fulfill({
+                contentType: "application/json",
+                body: JSON.stringify({data: {
+                    exportBuilderData: "6*Fresh~Original~protected-current*"
+                }})
+            });
+        }
+        if (body.query.includes("DeleteAllBuilderData")) {
+            deleteCalls += 1;
+            await new Promise(resolve => { releaseDelete = resolve; });
+            return route.fulfill({
+                contentType: "application/json",
+                body: JSON.stringify({data: {deleteAllBuilderData: {
+                    status: "deleted",
+                    storageGeneration: 8,
+                    usedBytes: 0,
+                    quotaBytes: 10_485_760
+                }}})
+            });
+        }
+        return route.abort();
+    });
+
+    await page.goto(`${baseUrl}/account/`);
+    const propsText = await page.locator('[data-react-props="account-settings"]')
+        .textContent();
+    const props = JSON.parse(propsText);
+    expect(props.builderStorage).toEqual({
+        enabled: true,
+        profiles: [{
+            id: "profile-1",
+            name: "Hero",
+            revision: 4,
+            updatedOn: "2026-08-28T00:00:00.000Z"
+        }],
+        usedBytes: 4096,
+        quotaBytes: 10_485_760,
+        storageGeneration: 7
+    });
+    for (const privateValue of [
+        "private-builder-payload", "privatePreference", "memberId",
+        "private-storage-namespace", "initial-session"
+    ])
+        expect(propsText).not.toContain(privateValue);
+
+    await expect(page.getByRole("heading", {name: "Builder storage"})).toBeVisible();
+    await expect(page.getByText("4 KB of 10 MB used", {exact: true})).toBeVisible();
+    await page.getByRole("button", {name: "Export all Builder data"}).click();
+    await expect.poll(() => exportCalls).toBe(1);
+    expect(await page.evaluate(() => window.__builderDownloadEvents)).toEqual([
+        {type: "create", blobType: "text/plain;charset=utf-8", size: 35},
+        {
+            type: "click",
+            download: expect.stringMatching(/^legendhub-builder-\d{4}-\d{2}-\d{2}\.txt$/),
+            href: "blob:builder-export"
+        },
+        {type: "revoke", value: "blob:builder-export"}
+    ]);
+    await expect(page.locator("body")).not.toContainText("protected-current");
+
+    const deleteTrigger = page.getByRole("button", {
+        name: "Delete all synced Builder data",
+        exact: true
+    });
+    await deleteTrigger.click();
+    expect(deleteCalls).toBe(0);
+    let dialog = page.getByRole("dialog", {name: "Delete all synced Builder data"});
+    await expect(dialog.getByRole("button", {name: "Cancel deletion"})).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(deleteTrigger).toBeFocused();
+
+    await deleteTrigger.click();
+    dialog = page.getByRole("dialog", {name: "Delete all synced Builder data"});
+    await dialog.getByRole("button", {
+        name: "Permanently delete synced Builder data"
+    }).click();
+    await expect.poll(() => deleteCalls).toBe(1);
+    await expect(dialog.getByRole("button", {
+        name: "Permanently deleting synced Builder data"
+    })).toBeDisabled();
+    await expect(dialog.getByRole("button", {name: "Cancel deletion"})).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeVisible();
+    releaseDelete();
+
+    await expect(dialog).toHaveCount(0);
+    await expect(deleteTrigger).toBeFocused();
+    await expect(page.getByRole("status").filter({
+        hasText: "All synced Builder data was deleted."
+    })).toBeVisible();
+    await expect(page.getByText("0 B of 10 MB used", {exact: true})).toBeVisible();
+    await expect(page.getByText("Storage version: 8", {exact: true})).toBeVisible();
+    await expect(page.getByText("0 synced Builder profiles", {exact: true})).toBeVisible();
+
+    const deleteBody = requestBodies.find(body => body.query.includes("DeleteAllBuilderData"));
+    expect(deleteBody.variables).toEqual({
+        authToken: "initial-session",
+        storageGeneration: 7
+    });
+    expect(await page.evaluate(function() {
+        return {
+            lists: localStorage.getItem("cln"),
+            acknowledgement: localStorage.getItem(
+                "legendhub-builder-import:private-storage-namespace"
+            )
+        };
+    })).toEqual({
+        lists: "6*Anonymous~Original~keep-local*",
+        acknowledgement: "a".repeat(64)
+    });
+    const anonymousCookie = (await context.cookies(baseUrl)).find(
+        cookie => cookie.name === "anonymous-builder-preference"
+    );
+    expect(anonymousCookie?.value).toBe("keep-cookie");
+    await expectNoAxeViolations(page, '[data-react-root="account-settings"]');
+});
+
+// Catches optimistic deletion or raw server diagnostics reaching the dialog;
+// the account snapshot and independent export recovery must remain available.
+test("Builder storage delete failure retains data and focuses a fixed safe error", async function({page}) {
+    emailVerified = true;
+    let exportCalls = 0;
+    let deleteCalls = 0;
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const body = route.request().postDataJSON();
+        if (body.query.includes("DeleteAllBuilderData")) {
+            deleteCalls += 1;
+            return route.fulfill({
+                contentType: "application/json",
+                body: JSON.stringify({
+                    data: {deleteAllBuilderData: null},
+                    errors: [{
+                        message: "private database diagnostic 6*secret-payload*",
+                        code: 500
+                    }]
+                })
+            });
+        }
+        if (body.query.includes("ExportBuilderData")) {
+            exportCalls += 1;
+            return route.fulfill({
+                contentType: "application/json",
+                body: JSON.stringify({data: {exportBuilderData: "6*Recovery*"}})
+            });
+        }
+        return route.abort();
+    });
+
+    await page.goto(`${baseUrl}/account/`);
+    const deleteTrigger = page.getByRole("button", {
+        name: "Delete all synced Builder data",
+        exact: true
+    });
+    await deleteTrigger.click();
+    const dialog = page.getByRole("dialog", {name: "Delete all synced Builder data"});
+    expect(deleteCalls).toBe(0);
+    await dialog.getByRole("button", {
+        name: "Permanently delete synced Builder data"
+    }).click();
+
+    const error = dialog.getByRole("alert");
+    await expect(error).toBeFocused();
+    await expect(error).toHaveText(
+        "Synced Builder data could not be deleted. Nothing was removed. Try again."
+    );
+    await expect(dialog).not.toContainText("private database diagnostic");
+    await expect(page.getByText("4 KB of 10 MB used", {exact: true})).toBeAttached();
+    await expect(page.getByText("1 synced Builder profile", {exact: true})).toBeAttached();
+
+    await dialog.getByRole("button", {name: "Cancel deletion"}).click();
+    await expect(deleteTrigger).toBeFocused();
+    await page.getByRole("button", {name: "Export all Builder data"}).click();
+    await expect.poll(() => exportCalls).toBe(1);
+    expect(deleteCalls).toBe(1);
+    await expectNoAxeViolations(page, '[data-react-root="account-settings"]');
+});
+
+// Catches export failure leaking diagnostics, triggering deletion, or leaving
+// the destructive confirmation inaccessible. Anonymous/unverified contexts
+// must expose neither protected metadata nor controls.
+test("Builder storage failures stay independent and unverified accounts expose no controls", async function({page}) {
+    await page.goto(`${baseUrl}/account/`);
+    const props = JSON.parse(await page.locator(
+        '[data-react-props="account-settings"]'
+    ).textContent());
+    expect(props.builderStorage).toEqual({
+        enabled: false,
+        profiles: [],
+        usedBytes: 0,
+        quotaBytes: 0,
+        storageGeneration: 0
+    });
+    await expect(page.getByRole("heading", {name: "Builder storage"})).toHaveCount(0);
+    await expect(page.getByRole("button", {name: "Export all Builder data"})).toHaveCount(0);
+    await expect(page.getByRole("button", {
+        name: "Delete all synced Builder data",
+        exact: true
+    })).toHaveCount(0);
+
+    emailVerified = true;
+    let deleteCalls = 0;
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const body = route.request().postDataJSON();
+        if (body.query.includes("ExportBuilderData")) {
+            return route.fulfill({
+                contentType: "application/json",
+                body: JSON.stringify({
+                    data: {exportBuilderData: null},
+                    errors: [{message: "private export diagnostic 6*secret*"}]
+                })
+            });
+        }
+        if (body.query.includes("DeleteAllBuilderData")) {
+            deleteCalls += 1;
+            return route.abort();
+        }
+        return route.abort();
+    });
+    await page.reload();
+    await page.getByRole("button", {name: "Export all Builder data"}).click();
+    const error = page.getByRole("alert").filter({
+        hasText: "Builder data could not be exported. Try again."
+    });
+    await expect(error).toBeFocused();
+    await expect(page.locator('[data-react-root="account-settings"]'))
+        .not.toContainText("private export diagnostic");
+    expect(deleteCalls).toBe(0);
+
+    await page.getByRole("button", {
+        name: "Delete all synced Builder data",
+        exact: true
+    }).click();
+    await expect(page.getByRole("dialog", {
+        name: "Delete all synced Builder data"
+    })).toBeVisible();
+    expect(deleteCalls).toBe(0);
+    await expectNoAxeViolations(page, '[data-react-root="account-settings"]');
 });
 
 async function expectNoAxeViolations(page, selector = "main") {

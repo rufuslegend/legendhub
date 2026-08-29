@@ -1,6 +1,11 @@
 import {formatCookie, parseCookieHeader} from "../../lib/cookies.js";
 import {graphqlRequest} from "../../lib/graphql-request.js";
 
+export {
+    deleteAllAccountBuilderData,
+    exportAccountBuilderData
+} from "../builder/builder-account-api.js";
+
 export const NOTIFICATION_FIELDS = [
     "itemAdded",
     "itemUpdated",

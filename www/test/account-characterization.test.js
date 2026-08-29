@@ -489,6 +489,21 @@ test("account route renders all notification settings", async function() {
                 verified: true,
                 pendingEmail: null,
                 canUseAccountStorage: true
+            },
+            getBuilderAccountState: {
+                profiles: [{
+                    id: "profile-1",
+                    name: "Hero",
+                    revision: 4,
+                    updatedOn: "2026-08-28T00:00:00.000Z",
+                    payload: "6*private-builder-payload*"
+                }],
+                usedBytes: 4096,
+                quotaBytes: 10_485_760,
+                storageGeneration: 7,
+                preferences: "{\"private\":true}",
+                memberId: 7,
+                storageNamespace: "private-namespace"
             }
         };
     });
@@ -497,7 +512,13 @@ test("account route renders all notification settings", async function() {
     await getAccountRouteHandler(router)(
         {cookies: {loginToken: "account-token"}},
         {
-            locals: {user: {memberId: 7}},
+            locals: {user: {
+                memberId: 7,
+                email: "player@example.com",
+                emailVerified: true,
+                canUseAccountStorage: true,
+                storageNamespace: "private-namespace"
+            }},
             redirect: function() {
                 assert.fail("an authenticated account request must not redirect");
             },
@@ -518,11 +539,32 @@ test("account route renders all notification settings", async function() {
         pendingEmail: null,
         canUseAccountStorage: true
     });
+    assert.deepEqual(rendered.locals.vm.builderStorage, {
+        enabled: true,
+        profiles: [{
+            id: "profile-1",
+            name: "Hero",
+            revision: 4,
+            updatedOn: "2026-08-28T00:00:00.000Z"
+        }],
+        usedBytes: 4096,
+        quotaBytes: 10_485_760,
+        storageGeneration: 7
+    });
     for (const field of ["email", "verified", "pendingEmail", "canUseAccountStorage"])
         assert.match(captured.query, new RegExp(`\\b${field}\\b`));
+    for (const field of ["id", "name", "revision", "updatedOn", "usedBytes",
+        "quotaBytes", "storageGeneration"]) {
+        assert.match(captured.query, new RegExp(`\\b${field}\\b`));
+    }
+    assert.doesNotMatch(captured.query,
+        /\b(payload|preferences|memberId|storageNamespace)\b/);
     assert.doesNotMatch(captured.query, /account-token/);
     assert.equal(captured.ip, undefined);
-    assert.deepEqual(captured.variables, {authToken: "account-token"});
+    assert.deepEqual(captured.variables, {
+        authToken: "account-token",
+        includeBuilderStorage: true
+    });
 });
 
 // Catches account email queries/mutations bypassing the established auth and

@@ -11,7 +11,8 @@
         <script type="application/json" data-react-props="account-settings"><%-
             serializeJsonForHtml({
                 notificationSettings: vm.notificationSettings,
-                emailStatus: vm.emailStatus
+                emailStatus: vm.emailStatus,
+                builderStorage: vm.builderStorage
             })
         %></script>
         <%-include("../shared/footer")-%>
