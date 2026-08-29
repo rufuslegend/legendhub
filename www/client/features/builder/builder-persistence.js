@@ -1,3 +1,5 @@
+import {canonicalPreferenceColumns} from "../../lib/account-preferences-store.js";
+
 export const BUILDER_STORAGE_KEYS = {
     currentLists: "cln",
     version2Lists: "cl2",
@@ -19,7 +21,9 @@ function readBuilderColumnCookies(cookies) {
 }
 
 export function applySelectedColumns(cookie, statInfo) {
-    const selected = cookie ? new Set(cookie.split("-").filter(Boolean)) : null;
+    const selected = cookie
+        ? new Set((Array.isArray(cookie) ? cookie : cookie.split("-")).filter(Boolean))
+        : null;
     return (statInfo || []).map(function(stat) {
         return {
             ...stat,
@@ -80,6 +84,29 @@ export function createBuilderPersistencePlan(state, writtenAt = new Date()) {
             }
         ],
         removeCookies: ["cl1", "scl1"]
+    };
+}
+
+export function createBuilderAccountPreferencePatch({
+    document,
+    character,
+    variant,
+    itemsPerPage,
+    selectedColumns
+}) {
+    const profileId = typeof character?.account?.id === "string" && character.account.id
+        ? character.account.id
+        : null;
+    const builderColumns = {...(document?.builderColumns || {})};
+    if (profileId)
+        builderColumns[profileId] = canonicalPreferenceColumns(selectedColumns, {tolerant: true});
+    return {
+        itemsPerPage,
+        builderColumns,
+        selectedProfileId: profileId,
+        selectedVariant: profileId && typeof variant?.name === "string" && variant.name
+            ? variant.name
+            : null
     };
 }
 

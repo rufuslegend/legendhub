@@ -9,10 +9,14 @@ import ImportExportDialog, {BuilderModal} from "./ImportExportDialog.jsx";
 import BuilderListsDialog from "./BuilderListsDialog.jsx";
 import BuilderMigrationDialog, {BuilderMigrationOffer} from "./BuilderMigrationDialog.jsx";
 import BuilderSyncStatus from "./BuilderSyncStatus.jsx";
+import {
+    canonicalizeAccountPreferences,
+    getPageAccountPreferencesStore
+} from "../../lib/account-preferences-store.js";
 import {deriveItemRestrictions, deriveRuneCharmStats} from "./builder-derivations.js";
 import {decodeBuilderEntries, decodeBuilderLists, encodeBuilderLists, encodeBuilderVariant} from "./builder-encoding.js";
 import {buildImportRequest, classifyAnonymousData, defaultMigrationPreferencesChoice, fingerprintAnonymousData, migrationAcknowledgementKey, normalizeMigrationResult, shouldOfferMigration, writeMigrationAcknowledgement} from "./builder-migration.js";
-import {applyBuilderPersistencePlan, applySelectedColumns, calculateStorageSize, createBuilderPersistencePlan, formatStorageSize, readBuilderPersistence} from "./builder-persistence.js";
+import {applyBuilderPersistencePlan, applySelectedColumns, calculateStorageSize, createBuilderAccountPreferencePatch, createBuilderPersistencePlan, formatStorageSize, readBuilderPersistence} from "./builder-persistence.js";
 import {builderReducer, createDefaultVariant, createInitialBuilderState, selectStatRestrictions, selectStatTotal} from "./builder-reducer.js";
 import {RUNE_CHARM_ID} from "./item-constants.js";
 import {createItemsBySlotQuery, createItemsInIdsQuery, hydrateBuilderVariant} from "./builder-api.js";
@@ -31,6 +35,31 @@ async function hydrateLists(lists, fragment) {
     const ids = [...new Set(lists.flatMap(list => list.variants.flatMap(variant => variant.items.map(item => item.id).filter(id => id > 0))))];
     const data = ids.length ? await graphqlRequest({query: createItemsInIdsQuery(fragment), variables: {ids}}) : {getItemsInIds: []};
     return lists.map(list => ({...list, variants: list.variants.map(variant => hydrateBuilderVariant(variant, data.getItemsInIds))}));
+}
+
+function builderPreferencePresentation(mode, preferences, lists, defaultStatInfo) {
+    let listIndex = 0;
+    let variantIndex = 0;
+    let columns = null;
+    if (mode === "anonymous") {
+        const [characterName, variantName] = String(preferences.selectedList || "!").split("!");
+        listIndex = Math.max(lists.findIndex(list => list.name === characterName), 0);
+        variantIndex = Math.max(lists[listIndex].variants.findIndex(variant => variant.name === variantName), 0);
+        columns = preferences.builderColumns?.[lists[listIndex].name] || preferences.itemColumns;
+    }
+    else {
+        listIndex = Math.max(lists.findIndex(list =>
+            list.account?.id && list.account.id === preferences.selectedProfileId), 0);
+        variantIndex = Math.max(lists[listIndex].variants.findIndex(variant =>
+            variant.name === preferences.selectedVariant), 0);
+        columns = preferences.builderColumns?.[lists[listIndex].account?.id] || preferences.itemColumns;
+    }
+    return {
+        listIndex,
+        variantIndex,
+        statInfo: applySelectedColumns(columns, defaultStatInfo),
+        itemsPerPage: preferences.itemsPerPage
+    };
 }
 
 function decodeAccountProfile(profile) {
@@ -69,6 +98,7 @@ export default function Builder({
     const columnsTriggerRef = useRef(null);
     const hydrated = useRef(false);
     const syncControllerRef = useRef(null);
+    const preferenceStoreRef = useRef(getPageAccountPreferencesStore());
     const syncBaselinesRef = useRef(new Map());
     const syncLocalKeysRef = useRef(new WeakMap());
     const nextSyncLocalKeyRef = useRef(1);
@@ -93,6 +123,17 @@ export default function Builder({
                     decode: decodeBuilderLists
                 });
                 if (cancelled) return;
+                const preferences = source.mode === "account"
+                    ? canonicalizeAccountPreferences(source.preferences)
+                    : source.preferences || {};
+                if (source.mode === "account") {
+                    preferenceStoreRef.current?.replace?.({
+                        enabled: true,
+                        payload: preferences,
+                        revision: source.accountState.preferenceRevision,
+                        storageGeneration: source.accountState.storageGeneration
+                    });
+                }
                 let migrationOffer = null;
                 if (source.mode === "account" && accountContext.authenticated === true &&
                     accountContext.emailVerified === true && accountContext.canUseAccountStorage === true &&
@@ -112,7 +153,7 @@ export default function Builder({
                                 fingerprint,
                                 profiles: classifyAnonymousData(source.anonymousSnapshot).profiles.map(profile => profile.name),
                                 preferencesChoice: defaultMigrationPreferencesChoice(
-                                    source.preferences,
+                                    preferences,
                                     source.accountState?.preferenceRevision
                                 )
                             };
@@ -122,7 +163,6 @@ export default function Builder({
                         // Invalid or unavailable browser-local data is never uploaded.
                     }
                 }
-                const preferences = source.preferences || {};
                 let lists = source.profiles;
                 if (!lists.length) {
                     lists = [{
@@ -136,36 +176,24 @@ export default function Builder({
                     // The encoding is still usable. Never replace it or persist an empty
                     // fallback merely because the optional item metadata request failed.
                     lists.sort((left, right) => left.name.localeCompare(right.name, undefined, {sensitivity: "accent"}));
-                    const [characterName, variantName] = source.mode === "anonymous"
-                        ? String(preferences.selectedList || "!").split("!")
-                        : ["", ""];
-                    const listIndex = Math.max(lists.findIndex(list => list.name === characterName), 0);
-                    const variantIndex = Math.max(lists[listIndex].variants.findIndex(variant => variant.name === variantName), 0);
-                    const columns = source.mode === "anonymous"
-                        ? preferences.builderColumns?.[lists[listIndex].name] || preferences.itemColumns
-                        : null;
+                    const presentation = builderPreferencePresentation(
+                        source.mode, preferences, lists, data.getItemStatInfo
+                    );
                     dispatch({type: "source/loaded", mode: source.mode, profiles: lists, accountState: source.accountState});
                     if (migrationOffer)
                         dispatch({type: "migration/offered", ...migrationOffer});
-                    dispatch({type: "ui/patch", value: {allLists: lists, selectedListIndex: listIndex, selectedListVariantIndex: variantIndex, selectedList: lists[listIndex].variants[variantIndex], statInfo: applySelectedColumns(columns, data.getItemStatInfo), defaultStatInfo: data.getItemStatInfo, itemFragment: data.getItemFragment, itemsPerPage: source.mode === "anonymous" ? preferences.itemsPerPage : state.itemsPerPage, initialized: true, requestStatus: "error", requestError: BUILDER_HYDRATION_ERROR}});
+                    dispatch({type: "ui/patch", value: {allLists: lists, selectedListIndex: presentation.listIndex, selectedListVariantIndex: presentation.variantIndex, selectedList: lists[presentation.listIndex].variants[presentation.variantIndex], statInfo: presentation.statInfo, defaultStatInfo: data.getItemStatInfo, itemFragment: data.getItemFragment, itemsPerPage: presentation.itemsPerPage, initialized: true, requestStatus: "error", requestError: BUILDER_HYDRATION_ERROR}});
                     return;
                 }
                 if (cancelled) return;
                 lists.sort((left, right) => left.name.localeCompare(right.name, undefined, {sensitivity: "accent"}));
-                const [characterName, variantName] = source.mode === "anonymous"
-                    ? String(preferences.selectedList || "!").split("!")
-                    : ["", ""];
-                const listIndex = Math.max(lists.findIndex(list => list.name === characterName), 0);
-                const variantIndex = Math.max(lists[listIndex].variants.findIndex(variant => variant.name === variantName), 0);
-                const selectedCharacterName = lists[listIndex].name;
-                const columns = source.mode === "anonymous"
-                    ? preferences.builderColumns?.[selectedCharacterName] || preferences.itemColumns
-                    : null;
-                const statInfo = applySelectedColumns(columns, data.getItemStatInfo);
+                const presentation = builderPreferencePresentation(
+                    source.mode, preferences, lists, data.getItemStatInfo
+                );
                 dispatch({type: "source/loaded", mode: source.mode, profiles: lists, accountState: source.accountState});
                 if (migrationOffer)
                     dispatch({type: "migration/offered", ...migrationOffer});
-                dispatch({type: "ui/patch", value: {allLists: lists, selectedListIndex: listIndex, selectedListVariantIndex: variantIndex, selectedList: lists[listIndex].variants[variantIndex], statInfo, defaultStatInfo: data.getItemStatInfo, itemFragment: data.getItemFragment, itemsPerPage: source.mode === "anonymous" ? preferences.itemsPerPage : state.itemsPerPage, initialized: true}});
+                dispatch({type: "ui/patch", value: {allLists: lists, selectedListIndex: presentation.listIndex, selectedListVariantIndex: presentation.variantIndex, selectedList: lists[presentation.listIndex].variants[presentation.variantIndex], statInfo: presentation.statInfo, defaultStatInfo: data.getItemStatInfo, itemFragment: data.getItemFragment, itemsPerPage: presentation.itemsPerPage, initialized: true}});
                 dispatch({type: "request/succeeded"});
                 hydrated.current = true;
             }
@@ -197,6 +225,21 @@ export default function Builder({
         const size = calculateStorageSize(localStorage);
         if (size !== state.clientSideDataSize) dispatch({type: "ui/patch", value: {clientSideDataSize: formatStorageSize(size)}});
     }, [state.allLists, state.selectedListIndex, state.selectedListVariantIndex, selected, state.statInfo, state.itemsPerPage, state.exceptionEncountered, state.storageMode]);
+
+    useEffect(function() {
+        const store = preferenceStoreRef.current;
+        if (state.storageMode !== "account" || !state.initialized || !selected ||
+            !state.accountState || !store?.get?.().enabled)
+            return;
+        const character = state.allLists[state.selectedListIndex];
+        store.patch(createBuilderAccountPreferencePatch({
+            document: store.get().document,
+            character,
+            variant: selected,
+            itemsPerPage: state.itemsPerPage,
+            selectedColumns: state.statInfo.filter(stat => stat.showColumn).map(stat => stat.short)
+        }));
+    }, [state.allLists, state.selectedListIndex, state.selectedListVariantIndex, selected, state.statInfo, state.itemsPerPage, state.storageMode, state.initialized, state.accountState]);
 
     function accountSnapshot(character, storageGeneration) {
         const {account, ...profile} = character;
@@ -389,6 +432,15 @@ export default function Builder({
             const cookieValues = cookies();
             dispatch({type: "ui/patch", value: {statInfo: applySelectedColumns(cookieValues[`sc-${characterName}`] || cookieValues.sc2, state.defaultStatInfo)}});
         }
+        if (state.storageMode === "account" && value.type === "variant/select" &&
+            value.listIndex !== state.selectedListIndex) {
+            const nextCharacter = state.allLists[value.listIndex];
+            const document = preferenceStoreRef.current?.get?.().document;
+            const columns = document?.builderColumns?.[nextCharacter.account?.id] || document?.itemColumns;
+            dispatch({type: "ui/patch", value: {
+                statInfo: applySelectedColumns(columns, state.defaultStatInfo)
+            }});
+        }
         dispatch(value);
     }
     function acknowledgeMigration() {
@@ -433,6 +485,13 @@ export default function Builder({
                 decode: decodeBuilderLists
             });
             let profiles = importedSource.profiles;
+            if (!profiles.length) {
+                profiles = [{
+                    name: "Untitled",
+                    variants: [createDefaultVariant("Original")],
+                    account: {id: null, revision: 0}
+                }];
+            }
             let hydrationFailed = false;
             try {
                 profiles = await hydrateLists(profiles, state.itemFragment);
@@ -440,12 +499,32 @@ export default function Builder({
             catch {
                 hydrationFailed = true;
             }
+            const preferences = canonicalizeAccountPreferences(importedSource.preferences);
+            preferenceStoreRef.current?.replace?.({
+                enabled: true,
+                payload: preferences,
+                revision: importedSource.accountState.preferenceRevision,
+                storageGeneration: importedSource.accountState.storageGeneration
+            });
+            profiles.sort((left, right) => left.name.localeCompare(right.name, undefined, {sensitivity: "accent"}));
+            const presentation = builderPreferencePresentation(
+                "account", preferences, profiles, state.defaultStatInfo
+            );
             dispatch({
                 type: "source/loaded",
                 mode: "account",
                 profiles,
                 accountState: importedSource.accountState
             });
+            dispatch({type: "ui/patch", value: {
+                allLists: profiles,
+                selectedListIndex: presentation.listIndex,
+                selectedListVariantIndex: presentation.variantIndex,
+                selectedList: profiles[presentation.listIndex]?.variants[presentation.variantIndex] || null,
+                statInfo: presentation.statInfo,
+                itemsPerPage: presentation.itemsPerPage,
+                initialized: true
+            }});
             if (hydrationFailed) {
                 dispatch({
                     type: "ui/patch",

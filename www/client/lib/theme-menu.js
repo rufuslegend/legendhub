@@ -25,7 +25,10 @@ function setGlassChoicesOpen({glassChoices, glassToggle, caret}, open) {
     caret.classList.toggle("fa-caret-right", !open);
 }
 
-export function initializeThemeMenu(document = globalThis.document, {now = new Date()} = {}) {
+export function initializeThemeMenu(document = globalThis.document, {
+    now = new Date(),
+    accountPreferencesStore = null
+} = {}) {
     const glassToggle = document?.querySelector("#glassThemeToggle");
     const glassChoices = document?.querySelector("#glassThemeChoices");
     const caret = document?.querySelector("#glassThemeToggle .theme-menu-caret");
@@ -35,6 +38,9 @@ export function initializeThemeMenu(document = globalThis.document, {now = new D
 
     const menu = {glassChoices, glassToggle, caret};
     setGlassChoicesOpen(menu, false);
+    const accountPreferences = accountPreferencesStore?.get?.();
+    if (accountPreferences?.enabled && accountPreferences.document?.theme)
+        themeLink.setAttribute("href", `/css/bootstrap-${accountPreferences.document.theme}.min.css`);
     document.cookie = formatCookie(
         TIMEZONE_COOKIE,
         String(now.getTimezoneOffset()),
@@ -52,7 +58,15 @@ export function initializeThemeMenu(document = globalThis.document, {now = new D
             event.preventDefault();
             const theme = choice.getAttribute("data-theme");
             themeLink.setAttribute("href", `/css/bootstrap-${theme}.min.css`);
-            persistTheme(document, theme, now);
+            if (accountPreferencesStore?.get?.().enabled)
+                accountPreferencesStore.patch({theme});
+            else
+                persistTheme(document, theme, now);
         });
     }
+
+    return accountPreferencesStore?.subscribe?.(function(value) {
+        if (value?.enabled && value.document?.theme)
+            themeLink.setAttribute("href", `/css/bootstrap-${value.document.theme}.min.css`);
+    });
 }

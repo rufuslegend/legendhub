@@ -113,3 +113,31 @@ test("native theme menu sets tzoffset and persists a choice only after cookie co
     withConsent.solarizedDark.click();
     assert.match(withConsent.document.cookie, /theme=solarized-dark; Path=\/; SameSite=Lax; Secure; Expires=/);
 });
+
+// Catches an account theme choice being mirrored into the anonymous cookie or
+// failing to patch the one shared account preference store.
+test("native theme menu patches account storage without changing anonymous theme cookies", async function() {
+    const {initializeThemeMenu} = await loadModule();
+    const menu = createThemeDocument("cookie-consent=true; theme=light");
+    const patches = [];
+    const subscribers = [];
+    const accountPreferencesStore = {
+        get() { return {enabled: true, document: {theme: "dark"}}; },
+        patch(value) { patches.push(value); },
+        subscribe(listener) { subscribers.push(listener); return function() {}; }
+    };
+
+    initializeThemeMenu(menu.document, {
+        now: new Date("2026-08-28T12:00:00.000Z"),
+        accountPreferencesStore
+    });
+    menu.solarizedDark.click();
+
+    assert.equal(menu.theme.getAttribute("href"), "/css/bootstrap-solarized-dark.min.css");
+    assert.deepEqual(patches, [{theme: "solarized-dark"}]);
+    assert.match(menu.document.cookie, /theme=light/);
+    assert.doesNotMatch(menu.document.cookie, /theme=solarized-dark/);
+
+    subscribers[0]({enabled: true, document: {theme: "high-contrast"}});
+    assert.equal(menu.theme.getAttribute("href"), "/css/bootstrap-high-contrast.min.css");
+});

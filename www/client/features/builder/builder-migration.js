@@ -3,36 +3,13 @@ import {
     encodeBuilderLists,
     readBuilderFormatVersion
 } from "./builder-encoding.js";
+import {
+    ACCOUNT_PREFERENCE_PAGE_SIZES,
+    ACCOUNT_PREFERENCE_THEMES,
+    DEFAULT_ACCOUNT_PREFERENCES,
+    canonicalPreferenceColumns
+} from "../../lib/account-preferences-store.js";
 
-const ITEMS_PER_PAGE = new Set([20, 50, 100, 200, 500, 1000]);
-const THEMES = new Set([
-    "light", "dark", "solarized-dark", "high-contrast", "glass-blue",
-    "glass-emerald", "glass-ruby", "glass-amethyst", "glass-amber"
-]);
-const ITEM_COLUMNS = new Set([
-    "Slot", "Name", "Light", "Heroic", "Str", "Min", "Dex", "Con",
-    "Per", "Spi", "Ac", "Align", "Hp", "Ma", "Mv", "Hpr", "Mar",
-    "Mvr", "Hit", "Dam", "SpDam", "SpCrit", "Ma Redux", "Concen",
-    "Mit", "Parry", "Shot Acc", "Ammo", "Bonus Acc", "2H", "Quality",
-    "Speed", "MaxDam", "AvgDam", "MinDam", "Holdable", "Weap Type",
-    "Weap Stat", "Weight", "Unique", "Bonded", "Casts", "Level",
-    "Net Stat", "Sell", "Rent", "Str Cap", "Min Cap", "Dex Cap",
-    "Con Cap", "Per Cap", "Spi Cap", "Soulbound", "Limited",
-    "MeCritPerc", "MeCrit", "MeDamCap", "DmgShield"
-]);
-const LEGACY_ITEM_COLUMN_ALIASES = new Map([
-    ["Accu", "Shot Acc"], ["AccuBonus", "Bonus Acc"], ["AC", "Ac"],
-    ["HP", "Hp"]
-]);
-const DEFAULT_ACCOUNT_PREFERENCES = {
-    version: 1,
-    theme: "glass-blue",
-    itemsPerPage: 20,
-    itemColumns: [],
-    builderColumns: {},
-    selectedProfileId: null,
-    selectedVariant: null
-};
 const SAFE_PROFILE_NAME = /^[A-Za-z\d ]{1,255}$/;
 
 export function classifyAnonymousData(snapshot) {
@@ -81,19 +58,7 @@ function selectedIdentity(snapshot, profiles) {
 }
 
 function canonicalColumns(value) {
-    const columns = typeof value === "string"
-        ? value.split("-").filter(Boolean)
-        : Array.isArray(value) ? value : [];
-    const canonical = [];
-    const seen = new Set();
-    for (const column of columns) {
-        const resolved = LEGACY_ITEM_COLUMN_ALIASES.get(column) || column;
-        if (typeof column === "string" && ITEM_COLUMNS.has(resolved) && !seen.has(resolved)) {
-            seen.add(resolved);
-            canonical.push(resolved);
-        }
-    }
-    return canonical;
+    return canonicalPreferenceColumns(value, {tolerant: true});
 }
 
 function syncablePreferences(snapshot, profiles) {
@@ -111,8 +76,8 @@ function syncablePreferences(snapshot, profiles) {
     });
     return {
         version: 1,
-        theme: THEMES.has(snapshot?.theme) ? snapshot.theme : DEFAULT_ACCOUNT_PREFERENCES.theme,
-        itemsPerPage: ITEMS_PER_PAGE.has(snapshot?.itemsPerPage)
+        theme: ACCOUNT_PREFERENCE_THEMES.has(snapshot?.theme) ? snapshot.theme : DEFAULT_ACCOUNT_PREFERENCES.theme,
+        itemsPerPage: ACCOUNT_PREFERENCE_PAGE_SIZES.has(snapshot?.itemsPerPage)
             ? snapshot.itemsPerPage
             : DEFAULT_ACCOUNT_PREFERENCES.itemsPerPage,
         itemColumns: canonicalColumns(snapshot?.itemColumns),

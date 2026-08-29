@@ -2,6 +2,7 @@ import {useCallback, useEffect, useReducer, useRef, useState} from "react";
 import ColumnsDialog from "../../components/ColumnsDialog.jsx";
 import FiltersDialog from "../../components/FiltersDialog.jsx";
 import Pagination from "../../components/Pagination.jsx";
+import {getPageAccountPreferencesStore} from "../../lib/account-preferences-store.js";
 import {parseCookieHeader} from "../../lib/cookies.js";
 import {loadItems} from "./item-search-api.js";
 import {columnsPreferenceCookie} from "./item-search-cookie.js";
@@ -16,7 +17,11 @@ function resultValue(item, stat, constants) {
 }
 
 export default function ItemSearch(props) {
-    const [state, dispatch] = useReducer(itemSearchReducer, props, createInitialItemSearchState);
+    const preferenceStoreRef = useRef(getPageAccountPreferencesStore());
+    const [state, dispatch] = useReducer(itemSearchReducer, {
+        ...props,
+        accountPreferences: preferenceStoreRef.current?.get?.() || null
+    }, createInitialItemSearchState);
     const [columnsOpen, setColumnsOpen] = useState(false);
     const [filtersOpen, setFiltersOpen] = useState(false);
     const abortRef = useRef(null);
@@ -40,6 +45,10 @@ export default function ItemSearch(props) {
         return () => window.removeEventListener("popstate", restoreFromHistory);
     }, []);
     function persistColumns(columns) {
+        if (preferenceStoreRef.current?.get?.().enabled) {
+            preferenceStoreRef.current.patch({itemColumns: columns});
+            return;
+        }
         if (parseCookieHeader(document.cookie)["cookie-consent"] !== "true") return;
         document.cookie = columnsPreferenceCookie(columns);
     }

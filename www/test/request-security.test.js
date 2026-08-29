@@ -280,6 +280,85 @@ test("authentication locals expose verified-email-only account storage eligibili
     }
 });
 
+// Catches the verified page bootstrap omitting the canonical account document,
+// copying identity fields, or allowing malformed optional preference data to
+// fail the authenticated page request.
+test("authentication locals expose only validated account preference bootstrap state", async function() {
+    const apiRequests = [];
+    const middleware = loadAuthRoute({
+        authToken: async function() {
+            return {
+                memberId: 7,
+                username: "VerifiedMember",
+                email: "verified@example.test",
+                emailVerified: true,
+                storageNamespace: "private-storage-namespace"
+            };
+        },
+        getPermissions: async function() { return {}; },
+        postAsync: async function(query, _ip, variables) {
+            apiRequests.push({query, variables});
+            if (query.includes("AccountPreferenceBootstrap")) {
+                return {getBuilderAccountState: {
+                    preferences: JSON.stringify({
+                        version: 1,
+                        theme: "dark",
+                        itemsPerPage: 50,
+                        itemColumns: ["AC", "Name"],
+                        builderColumns: {"profile-a": ["HP"]},
+                        selectedProfileId: "profile-a",
+                        selectedVariant: "Tank",
+                        loginToken: "private-token",
+                        timezone: "private-timezone",
+                        unknown: "private-value"
+                    }),
+                    preferenceRevision: 8,
+                    storageGeneration: 3
+                }};
+            }
+            return {getNotifications: {moreResults: false, results: []}};
+        }
+    });
+    const res = {locals: {}};
+    await middleware({
+        cookies: {loginToken: "session-token"},
+        ip: "192.0.2.7"
+    }, res, function(error) {
+        if (error) throw error;
+    });
+
+    assert.deepEqual(res.locals.accountPreferenceContext, {
+        enabled: true,
+        payload: {
+            version: 1,
+            theme: "dark",
+            itemsPerPage: 50,
+            itemColumns: ["Ac", "Name"],
+            builderColumns: {"profile-a": ["Hp"]},
+            selectedProfileId: "profile-a",
+            selectedVariant: "Tank"
+        },
+        revision: 8,
+        storageGeneration: 3
+    });
+    assert.deepEqual(apiRequests.find(request =>
+        request.query.includes("AccountPreferenceBootstrap")).variables, {
+        authToken: "session-token"
+    });
+    const serialized = JSON.stringify(res.locals.accountPreferenceContext);
+    for (const privateValue of [
+        "verified@example.test", "private-storage-namespace", "private-token",
+        "private-timezone", "private-value"
+    ])
+        assert.equal(serialized.includes(privateValue), false);
+
+    assert.deepEqual(middleware.createAccountPreferenceContext({
+        preferences: "{private malformed json",
+        preferenceRevision: 2,
+        storageGeneration: 1
+    }), {enabled: false, payload: null, revision: 0, storageGeneration: 0});
+});
+
 // Catches registration reaching GraphQL without an address, dropping entered
 // values after validation, or omitting resend guidance after committed signup.
 test("registration requires email, preserves entered identity fields, and passes email to GraphQL", async function() {

@@ -2,8 +2,32 @@ import {initializeCookieConsent} from "../lib/cookie-consent.js";
 import {initializeNotifications} from "../lib/notifications.js";
 import {initializeResponsiveCategoryLists} from "../lib/responsive-category-list.js";
 import {initializeThemeMenu} from "../lib/theme-menu.js";
+import {
+    createAccountPreferencesStore,
+    readAccountPreferenceContext,
+    setPageAccountPreferencesStore
+} from "../lib/account-preferences-store.js";
+import {updateAccountPreferences} from "../features/builder/builder-account-api.js";
 
-initializeThemeMenu();
+const accountPreferencesStore = createAccountPreferencesStore({
+    initialState: readAccountPreferenceContext(),
+    save: request => updateAccountPreferences({
+        preferences: JSON.stringify(request.document),
+        storageGeneration: request.storageGeneration
+    }),
+    onStatus: detail => document.dispatchEvent(new CustomEvent(
+        "legendhub:account-preferences-status",
+        {detail}
+    ))
+});
+setPageAccountPreferencesStore(accountPreferencesStore);
+
+initializeThemeMenu(document, {accountPreferencesStore});
 initializeNotifications();
 initializeCookieConsent();
 initializeResponsiveCategoryLists();
+
+window.addEventListener("pagehide", function(event) {
+    if (!event.persisted)
+        accountPreferencesStore.dispose();
+});

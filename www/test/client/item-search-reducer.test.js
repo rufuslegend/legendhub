@@ -49,6 +49,34 @@ test("item search snapshots server metadata, criteria, and result state", async 
     assert.equal(state.status, "idle");
 });
 
+// Catches synchronized account Item Search columns losing to the device's
+// anonymous cookie-backed props during client initialization.
+test("item search prefers enabled account columns without changing anonymous initialization", async function() {
+    const {createInitialItemSearchState} = await loadSearch();
+    const account = createInitialItemSearchState(initial({
+        selectedColumns: ["Name"],
+        accountPreferences: {
+            enabled: true,
+            document: {
+                version: 1,
+                theme: "dark",
+                itemsPerPage: 50,
+                itemColumns: ["Slot"],
+                builderColumns: {},
+                selectedProfileId: null,
+                selectedVariant: null
+            }
+        }
+    }));
+    const anonymous = createInitialItemSearchState(initial({
+        selectedColumns: ["Name"],
+        accountPreferences: {enabled: false, document: null}
+    }));
+
+    assert.deepEqual(account.selectedColumns, ["Slot"]);
+    assert.deepEqual(anonymous.selectedColumns, ["Name"]);
+});
+
 // Catches a filter toggle that mutates unrelated criteria or fails to mark unapplied filters.
 test("item search toggles category filters and marks them pending", async function() {
     const {createInitialItemSearchState, itemSearchReducer} = await loadSearch();

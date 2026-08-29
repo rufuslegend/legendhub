@@ -1,12 +1,45 @@
 let express = require("express");
 let authApi = require("./api/auth");
 let apiUtils = require("./api/utils");
+let {validatePreferences} = require("./api/builder-preferences");
 let url = require("url");
+
+const DISABLED_ACCOUNT_PREFERENCE_CONTEXT = Object.freeze({
+    enabled: false,
+    payload: null,
+    revision: 0,
+    storageGeneration: 0
+});
+
+function disabledAccountPreferenceContext() {
+    return {...DISABLED_ACCOUNT_PREFERENCE_CONTEXT};
+}
+
+function createAccountPreferenceContext(state) {
+    if (!state || typeof state !== "object" || Array.isArray(state) ||
+        typeof state.preferences !== "string" ||
+        !Number.isSafeInteger(state.preferenceRevision) || state.preferenceRevision < 1 ||
+        !Number.isSafeInteger(state.storageGeneration) || state.storageGeneration < 1) {
+        return disabledAccountPreferenceContext();
+    }
+    try {
+        return {
+            enabled: true,
+            payload: validatePreferences(state.preferences),
+            revision: state.preferenceRevision,
+            storageGeneration: state.storageGeneration
+        };
+    }
+    catch {
+        return disabledAccountPreferenceContext();
+    }
+}
 
 var initializeLocals = function(req, res, next) {
     res.locals.url = url.parse(req.url, true);
     res.locals.version = process.env.npm_package_version;
     res.locals.cookies = req.cookies;
+    res.locals.accountPreferenceContext = disabledAccountPreferenceContext();
 
     res.locals.displayDateTime = function(date) {
         let offset = res.locals.cookies.tzoffset;
@@ -38,6 +71,8 @@ var initializeLocals = function(req, res, next) {
 };
 
 var authFunc = async function(req, res, next) {
+    if (!res.locals.accountPreferenceContext)
+        res.locals.accountPreferenceContext = disabledAccountPreferenceContext();
     if (req.cookies.loginToken) {
         try {
             res.locals.user = await authApi.utils.authToken(req.cookies.loginToken, authApi.utils.getIPFromRequest(req), false, true);
@@ -46,6 +81,32 @@ var authFunc = async function(req, res, next) {
             );
             res.locals.user.emailVerified = canUseAccountStorage;
             res.locals.user.canUseAccountStorage = canUseAccountStorage;
+
+            if (canUseAccountStorage) {
+                try {
+                    const preferenceQuery = `
+                    query AccountPreferenceBootstrap($authToken: String!) {
+                        getBuilderAccountState(authToken: $authToken) {
+                            preferences
+                            preferenceRevision
+                            storageGeneration
+                        }
+                    }
+                    `;
+                    const preferenceResponse = await apiUtils.postAsync(
+                        preferenceQuery,
+                        undefined,
+                        {authToken: req.cookies.loginToken}
+                    );
+                    res.locals.accountPreferenceContext = createAccountPreferenceContext(
+                        preferenceResponse.getBuilderAccountState
+                    );
+                }
+                catch {
+                    // Account preference bootstrap is optional. The Builder's
+                    // authenticated state request remains the runtime authority.
+                }
+            }
         }
         catch (e) {
             if (e.message === "Invalid token") {
@@ -104,3 +165,4 @@ var authFunc = async function(req, res, next) {
 
 module.exports = authFunc;
 module.exports.initializeLocals = initializeLocals;
+module.exports.createAccountPreferenceContext = createAccountPreferenceContext;

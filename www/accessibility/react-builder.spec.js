@@ -40,7 +40,16 @@ const importedAccountProfiles = [
         updatedOn: "2026-08-26T12:05:00.000Z"
     }
 ];
-const accountPreferences = "{\"itemsPerPage\":99,\"builderColumns\":[\"Rent\"],\"sentinel\":\"private-account-preference\"}";
+const accountPreferences = JSON.stringify({
+    version: 1,
+    theme: "glass-blue",
+    itemsPerPage: 50,
+    itemColumns: ["Name"],
+    builderColumns: {"account-profile-id": ["Rent"]},
+    selectedProfileId: "account-profile-id",
+    selectedVariant: "Imported",
+    sentinel: "private-account-preference"
+});
 const canonicalDefaultPreferences = JSON.stringify({
     version: 1,
     theme: "glass-blue",
@@ -168,9 +177,27 @@ test.beforeAll(async function() {
     const app = loadAppWithoutDatabaseMetadataQuery();
     const apiUtils = require("../src/routes/api/utils");
     const originalPostAsync = apiUtils.postAsync;
-    apiUtils.postAsync = function(query) {
+    apiUtils.postAsync = function(query, _ip, variables) {
+        if (query.includes("getItems("))
+            return publicPageData(query);
         if (query.includes("getItemStatCategories"))
             return Promise.resolve({getItemStatCategories: itemStatCategories, getItemStatInfo: itemStatInfo});
+        if (query.includes("AccountPreferenceBootstrap")) {
+            const itemPreferences = variables?.authToken === "item-preference-account";
+            return Promise.resolve({getBuilderAccountState: {
+                preferences: JSON.stringify({
+                    version: 1,
+                    theme: itemPreferences ? "dark" : "glass-blue",
+                    itemsPerPage: 20,
+                    itemColumns: itemPreferences ? ["Slot"] : [],
+                    builderColumns: {},
+                    selectedProfileId: null,
+                    selectedVariant: null
+                }),
+                preferenceRevision: 4,
+                storageGeneration: 2
+            }});
+        }
         if (query.includes("getNotifications"))
             return Promise.resolve({getNotifications: {moreResults: false, results: []}});
         return publicPageData(query);
@@ -186,6 +213,55 @@ test.beforeAll(async function() {
         });
     });
     baseUrl = `http://127.0.0.1:${server.address().port}`;
+});
+
+// Catches Item Search initializing from anonymous sc2 data in a verified
+// account or mirroring an account column change back into that device cookie.
+test("Item Search applies and saves account columns without changing its cookie", async function({context, page}) {
+    await context.addCookies([
+        {name: "loginToken", value: "item-preference-account", url: baseUrl},
+        {name: "theme", value: "light", url: baseUrl},
+        {name: "sc2", value: "Name-", url: baseUrl}
+    ]);
+    const preferenceRequests = [];
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (!request.query.includes("UpdateBuilderPreferences"))
+            return route.fallback();
+        preferenceRequests.push(request);
+        const document = JSON.parse(request.variables.preferences);
+        return route.fulfill({contentType: "application/json", body: JSON.stringify({data: {
+            updateBuilderPreferences: {
+                status: "saved",
+                preferences: JSON.stringify(document),
+                preferenceRevision: 5,
+                preferencesUpdatedOn: "2026-08-28T12:01:00.000Z",
+                storageGeneration: 2,
+                usedBytes: 0,
+                quotaBytes: 10_485_760
+            }
+        }})});
+    });
+
+    await page.goto(`${baseUrl}/items/`);
+    await expect(page.locator("link#theme")).toHaveAttribute("href", /bootstrap-dark\.min\.css/);
+    await page.getByRole("button", {name: "Columns", exact: true}).click();
+    await expect(page.getByRole("button", {name: "Slot", exact: true})).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", {name: "Name", exact: true})).toHaveAttribute("aria-pressed", "false");
+    await page.getByRole("button", {name: "Name", exact: true}).click();
+
+    await expect.poll(() => preferenceRequests.length).toBe(1);
+    expect(JSON.parse(preferenceRequests[0].variables.preferences)).toEqual({
+        version: 1,
+        theme: "dark",
+        itemsPerPage: 20,
+        itemColumns: ["Slot", "Name"],
+        builderColumns: {},
+        selectedProfileId: null,
+        selectedVariant: null
+    });
+    expect(preferenceRequests[0].variables.storageGeneration).toBe(2);
+    expect((await context.cookies(baseUrl)).find(cookie => cookie.name === "sc2")?.value).toBe("Name-");
 });
 
 test.afterAll(async function() {
@@ -278,6 +354,93 @@ test("Builder startup creates unsaved Untitled for an empty verified account", a
     await page.locator("#strInput").blur();
     await page.waitForTimeout(100);
     expect(await page.evaluate(() => localStorage.getItem("cln"))).toBe(encodedLists);
+});
+
+// Catches account paging, stable selection, and per-profile columns being
+// replaced by anonymous cookies, or account changes leaking back into them.
+test("Builder applies and saves canonical account preferences independently", async function({context, page}) {
+    await context.addCookies([
+        {name: "loginToken", value: "builder-preference-account", url: baseUrl},
+        {name: "theme", value: "light", url: baseUrl},
+        {name: "ipp", value: "37", url: baseUrl},
+        {name: "sc-Scout", value: "Name-", url: baseUrl}
+    ]);
+    const preferences = {
+        version: 1,
+        theme: "dark",
+        itemsPerPage: 50,
+        itemColumns: ["Name"],
+        builderColumns: {
+            "account-profile-id": ["Name"],
+            "scout-profile-id": ["Rent"]
+        },
+        selectedProfileId: "scout-profile-id",
+        selectedVariant: "Original"
+    };
+    const scoutProfile = {
+        id: "scout-profile-id",
+        name: "Scout",
+        payload: scoutProfilePayload,
+        payloadVersion: 6,
+        revision: 2,
+        updatedOn: "2026-08-28T12:00:00.000Z"
+    };
+    const preferenceRequests = [];
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (request.query.includes("GetBuilderAccountState")) {
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({data: {
+                getBuilderAccountState: {
+                    ...accountBuilderState([accountProfile, scoutProfile]),
+                    preferences: JSON.stringify(preferences),
+                    preferenceRevision: 7,
+                    storageGeneration: 3
+                }
+            }})});
+        }
+        if (request.query.includes("UpdateBuilderPreferences")) {
+            preferenceRequests.push(request);
+            const document = JSON.parse(request.variables.preferences);
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({data: {
+                updateBuilderPreferences: {
+                    status: "saved",
+                    preferences: JSON.stringify(document),
+                    preferenceRevision: 8,
+                    preferencesUpdatedOn: "2026-08-28T12:01:00.000Z",
+                    storageGeneration: 3,
+                    usedBytes: 100,
+                    quotaBytes: 10_485_760
+                }
+            }})});
+        }
+        return route.fallback();
+    });
+
+    await page.goto(`${baseUrl}/builder/`);
+    await expect(page.locator("link#theme")).toHaveAttribute("href", /bootstrap-dark\.min\.css/);
+    await expect(page.getByLabel("Character", {exact: true})).toHaveValue("1");
+    await expect(page.getByLabel("Variant", {exact: true})).toHaveValue("0");
+    await page.getByRole("button", {name: "Hide/Show Columns", exact: true}).click();
+    await expect(page.getByRole("button", {name: "Rent", exact: true})).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", {name: "Name", exact: true})).toHaveAttribute("aria-pressed", "false");
+    await page.getByRole("button", {name: "Name", exact: true}).click();
+    await page.keyboard.press("Escape");
+
+    await expect.poll(() => preferenceRequests.length).toBe(1);
+    const saved = JSON.parse(preferenceRequests[0].variables.preferences);
+    expect(saved).toEqual({
+        ...preferences,
+        builderColumns: {
+            ...preferences.builderColumns,
+            "scout-profile-id": ["Name", "Rent"]
+        }
+    });
+    expect(preferenceRequests[0].variables.storageGeneration).toBe(3);
+    for (const key of ["cookieConsent", "loginToken", "timezone", "email", "memberId", "storageNamespace", "profiles"])
+        expect(Object.hasOwn(saved, key)).toBe(false);
+
+    const cookiesAfter = Object.fromEntries((await context.cookies(baseUrl)).map(cookie => [cookie.name, cookie.value]));
+    expect(cookiesAfter).toMatchObject({theme: "light", ipp: "37", "sc-Scout": "Name-"});
 });
 
 // Catches account edits staying browser-only, announcing Saved before the

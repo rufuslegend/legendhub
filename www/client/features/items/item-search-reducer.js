@@ -54,6 +54,10 @@ export function createInitialItemSearchState(props) {
         sortAsc: query.sortAsc === "true",
         page: Math.max(1, Number(query.page) || 1)
     };
+    const accountColumns = props.accountPreferences?.enabled === true &&
+        Array.isArray(props.accountPreferences.document?.itemColumns)
+        ? props.accountPreferences.document.itemColumns
+        : null;
     return {
         criteria,
         nextCriteria: criteria,
@@ -67,7 +71,7 @@ export function createInitialItemSearchState(props) {
         moreResults: Boolean(props.moreResults),
         requestId: 0,
         results: props.results || [],
-        selectedColumns: [...(props.selectedColumns || defaultColumns(props.statInfo || []))],
+        selectedColumns: [...(accountColumns || props.selectedColumns || defaultColumns(props.statInfo || []))],
         status: "idle"
     };
 }

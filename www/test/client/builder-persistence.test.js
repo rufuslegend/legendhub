@@ -77,6 +77,7 @@ test("builder persistence keeps Item Search and scoped Builder columns distinct"
     assert.equal(preference.itemColumns, "Name-");
     assert.deepEqual(preference.builderColumns, {Hero: "Rent-"});
     assert.deepEqual(applySelectedColumns(preference.builderColumns.Hero, statInfo).map(stat => stat.showColumn), [false, false, true]);
+    assert.deepEqual(applySelectedColumns(["Name"], statInfo).map(stat => stat.showColumn), [false, true, false]);
     assert.deepEqual(applySelectedColumns(null, statInfo).map(stat => stat.showColumn), [true, true, false]);
     assert.equal(statInfo[0].showColumn, undefined);
 });
@@ -166,6 +167,34 @@ test("account mode never creates an anonymous persistence plan", async function(
     };
 
     assert.equal(createBuilderPersistencePlan(input), null);
+});
+
+// Catches Builder account preferences using character names instead of stable
+// profile IDs, dropping other profiles' columns, or omitting paging/selection.
+test("builder account preference patch uses stable profile identity", async function() {
+    const {createBuilderAccountPreferencePatch} = await loadPersistence();
+    const document = {
+        version: 1,
+        theme: "dark",
+        itemsPerPage: 20,
+        itemColumns: ["Name"],
+        builderColumns: {"profile-b": ["Str"]},
+        selectedProfileId: "profile-b",
+        selectedVariant: "Other"
+    };
+
+    assert.deepEqual(createBuilderAccountPreferencePatch({
+        document,
+        character: {name: "Renamed Hero", account: {id: "profile-a", revision: 5}},
+        variant: {name: "Tank"},
+        itemsPerPage: 50,
+        selectedColumns: ["Name", "Rent"]
+    }), {
+        itemsPerPage: 50,
+        builderColumns: {"profile-b": ["Str"], "profile-a": ["Name", "Rent"]},
+        selectedProfileId: "profile-a",
+        selectedVariant: "Tank"
+    });
 });
 
 // Catches the account separation guard changing even one anonymous key, value,
