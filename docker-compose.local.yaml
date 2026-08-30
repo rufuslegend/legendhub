@@ -1,4 +1,17 @@
 services:
+    mailpit:
+        image: axllent/mailpit:v1.30.5
+        environment:
+            MP_SMTP_AUTH_ACCEPT_ANY: "1"
+            MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+        networks:
+            - legendhub
+        ports:
+            - target: 8025
+              published: "8025"
+              host_ip: 127.0.0.1
+              protocol: tcp
+        restart: unless-stopped
     mysql:
         image: mysql:5.7.44
         healthcheck:
@@ -12,12 +25,15 @@ services:
               target: /docker-entrypoint-initdb.d/01-dunwich.sql.gz
               read_only: true
     www:
+        depends_on:
+            mailpit:
+                condition: service_healthy
         ports: !reset []
         volumes: !reset []
         environment:
             RECAPTCHA_SITEKEY: 6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI
             RECAPTCHA_SECRET: 6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe
-            SMTP_HOST: localhost
+            SMTP_HOST: mailpit
             SMTP_PORT: "1025"
             SMTP_SECURE: "false"
             SMTP_USER: local-test

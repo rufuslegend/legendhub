@@ -67,6 +67,13 @@ so registration can exercise the normal browser and server verification path
 on `localhost`. The widget displays Google's test-only warning and must never
 be used as evidence that Dunwich or production CAPTCHA configuration works.
 
+The local overlay also runs Mailpit as a local-only email catcher. Register
+through `https://localhost`, then open `http://127.0.0.1:8025` to inspect the
+captured verification message and follow its real LegendHUB confirmation link.
+Password-reset and email-change messages appear in the same inbox. Mailpit
+does not relay these messages externally, and its inbox is intentionally
+ephemeral when the local service is replaced.
+
 Use the wrapper for normal Compose operations:
 
 ```sh

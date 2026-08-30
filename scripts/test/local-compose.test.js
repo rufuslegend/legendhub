@@ -48,7 +48,21 @@ test("renders a persistent production-shaped local HTTPS stack", () => {
     const services = config.services;
 
     assert.deepEqual(Object.keys(services).sort(),
-        ["mysql", "mysql-backup", "nginx", "python", "www"]);
+        ["mailpit", "mysql", "mysql-backup", "nginx", "python", "www"]);
+    assert.equal(services.mailpit.image, "axllent/mailpit:v1.30.5");
+    assert.deepEqual(services.mailpit.ports, [{
+        mode: "ingress",
+        target: 8025,
+        published: "8025",
+        protocol: "tcp",
+        host_ip: "127.0.0.1",
+    }]);
+    assert.equal(services.mailpit.environment.MP_SMTP_AUTH_ACCEPT_ANY, "1");
+    assert.equal(services.mailpit.environment.MP_SMTP_AUTH_ALLOW_INSECURE, "1");
+    assert.equal(services.www.environment.SMTP_HOST, "mailpit");
+    assert.equal(services.www.environment.SMTP_PORT, "1025");
+    assert.equal(services.www.environment.SMTP_SECURE, "false");
+    assert.equal(services.www.depends_on.mailpit.condition, "service_healthy");
     assert.equal(services.nginx.image, "nginx:1.27-alpine");
     assert.deepEqual(services.nginx.ports, [{
         mode: "ingress",
