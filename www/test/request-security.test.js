@@ -364,7 +364,7 @@ test("authentication locals expose only validated account preference bootstrap s
         enabled: false,
         payload: {
             version: 1,
-            theme: "glass-blue",
+            theme: "dark",
             itemsPerPage: 20,
             itemColumns: [],
             builderColumns: {},
@@ -408,7 +408,7 @@ test("verified bootstrap failure exposes disabled safe account defaults", async 
         enabled: false,
         payload: {
             version: 1,
-            theme: "glass-blue",
+            theme: "dark",
             itemsPerPage: 20,
             itemColumns: [],
             builderColumns: {},

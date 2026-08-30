@@ -256,6 +256,45 @@ test("registration error state has no detectable WCAG A or AA violations in High
     await expectNoWcagViolations(page);
 });
 
+// Catches intrinsic label text widths shifting the input boundary between
+// authentication rows even when every label carries the same utility class.
+test("login and registration rows render equal label and input columns", async function({ page }) {
+    await page.setViewportSize({width: 926, height: 988});
+    const loginPage = pages.find(function(pageUnderTest) {
+        return pageUnderTest.name === "login";
+    });
+    await expectHighContrastPage(page, loginPage);
+
+    async function columnWidths(formName) {
+        return page.locator(`form[name="${formName}"] .input-group`).evaluateAll(function(rows) {
+            return rows.map(function(row) {
+                const label = row.querySelector(".input-group-text").getBoundingClientRect();
+                const input = row.querySelector(".form-control").getBoundingClientRect();
+                return {
+                    label: Math.round(label.width * 10) / 10,
+                    input: Math.round(input.width * 10) / 10
+                };
+            });
+        });
+    }
+
+    const loginWidths = await columnWidths("login");
+    expect(loginWidths).toHaveLength(2);
+    expect(new Set(loginWidths.map(widths => widths.label)).size).toBe(1);
+    expect(new Set(loginWidths.map(widths => widths.input)).size).toBe(1);
+    expect(loginWidths[0].label).toBe(160);
+    expect(loginWidths[0].input).toBeGreaterThanOrEqual(280);
+    expect(loginWidths[0].input).toBeLessThanOrEqual(300);
+
+    await page.getByRole("button", {name: "Register", exact: true}).click();
+    await expect(page.locator("#registerCollapse")).toBeVisible();
+    const registerWidths = await columnWidths("register");
+    expect(registerWidths).toHaveLength(4);
+    expect(new Set(registerWidths.map(widths => widths.label)).size).toBe(1);
+    expect(new Set(registerWidths.map(widths => widths.input)).size).toBe(1);
+    expect(registerWidths[0]).toEqual(loginWidths[0]);
+});
+
 test("theme chooser supports keyboard access to the Glass theme submenu", async function({ page }) {
     const homePage = pages.find(function(pageUnderTest) {
         return pageUnderTest.name === "home";

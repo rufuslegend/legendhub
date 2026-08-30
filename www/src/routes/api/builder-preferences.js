@@ -34,7 +34,7 @@ const LEGACY_ITEM_COLUMN_ALIASES = new Map([
 const PROFILE_ID = /^[A-Za-z0-9-]{1,64}$/;
 const DEFAULT_PREFERENCES = Object.freeze({
     version: 1,
-    theme: "glass-blue",
+    theme: "dark",
     itemsPerPage: 20,
     itemColumns: Object.freeze([]),
     builderColumns: Object.freeze({}),

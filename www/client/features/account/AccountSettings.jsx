@@ -124,19 +124,21 @@ function EmailEditor({editor, dispatch}) {
             </div>
             <div className={editing ? "col-12 col-lg-8" : "col-8 col-lg-8"}>
                 {!editing && (
-                    <div>
-                        <p className="mb-1">
-                            <strong>Current:</strong>{" "}
-                            {editor.email || "No email address added"}
-                            {editor.email && ` (${editor.verified ? "verified" : "not verified"})`}
-                        </p>
-                        {editor.pendingEmail && (
-                            <p className="mb-2">
-                                <strong>Pending:</strong> {editor.pendingEmail}
+                    <div className="row align-items-start">
+                        <div className="col-12 col-md-6 mb-2">
+                            <p className={editor.pendingEmail ? "mb-1" : "mb-0"}>
+                                <strong>Current:</strong>{" "}
+                                {editor.email || "No email address added"}
+                                {editor.email && ` (${editor.verified ? "verified" : "not verified"})`}
                             </p>
-                        )}
-                        <div className="row">
-                            <div className="col-12 col-md-6 mb-2">
+                            {editor.pendingEmail && (
+                                <p className="mb-0">
+                                    <strong>Pending:</strong> {editor.pendingEmail}
+                                </p>
+                            )}
+                        </div>
+                        <div className="col-12 col-md-6">
+                            <div className="mb-2">
                                 <button
                                     ref={focus.triggerRef}
                                     type="button"
@@ -149,7 +151,7 @@ function EmailEditor({editor, dispatch}) {
                                 </button>
                             </div>
                             {canResend && (
-                                <div className="col-12 col-md-6 mb-2">
+                                <div className="mb-2">
                                     <button
                                         type="button"
                                         className="btn btn-outline-primary btn-block"

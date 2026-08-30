@@ -10,7 +10,7 @@ const {
 
 const CANONICAL_DEFAULT_PREFERENCES = {
     version: 1,
-    theme: "glass-blue",
+    theme: "dark",
     itemsPerPage: 20,
     itemColumns: [],
     builderColumns: {},
@@ -84,7 +84,7 @@ test("preferences retain builder settings only for active profile IDs", function
 
     assert.deepEqual(result, {
         version: 1,
-        theme: "glass-blue",
+        theme: "dark",
         itemsPerPage: 20,
         itemColumns: [],
         builderColumns: {active: ["Name", "Slot"]},
@@ -122,7 +122,7 @@ test("preferences store current item metadata names and canonicalize legacy alia
         ]}
     }), {
         version: 1,
-        theme: "glass-blue",
+        theme: "dark",
         itemsPerPage: 20,
         itemColumns: ["Shot Acc", "Bonus Acc", "Ac", "Hp"],
         builderColumns: {profile: ["Shot Acc", "Bonus Acc", "Ac", "Hp"]},

@@ -2,24 +2,34 @@ import {useEffect, useRef} from "react";
 import {BuilderModal} from "./ImportExportDialog.jsx";
 
 function ResultList({heading, values, render = value => value}) {
-    return <section className="mt-3"><h3 className="h6">{heading}</h3>{values.length
+    return <section className="mt-3"><h3 className="h6">{heading} ({values.length})</h3>{values.length
         ? <ul className="mb-0">{values.map((value, index) => <li key={`${heading}-${index}`}>{render(value)}</li>)}</ul>
         : <p className="mb-0">None.</p>}</section>;
 }
 
+function profileCount(count) {
+    return `${count} ${count === 1 ? "profile" : "profiles"}`;
+}
+
 export function BuilderMigrationOffer({migration, onOpen}) {
-    if (migration.status === "idle")
+    if (["idle", "dismissed"].includes(migration.status))
         return null;
     const succeeded = migration.status === "succeeded";
-    return <section className="alert alert-info" role="region" aria-label="Local Builder data">
-        <h2 className="h5">Local Builder data</h2>
-        <p>{succeeded
-            ? "Your copy is complete. The original profiles remain saved in this browser."
-            : "Profiles saved in this browser can be copied to your account. The browser copies will be retained."}</p>
-        {!succeeded && <ul>{migration.profiles.map(name => <li key={name}>{name}</li>)}</ul>}
-        <button type="button" className="btn btn-primary" onClick={onOpen}>
-            {succeeded ? "View copy results" : "Review local Builder data"}
-        </button>
+    return <section className="card mb-3" role="region" aria-label="Local Builder data">
+        <div className="card-header">
+            <h2 className="h5 mb-0">Local Builder data</h2>
+        </div>
+        <div className="card-body d-flex align-items-start">
+            <span className="text-warning h3 mb-0 mr-3" aria-hidden="true">⚠</span>
+            <div className="flex-grow-1">
+                <p>{succeeded
+                    ? "Your copy is complete. The original profiles remain saved in this browser."
+                    : `${profileCount(migration.profiles.length)} saved in this browser can be copied to your account. The browser copies will be retained.`}</p>
+                <button type="button" className="btn btn-primary" onClick={onOpen}>
+                    {succeeded ? "View copy results" : "Review local Builder data"}
+                </button>
+            </div>
+        </div>
     </section>;
 }
 
@@ -28,13 +38,16 @@ function MigrationResults({result, onClose}) {
         <p role="status" aria-live="polite" tabIndex="-1" id="builder-migration-result">
             Local Builder data was copied to your account. The original data remains saved in this browser.
         </p>
-        <ResultList heading="Copied" values={result.copied} />
-        <ResultList heading="Renamed" values={result.renamed} render={entry => `${entry.from} → ${entry.to}`} />
-        <ResultList heading="Deduplicated" values={result.deduplicated} />
-        <ResultList heading="Rejected" values={result.rejected} render={entry => `${entry.name} — ${entry.reason}`} />
+        <div className="border rounded px-3 pb-3" role="region" aria-label="Profile copy results"
+            tabIndex="0" style={{maxHeight: "20rem", overflowY: "auto"}}>
+            <ResultList heading="Copied" values={result.copied} />
+            <ResultList heading="Renamed" values={result.renamed} render={entry => `${entry.from} → ${entry.to}`} />
+            <ResultList heading="Deduplicated" values={result.deduplicated} />
+            <ResultList heading="Rejected" values={result.rejected} render={entry => `${entry.name} — ${entry.reason}`} />
+        </div>
         <p className="mt-3 mb-0">{result.preferencesImported
-            ? "This browser's selected preferences were copied to the account."
-            : "Your account preferences were kept."}</p>
+            ? "This browser's Builder preferences are now saved to your account."
+            : "Your existing account Builder preferences were retained."}</p>
         {result.acknowledgementWarning && <p role="status" className="text-warning mt-3 mb-0">
             The copy completed, but this browser could not remember it. You may be asked to copy this local data again.
         </p>}
@@ -42,7 +55,7 @@ function MigrationResults({result, onClose}) {
     </div>;
 }
 
-export default function BuilderMigrationDialog({migration, onClose, onCopy, onPreferenceChange}) {
+export default function BuilderMigrationDialog({migration, onClose, onCopy}) {
     const statusRef = useRef(null);
     useEffect(function() {
         if (["pending", "error", "succeeded"].includes(migration.status))
@@ -64,21 +77,13 @@ export default function BuilderMigrationDialog({migration, onClose, onCopy, onPr
     return <BuilderModal key="migration-form" label="Copy local Builder data" onClose={onClose} closeDisabled={pending} initialFocus="#builder-migration-copy">
         <div className="modal-body" aria-describedby="builder-migration-retention">
             <p id="builder-migration-retention">
-                Copying adds these profiles to your account. It never deletes or changes the originals saved in this browser.
+                Copying adds {profileCount(migration.profiles.length)} to your account. It never deletes or changes the originals saved in this browser.
             </p>
-            <ul>{migration.profiles.map(name => <li key={name}>{name}</li>)}</ul>
-            <fieldset disabled={pending}>
-                <legend className="h6">Builder preferences</legend>
-                <div className="form-check">
-                    <input className="form-check-input" id="migration-preferences-account" type="radio" name="migration-preferences" value="account" checked={migration.preferencesChoice === "account"} onChange={event => onPreferenceChange(event.target.value)} />
-                    <label className="form-check-label" htmlFor="migration-preferences-account">Keep my account preferences</label>
-                </div>
-                <div className="form-check">
-                    <input className="form-check-input" id="migration-preferences-browser" type="radio" name="migration-preferences" value="browser" checked={migration.preferencesChoice === "browser"} onChange={event => onPreferenceChange(event.target.value)} />
-                    <label className="form-check-label" htmlFor="migration-preferences-browser">Use this browser's preferences</label>
-                </div>
-            </fieldset>
-            <p className="small mt-2">Only theme, Item Search columns, and Builder display, selection, and paging preferences are copyable. Login, consent, timezone, and other device-only values stay in this browser.</p>
+            <section className="border rounded p-2 mb-3" role="region"
+                aria-label={`${migration.profiles.length} local Builder ${migration.profiles.length === 1 ? "profile" : "profiles"}`}
+                tabIndex="0" style={{maxHeight: "18rem", overflowY: "auto"}}>
+                <ul className="mb-0">{migration.profiles.map(name => <li key={name}>{name}</li>)}</ul>
+            </section>
             {pending && <p ref={statusRef} role="status" aria-live="polite" tabIndex="-1">Copying local Builder data…</p>}
             {migration.error && <p ref={statusRef} role="alert" tabIndex="-1" className="text-danger">{migration.error}</p>}
             <div className="mt-3 d-flex flex-wrap">

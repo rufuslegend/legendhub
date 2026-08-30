@@ -257,19 +257,6 @@ export function builderReducer(state, action) {
             };
         case "migration/opened":
             return {...state, migration: {...state.migration, open: true}};
-        case "migration/preferences-changed":
-            return {
-                ...state,
-                migration: {
-                    ...state.migration,
-                    status: "offered",
-                    preferencesChoice: action.value,
-                    request: null,
-                    result: null,
-                    error: "",
-                    acknowledgementWarning: false
-                }
-            };
         case "migration/requested":
             return {
                 ...state,
@@ -315,8 +302,6 @@ export function builderReducer(state, action) {
                     error: ""
                 }
             };
-        case "migration/closed":
-            return {...state, migration: {...state.migration, open: false}};
         case "account/profile-saved": {
             const allLists = state.allLists.slice();
             const metadata = accountMetadata(action.profile);

@@ -138,6 +138,10 @@ router.get(["/cookies.html"], function(req, res, next) {
     res.render("cookies", {title: "Cookie Policy"});
 });
 
+router.get(["/privacy.html"], function(req, res, next) {
+    res.render("privacy", {title: "Privacy Policy"});
+});
+
 //router.all(["/play.html"], function(req, res, next) {
     //res.render("play", {title: "Play LegendMUD"});
 //});
@@ -162,6 +166,7 @@ router.get(["/sitemap.xml"], async function(req, res, next) {
     sitemapMainText.push(`<url><loc>https://www.legendhub.org/index.html</loc></url>`);
     sitemapMainText.push(`<url><loc>https://www.legendhub.org/login.html</loc></url>`);
     sitemapMainText.push(`<url><loc>https://www.legendhub.org/cookies.html</loc></url>`);
+    sitemapMainText.push(`<url><loc>https://www.legendhub.org/privacy.html</loc></url>`);
 
     try {
         var sitemapItems = await getSitemapQuery("Items");

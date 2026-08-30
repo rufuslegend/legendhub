@@ -145,7 +145,10 @@ test.beforeEach(async function({context, page}) {
         memberId: 7,
         storageNamespace: "private-storage-namespace"
     };
-    await context.addCookies([{name: "loginToken", value: "initial-session", url: baseUrl}]);
+    await context.addCookies([
+        {name: "loginToken", value: "initial-session", url: baseUrl},
+        {name: "emailPromptDismissed", value: "true", url: baseUrl}
+    ]);
     await page.route(/^https?:\/\//, function(route) {
         if (route.request().url().startsWith(baseUrl))
             return route.continue();
@@ -460,11 +463,28 @@ async function expectNoAxeViolations(page, selector = "main") {
 }
 
 test("email prompt dismissal resets on login and email settings announce both resend states", async function({context, page}) {
+    await context.clearCookies({name: "emailPromptDismissed"});
+    await context.addCookies([{name: "theme", value: "glass-amber", url: baseUrl}]);
     await page.goto(`${baseUrl}/`);
-    const prompt = page.getByRole("status", {name: "Verify your email address"});
+    const prompt = page.getByRole("dialog", {name: "Verify your email address"});
+    await expect(prompt).toBeVisible();
     await expect(prompt).toContainText("Existing LegendHUB features remain available");
     await expect(prompt.getByRole("link", {name: "Enter and verify your email address now"}))
         .toBeVisible();
+    await expect(page.locator("link#theme")).toHaveAttribute(
+        "href", /bootstrap-glass-amber\.min\.css/
+    );
+    await expect(prompt.locator(".modal-content")).toHaveCSS(
+        "background-color", "rgb(18, 14, 6)"
+    );
+    await expect(prompt.locator(".modal-header")).not.toHaveCSS("background-image", "none");
+    await expect(page.locator(".modal-backdrop.show")).toHaveCount(1);
+    await expect(page.locator("body")).toHaveClass(/modal-open/);
+    await expect.poll(() => prompt.evaluate(element =>
+        element.contains(document.activeElement))).toBe(true);
+    await page.keyboard.press("Escape");
+    await expect(prompt).toBeVisible();
+    await expectNoAxeViolations(page, "#emailVerificationPrompt");
 
     const dismiss = prompt.getByRole("button", {name: "Dismiss for this login"});
     await dismiss.focus();
@@ -475,7 +495,7 @@ test("email prompt dismissal resets on login and email settings announce both re
             response.request().method() === "POST"),
         page.keyboard.press("Enter")
     ]);
-    await expect(page.getByRole("status", {name: "Verify your email address"})).toHaveCount(0);
+    await expect(page.getByRole("dialog", {name: "Verify your email address"})).toHaveCount(0);
     const dismissal = (await context.cookies(baseUrl))
         .find(cookie => cookie.name === "emailPromptDismissed");
     expect(dismissal).toMatchObject({httpOnly: true, secure: true, sameSite: "Lax"});
@@ -499,10 +519,11 @@ test("email prompt dismissal resets on login and email settings announce both re
         page.waitForURL(`${baseUrl}/`),
         loginForm.locator('button[type="submit"]').click()
     ]);
-    await expect(page.getByRole("status", {name: "Verify your email address"})).toBeVisible();
+    await expect(page.getByRole("dialog", {name: "Verify your email address"})).toBeVisible();
 
     await page.getByRole("link", {name: "Enter and verify your email address now"}).click();
     await expect(page.getByRole("heading", {name: "Account Settings"})).toBeVisible();
+    await expect(page.getByRole("dialog", {name: "Verify your email address"})).toHaveCount(0);
 
     let releaseResend;
     await page.route(`${baseUrl}/api`, async function(route) {
@@ -593,8 +614,11 @@ test("rate-limited resend starts an accessible cooldown instead of a generic err
     await expectNoAxeViolations(page, '[data-react-root="account-settings"]');
 });
 
-test("email verification confirmation is keyboard operable and exposes a status result", async function({page}) {
+test("email verification confirmation is keyboard operable and exposes a status result", async function({context, page}) {
+    await context.clearCookies({name: "emailPromptDismissed"});
+    await context.addCookies([{name: "theme", value: "high-contrast", url: baseUrl}]);
     await page.goto(`${baseUrl}/verify-email.html?token=test-selector-test-validator`);
+    await expect(page.locator("[data-email-verification-prompt]")).toHaveCount(0);
     const verifyButton = page.getByRole("button", {name: "Verify email"});
     await expect(verifyButton).toBeFocused();
     await expectNoAxeViolations(page);
@@ -610,7 +634,7 @@ test("email verification confirmation is keyboard operable and exposes a status 
     await expectNoAxeViolations(page);
 
     await page.goto(`${baseUrl}/`);
-    await expect(page.getByRole("status", {name: "Verify your email address"})).toHaveCount(0);
+    await expect(page.getByRole("dialog", {name: "Verify your email address"})).toHaveCount(0);
 });
 
 test("password recovery forms focus their first field and announce generic and reset results", async function({page}) {

@@ -1,22 +1,33 @@
 <% if (locals.user && !locals.user.emailVerified &&
-    locals.cookies.emailPromptDismissed !== "true") { %>
-<section class="container mt-3" role="status" aria-live="polite"
-    aria-labelledby="email-verification-prompt-heading">
-    <div class="alert alert-info mb-0">
-        <h2 class="h5" id="email-verification-prompt-heading">Verify your email address</h2>
-        <p>
-            Existing LegendHUB features remain available without a verified email.
-            Verification also enables password recovery and account-backed storage.
-        </p>
-        <div class="d-flex flex-column flex-sm-row align-items-sm-center">
-            <a class="btn btn-primary mr-sm-2 mb-2 mb-sm-0" href="/account/#email-heading">
-                Enter and verify your email address now
-            </a>
-            <form action="/dismiss-email-prompt" method="post" class="mb-0">
-                <input type="hidden" name="returnUrl" value="<%=locals.url.path%>">
-                <button type="submit" class="btn btn-link">Dismiss for this login</button>
-            </form>
+    locals.cookies.emailPromptDismissed !== "true" &&
+    !["/account/", "/account/index.html", "/verify-email.html"].includes(locals.url.pathname)) { %>
+<div class="modal fade" id="emailVerificationPrompt" tabindex="-1" role="dialog"
+    aria-labelledby="email-verification-prompt-heading"
+    aria-describedby="email-verification-prompt-description"
+    data-email-verification-prompt data-backdrop="static" data-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title h5" id="email-verification-prompt-heading">
+                    Verify your email address
+                </h2>
+            </div>
+            <div class="modal-body">
+                <p class="mb-0" id="email-verification-prompt-description">
+                    Existing LegendHUB features remain available without a verified email.
+                    Verification also enables password recovery and account-backed storage.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-primary" href="/account/#email-heading">
+                    Enter and verify your email address now
+                </a>
+                <form action="/dismiss-email-prompt" method="post" class="mb-0">
+                    <input type="hidden" name="returnUrl" value="<%=locals.url.path%>">
+                    <button type="submit" class="btn btn-secondary">Dismiss for this login</button>
+                </form>
+            </div>
         </div>
     </div>
-</section>
+</div>
 <% } %>

@@ -11,6 +11,8 @@ import {
 } from "../../lib/account-preferences-store.js";
 
 const SAFE_PROFILE_NAME = /^[A-Za-z\d ]{1,255}$/;
+const MIGRATION_FINGERPRINT = /^[a-f0-9]{64}$/;
+const MIGRATION_ACKNOWLEDGEMENT_VERSION = "profiles-v1:";
 
 export function classifyAnonymousData(snapshot) {
     const value = snapshot?.encodedLists;
@@ -88,10 +90,7 @@ function syncablePreferences(snapshot, profiles) {
 
 function canonicalAnonymousData(snapshot) {
     const classified = classifyAnonymousData(snapshot);
-    return {
-        encodedLists: classified.encodedLists,
-        preferences: syncablePreferences(snapshot, classified.profiles)
-    };
+    return {encodedLists: classified.encodedLists};
 }
 
 function toHex(buffer) {
@@ -125,16 +124,40 @@ export function migrationAcknowledgementKey(storageNamespace) {
 export function writeMigrationAcknowledgement({storage, storageNamespace, fingerprint}) {
     if (!storage || typeof storage.setItem !== "function" ||
         typeof storageNamespace !== "string" || !storageNamespace ||
-        typeof fingerprint !== "string" || !/^[a-f0-9]{64}$/.test(fingerprint)) {
+        typeof fingerprint !== "string" || !MIGRATION_FINGERPRINT.test(fingerprint)) {
         return false;
     }
     try {
-        storage.setItem(migrationAcknowledgementKey(storageNamespace), fingerprint);
+        storage.setItem(
+            migrationAcknowledgementKey(storageNamespace),
+            `${MIGRATION_ACKNOWLEDGEMENT_VERSION}${fingerprint}`
+        );
         return true;
     }
     catch {
         return false;
     }
+}
+
+export function readMigrationAcknowledgement({storage, storageNamespace, fingerprint}) {
+    if (!storage || typeof storage.getItem !== "function" ||
+        typeof storageNamespace !== "string" || !storageNamespace ||
+        typeof fingerprint !== "string" || !MIGRATION_FINGERPRINT.test(fingerprint)) {
+        return null;
+    }
+    let value;
+    try {
+        value = storage.getItem(migrationAcknowledgementKey(storageNamespace));
+    }
+    catch {
+        return null;
+    }
+    if (value === `${MIGRATION_ACKNOWLEDGEMENT_VERSION}${fingerprint}`)
+        return fingerprint;
+    if (!MIGRATION_FINGERPRINT.test(value || ""))
+        return null;
+    writeMigrationAcknowledgement({storage, storageNamespace, fingerprint});
+    return fingerprint;
 }
 
 export function shouldOfferMigration({snapshot, fingerprint, acknowledgedFingerprint}) {

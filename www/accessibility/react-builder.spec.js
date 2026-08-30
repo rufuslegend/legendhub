@@ -1,6 +1,7 @@
 "use strict";
 
 const Module = require("node:module");
+const AxeBuilder = require("@axe-core/playwright").default;
 const {expect, test} = require("@playwright/test");
 const fulfillLocalBrowserScript = require("./support/local-browser-scripts");
 const publicPageData = require("./support/public-page-data");
@@ -1096,6 +1097,79 @@ test("Builder startup normalizes verified item metadata failures before account 
 // Catches migration uploading before explicit consent, minting a fresh batch
 // key on retry, acknowledging a failure, leaking private errors, or activating
 // anything other than the strict account state returned by the atomic import.
+test("local Builder data offer is theme-readable and marks its caution visually", async function({context, page}) {
+    await context.addCookies([
+        {name: "loginToken", value: "migration-theme-account", url: baseUrl},
+        {name: "theme", value: "glass-blue", url: baseUrl}
+    ]);
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (request.query.includes("GetBuilderAccountState")) {
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({
+                data: {getBuilderAccountState: accountBuilderState()}
+            })});
+        }
+        return route.fallback();
+    });
+
+    await page.goto(`${baseUrl}/builder/`);
+    await expect(page.locator("link#theme")).toHaveAttribute(
+        "href", /bootstrap-glass-blue\.min\.css/
+    );
+    const offer = page.getByRole("region", {name: "Local Builder data"});
+    await expect(offer).toBeVisible();
+    await expect(offer.locator('[aria-hidden="true"]')).toContainText("⚠");
+
+    const results = await new AxeBuilder({page})
+        .include('[aria-label="Local Builder data"]')
+        .withRules(["color-contrast"])
+        .analyze();
+    expect(results.violations, JSON.stringify(results.violations)).toEqual([]);
+});
+
+// Catches hundreds of browser profiles expanding the Builder page or copy
+// dialog instead of moving names into one bounded, keyboard-scrollable list.
+test("local Builder data scales from a count into a bounded profile list", async function({context, page}) {
+    const profileNames = Array.from(
+        {length: 125},
+        (_, index) => `Profile ${String(index + 1).padStart(3, "0")}`
+    );
+    const tankRow = currentTankExport.split("*")[1];
+    const largeEncodedLists = `6*${profileNames.map(name =>
+        tankRow.replace(/^Hero~/, `${name}~`)).join("*")}*`;
+    await context.addCookies([
+        {name: "loginToken", value: "large-migration-account", url: baseUrl},
+        {name: "theme", value: "glass-blue", url: baseUrl}
+    ]);
+    await page.addInitScript(value => localStorage.setItem("cln", value), largeEncodedLists);
+    await page.route(`${baseUrl}/api`, async function(route) {
+        const request = route.request().postDataJSON();
+        if (request.query.includes("GetBuilderAccountState")) {
+            return route.fulfill({contentType: "application/json", body: JSON.stringify({
+                data: {getBuilderAccountState: accountBuilderState()}
+            })});
+        }
+        return route.fallback();
+    });
+
+    await page.goto(`${baseUrl}/builder/`);
+    const offer = page.getByRole("region", {name: "Local Builder data"});
+    await expect(offer).toContainText("125 profiles");
+    await expect(offer).not.toContainText("Profile 001");
+    await expect(offer.locator(".card-header [aria-hidden=\"true\"]")).toHaveCount(0);
+    await expect(offer.locator(".card-body > [aria-hidden=\"true\"]")).toContainText("⚠");
+    await expect(offer.locator(".card-body")).toHaveCSS("display", "flex");
+
+    await offer.getByRole("button", {name: "Review local Builder data"}).click();
+    const dialog = page.getByRole("dialog", {name: "Copy local Builder data"});
+    await expect(dialog.getByRole("group", {name: "Builder preferences"})).toHaveCount(0);
+    const profileList = dialog.getByRole("region", {name: "125 local Builder profiles"});
+    await expect(profileList).toContainText("Profile 001");
+    await expect(profileList).toContainText("Profile 125");
+    await expect.poll(() => profileList.evaluate(element =>
+        element.scrollHeight > element.clientHeight)).toBe(true);
+});
+
 test("local Builder data migration is explicit, retry-safe, private, and reports every result", async function({context, page}) {
     await context.addCookies([
         {name: "loginToken", value: "migration-builder-account", url: baseUrl},
@@ -1121,7 +1195,10 @@ test("local Builder data migration is explicit, retry-safe, private, and reports
         const request = route.request().postDataJSON();
         if (request.query.includes("GetBuilderAccountState")) {
             return route.fulfill({contentType: "application/json", body: JSON.stringify({
-                data: {getBuilderAccountState: accountBuilderState()}
+                data: {getBuilderAccountState: {
+                    ...accountBuilderState(),
+                    preferences: canonicalDefaultPreferences
+                }}
             })});
         }
         if (!request.query.includes("ImportBuilderProfiles"))
@@ -1144,6 +1221,7 @@ test("local Builder data migration is explicit, retry-safe, private, and reports
         });
         const {authToken, ...migrationVariables} = request.variables;
         expect(authToken).toBe("migration-builder-account");
+        expect(migrationVariables.replacePreferences).toBe(true);
         expect(JSON.stringify(migrationVariables)).not.toContain("migration-builder-account");
         expect(JSON.stringify(migrationVariables)).not.toContain(privateMalformedRow);
         if (importAttempts === 1) {
@@ -1175,8 +1253,9 @@ test("local Builder data migration is explicit, retry-safe, private, and reports
 
     await page.goto(`${baseUrl}/builder/`);
     const offer = page.getByRole("region", {name: "Local Builder data"});
-    await expect(offer).toContainText("Hero");
-    await expect(offer).toContainText("Scout");
+    await expect(offer).toContainText("2 profiles");
+    await expect(offer).not.toContainText("Hero");
+    await expect(offer).not.toContainText("Scout");
     expect(importAttempts).toBe(0);
     expect(await page.evaluate(() => localStorage.getItem(
         "legendhub-builder-import:0123456789abcdef0123456789abcdef"
@@ -1187,9 +1266,10 @@ test("local Builder data migration is explicit, retry-safe, private, and reports
     await trigger.click();
     const dialog = page.getByRole("dialog", {name: "Copy local Builder data"});
     await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("region", {name: "2 local Builder profiles"})).toContainText("Hero");
+    await expect(dialog.getByRole("region", {name: "2 local Builder profiles"})).toContainText("Scout");
     await expect(dialog.getByRole("button", {name: "Copy all to my account"})).toBeFocused();
-    await expect(dialog.getByLabel("Keep my account preferences")).toBeChecked();
-    await dialog.getByLabel("Use this browser's preferences").check();
+    await expect(dialog.getByRole("group", {name: "Builder preferences"})).toHaveCount(0);
     await dialog.getByRole("button", {name: "Copy all to my account"}).click();
     await firstImportStarted;
     await expect(dialog.getByRole("button", {name: "Close"})).toBeDisabled();
@@ -1213,6 +1293,11 @@ test("local Builder data migration is explicit, retry-safe, private, and reports
     await expect(dialog.getByText("Hero → Hero Local", {exact: true})).toBeVisible();
     await expect(dialog.getByText("Same", {exact: true})).toBeVisible();
     await expect(dialog.getByText("Local row 3 — Could not be copied.", {exact: true})).toBeVisible();
+    const resultList = dialog.getByRole("region", {name: "Profile copy results"});
+    await expect(resultList).toHaveCSS("overflow-y", "auto");
+    await expect(resultList).not.toHaveCSS("max-height", "none");
+    await expect(dialog.getByRole("heading", {name: "Copied (1)"})).toBeVisible();
+    await expect(dialog).toContainText("This browser's Builder preferences are now saved to your account.");
     await expect(dialog.getByText("Server rejection 1 — Could not be copied.", {exact: true})).toBeVisible();
     await expect(dialog).not.toContainText("private-builder-payload");
     await expect(dialog).not.toContainText(privateMalformedRow);
@@ -1225,17 +1310,17 @@ test("local Builder data migration is explicit, retry-safe, private, and reports
         ),
         anonymousLists: localStorage.getItem("cln")
     }))).toEqual({
-        acknowledgement: expect.stringMatching(/^[a-f0-9]{64}$/),
+        acknowledgement: expect.stringMatching(/^profiles-v1:[a-f0-9]{64}$/),
         anonymousLists: mixedEncodedLists
     });
 
     await dialog.getByRole("button", {name: "Close results"}).click();
-    await expect(offer.getByRole("button", {name: "View copy results"})).toBeFocused();
+    await expect(page.getByRole("region", {name: "Local Builder data"})).toHaveCount(0);
 });
 
 // Catches dismissal modifying browser data, calling the import mutation, or
 // failing to acknowledge the exact local fingerprint for the next login.
-test("local Builder data migration dismissal retains browser source and restores focus", async function({context, page}) {
+test("local Builder data migration dismissal retains browser source and hides the offer", async function({context, page}) {
     await context.addCookies([{name: "loginToken", value: "dismiss-migration-account", url: baseUrl}]);
     let importAttempts = 0;
     await page.route(`${baseUrl}/api`, async function(route) {
@@ -1259,22 +1344,23 @@ test("local Builder data migration dismissal retains browser source and restores
     const trigger = offer.getByRole("button", {name: "Review local Builder data"});
     await trigger.click();
     const dialog = page.getByRole("dialog", {name: "Copy local Builder data"});
-    await expect(dialog.getByLabel("Use this browser's preferences")).toBeChecked();
+    await expect(dialog.getByRole("group", {name: "Builder preferences"})).toHaveCount(0);
     await dialog.getByRole("button", {name: "Not now"}).click();
 
     expect(importAttempts).toBe(0);
-    await expect(offer.getByRole("button", {name: "Review local Builder data"})).toBeFocused();
+    await expect(page.getByRole("region", {name: "Local Builder data"})).toHaveCount(0);
     expect(await page.evaluate(() => ({
         acknowledgement: localStorage.getItem(
             "legendhub-builder-import:0123456789abcdef0123456789abcdef"
         ),
         anonymousLists: localStorage.getItem("cln")
     }))).toEqual({
-        acknowledgement: expect.stringMatching(/^[a-f0-9]{64}$/),
+        acknowledgement: expect.stringMatching(/^profiles-v1:[a-f0-9]{64}$/),
         anonymousLists: encodedLists
     });
 
     await page.reload();
+    await expect(page.getByLabel("Character", {exact: true})).toBeVisible();
     await expect(page.getByRole("region", {name: "Local Builder data"})).toHaveCount(0);
     expect(importAttempts).toBe(0);
 });
@@ -1335,6 +1421,7 @@ test("successful local Builder data migration survives acknowledgement storage f
     }))).toEqual({acknowledgement: null, anonymousLists: encodedLists});
 
     await dialog.getByRole("button", {name: "Close results"}).click();
+    await expect(page.getByRole("region", {name: "Local Builder data"})).toHaveCount(0);
     await page.reload();
     await expect(page.getByRole("region", {name: "Local Builder data"})).toBeVisible();
     expect(importAttempts).toBe(1);
@@ -1404,12 +1491,12 @@ test("successful local Builder data migration survives item hydration failure", 
         ),
         anonymousLists: localStorage.getItem("cln")
     }))).toEqual({
-        acknowledgement: expect.stringMatching(/^[a-f0-9]{64}$/),
+        acknowledgement: expect.stringMatching(/^profiles-v1:[a-f0-9]{64}$/),
         anonymousLists: encodedLists
     });
 
     await dialog.getByRole("button", {name: "Close results"}).click();
-    await expect(offer.getByRole("button", {name: "View copy results"})).toBeFocused();
+    await expect(page.getByRole("region", {name: "Local Builder data"})).toHaveCount(0);
     await expect(page.getByLabel("Character", {exact: true})).toContainText("Guest");
     await expect(page.getByLabel("Character", {exact: true})).toContainText("Hero");
     await expect(page.getByLabel("Character", {exact: true})).toContainText("Scout");
@@ -1451,7 +1538,7 @@ test("local Builder data dismissal closes when acknowledgement storage fails", a
         .getByRole("button", {name: "Not now"}).click();
 
     await expect(page.getByRole("dialog", {name: "Copy local Builder data"})).toHaveCount(0);
-    await expect(trigger).toBeFocused();
+    await expect(page.getByRole("region", {name: "Local Builder data"})).toHaveCount(0);
     expect(await page.evaluate(() => ({
         acknowledgement: localStorage.getItem(
             "legendhub-builder-import:0123456789abcdef0123456789abcdef"
@@ -1622,6 +1709,26 @@ test("Builder item name cells remain clickable across the whole cell", async fun
 
     await nameCell.click({position: {x: bounds.width - 40, y: bounds.height / 2}});
     await expect(page.getByRole("dialog", {name: "Choose Item"})).toBeVisible();
+});
+
+// Catches picker results requiring a precise click on the item-name text
+// instead of accepting the unused area across the full Name cell.
+test("Builder picker item name cells select across the whole cell", async function({page}) {
+    await page.goto(`${baseUrl}/builder/`);
+    await page.getByLabel("Variant", {exact: true}).selectOption("1");
+    const equipmentRow = equipmentTable(page).locator("tbody tr").nth(1);
+    await equipmentRow.getByRole("button", {name: "Brass lantern", exact: true}).click();
+
+    const dialog = page.getByRole("dialog", {name: "Choose Item"});
+    const resultRow = dialog.locator(".builder-picker-results tbody tr")
+        .filter({hasText: "Faux moonlight"});
+    const nameCell = resultRow.getByRole("cell").first();
+    const bounds = await nameCell.boundingBox();
+    expect(bounds).not.toBeNull();
+
+    await nameCell.click({position: {x: bounds.width - 40, y: bounds.height / 2}});
+    await expect(dialog).toHaveCount(0);
+    await expect(equipmentRow).toContainText("Faux moonlight");
 });
 
 // Catches the React table dropping the centered alignment used by the legacy
@@ -1891,6 +1998,15 @@ test("Builder item picker explains and consistently styles locked choices", asyn
     const firstResult = resultTable.locator("tbody tr").first();
     await expect(firstResult.getByRole("button", {name: "-", exact: true})).toBeDisabled();
     await expect(firstResult.locator("td").nth(1)).toHaveCSS("opacity", "0.65");
+    const lockedNameCell = firstResult.getByRole("cell").first();
+    const lockedBounds = await lockedNameCell.boundingBox();
+    expect(lockedBounds).not.toBeNull();
+    await lockedNameCell.click({position: {
+        x: lockedBounds.width - 40,
+        y: lockedBounds.height / 2
+    }});
+    await expect(dialog).toBeVisible();
+    await expect(equipmentTable(page).locator("tbody tr").nth(1)).toContainText("Limited light");
 
     await dialog.getByRole("button", {name: "Unlock current item", exact: true}).click();
     await expect(lockMessage).toHaveCount(0);

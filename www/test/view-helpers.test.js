@@ -10,9 +10,9 @@ const {normalizeTheme, serializeJsonForHtml} = require("../src/view-helpers");
 test("normalizeTheme accepts supported themes and rejects stylesheet injection", function() {
     assert.equal(normalizeTheme("glass-emerald"), "glass-emerald");
     assert.equal(normalizeTheme("solarized-dark"), "solarized-dark");
-    assert.equal(normalizeTheme('glass-blue\" onload=\"alert(1)'), "glass-blue");
-    assert.equal(normalizeTheme(["dark", "light"]), "glass-blue");
-    assert.equal(normalizeTheme(undefined), "glass-blue");
+    assert.equal(normalizeTheme('glass-blue\" onload=\"alert(1)'), "dark");
+    assert.equal(normalizeTheme(["dark", "light"]), "dark");
+    assert.equal(normalizeTheme(undefined), "dark");
 });
 
 test("serializeJsonForHtml round-trips values without HTML-significant characters", async function(t) {
@@ -104,7 +104,7 @@ test("items page escapes hostile title, canonical parameters, and theme cookies"
 
     assert.doesNotMatch(html, /<script data-release-xss>/);
     assert.match(html, /<title>&lt;\/title&gt;&lt;script data-release-xss&gt;/);
-    assert.match(html, /href="\/css\/bootstrap-glass-blue\.min\.css\?v=test"/);
+    assert.match(html, /href="\/css\/bootstrap-dark\.min\.css\?v=test"/);
     assert.doesNotMatch(html, /onload="alert\(1\)"/);
     assert.match(html,
         /href="https:\/\/www\.legendhub\.org\/items\/index\.html\?search=%22%3E%3Cimg\+src%3Dx\+onerror%3Dalert%281%29%3E&amp;sortBy=name&amp;sortAsc=true&amp;page=2" rel="canonical"/);

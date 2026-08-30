@@ -82,6 +82,38 @@ test("builder persistence keeps Item Search and scoped Builder columns distinct"
     assert.equal(statInfo[0].showColumn, undefined);
 });
 
+// Catches a fresh account's empty shared Item Search preference being treated
+// as an explicit request to hide every default Builder column.
+test("fresh account Builder uses metadata defaults until that profile saves columns", async function() {
+    const {accountPreferenceColumns} = await loadPersistence();
+    const statInfo = [
+        {short: "Slot", showColumnDefault: true},
+        {short: "Name", showColumnDefault: true},
+        {short: "Str", showColumnDefault: true},
+        {short: "Min", showColumnDefault: true},
+        {short: "Dex", showColumnDefault: true},
+        {short: "Con", showColumnDefault: true},
+        {short: "Per", showColumnDefault: true},
+        {short: "Spi", showColumnDefault: true},
+        {short: "Ac", showColumnDefault: true},
+        {short: "Align", showColumnDefault: true},
+        {short: "Rent", showColumnDefault: true},
+        {short: "Hp", showColumnDefault: false}
+    ];
+    const character = {name: "Hero", account: {id: "profile-a"}};
+    const visibleColumns = document => accountPreferenceColumns(document, character, statInfo)
+        .filter(stat => stat.showColumn)
+        .map(stat => stat.short);
+
+    assert.deepEqual(visibleColumns({itemColumns: [], builderColumns: {}}), [
+        "Slot", "Name", "Str", "Min", "Dex", "Con", "Per", "Spi", "Ac", "Align", "Rent"
+    ]);
+    assert.deepEqual(visibleColumns({
+        itemColumns: [],
+        builderColumns: {"profile-a": []}
+    }), []);
+});
+
 // Catches writes that change key names, omit secure cookie options, or fail to request the deployed twenty-year expiry.
 test("builder persistence plan preserves current keys and exact cookie options", async function() {
     const {createBuilderPersistencePlan} = await loadPersistence();

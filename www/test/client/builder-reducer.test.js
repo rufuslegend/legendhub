@@ -155,9 +155,9 @@ test("migration reducer reuses one atomic request through failure and retry", as
     assert.equal(state.migration.request, null);
 });
 
-// Catches preference edits retrying a stale request and dismissal mutating the
-// retained anonymous snapshot or active account profiles.
-test("migration preference change starts a new attempt and dismissal preserves both sources", async function() {
+// Catches dismissal mutating the retained anonymous snapshot or active
+// account profiles.
+test("migration dismissal preserves both profile sources", async function() {
     const {builderReducer, createDefaultVariant, createInitialBuilderState} = await loadReducer();
     const accountProfile = {
         name: "Account Hero", variants: [createDefaultVariant("Original")],
@@ -172,13 +172,6 @@ test("migration preference change starts a new attempt and dismissal preserves b
         type: "migration/offered", snapshot, fingerprint: "abc123",
         profiles: ["Local Hero"], preferencesChoice: "account"
     });
-    state = builderReducer(state, {
-        type: "migration/requested", request: {idempotencyKey: "old-key"}
-    });
-    state = builderReducer(state, {type: "migration/preferences-changed", value: "browser"});
-    assert.equal(state.migration.preferencesChoice, "browser");
-    assert.equal(state.migration.request, null);
-
     const activeProfiles = state.allLists;
     state = builderReducer(state, {type: "migration/dismissed"});
     assert.equal(state.migration.status, "dismissed");

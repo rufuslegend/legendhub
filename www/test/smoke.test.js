@@ -70,6 +70,19 @@ test("application HTTP smoke test", async function(t) {
         assert.doesNotMatch(body, /topmudsites|>Vote!?<|discordapp\.com\/widget/i);
     });
 
+    await t.test("serves the Privacy Policy from the shared interface", async function() {
+        const privacyResponse = await fetch(`${baseUrl}/privacy.html`);
+        assert.equal(privacyResponse.status, 200);
+        assert.match(privacyResponse.headers.get("content-type"), /^text\/html/);
+        const privacyBody = await privacyResponse.text();
+        assert.match(privacyBody, /<h1>Privacy Policy<\/h1>/);
+        assert.match(privacyBody, /href="mailto:rufus@legendmud\.org"/);
+
+        const homeResponse = await fetch(`${baseUrl}/`);
+        const homeBody = await homeResponse.text();
+        assert.match(homeBody, /href="\/privacy\.html"[^>]*>Privacy Policy<\/a>/);
+    });
+
     await t.test("serves forms that do not have a request body on GET", async function() {
         const loginResponse = await fetch(`${baseUrl}/login.html`);
         assert.equal(loginResponse.status, 200);

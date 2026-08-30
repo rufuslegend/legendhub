@@ -40,7 +40,7 @@ const HERO = `6*Hero~Tank~${BASE_STATS}000000___00000000000000000${BLANK_ITEMS}*
 const SCOUT = `6*Scout~Original~${BASE_STATS}000000___00000000000000000${BLANK_ITEMS}*`;
 const CANONICAL_DEFAULT_PREFERENCES = {
     version: 1,
-    theme: "glass-blue",
+    theme: "dark",
     itemsPerPage: 20,
     itemColumns: [],
     builderColumns: {},

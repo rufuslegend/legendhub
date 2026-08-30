@@ -8,7 +8,8 @@ with version 2.6.0.
 ### Added
 
 - Added verified email addresses to accounts. New accounts now require an email address and receive a verification link before email-only features become available.
-- Added a dismissible email-verification reminder after each login for existing accounts without a verified address; all features available before 3.1 continue to work without one.
+- Added a themed, dismissible email-verification modal after each login for existing accounts without a verified address; all features available before 3.1 continue to work without one.
+- Added a plain-language Privacy Policy covering account information, Builder storage, cookies, service providers, retention, and deletion requests.
 - Added password recovery through a verified email address, with one-hour reset links that sign out every existing session after the password changes.
 - Added account-backed Builder storage for players with a verified email address. Characters autosave separately, follow the player between work, home, and other browsers, and share a 10 MB account limit.
 - Added cross-device Builder and site preferences for account storage, including themes, paging, visible columns, and the last selected character and variant.
@@ -16,6 +17,7 @@ with version 2.6.0.
 
 ### Changed
 
+- Made Dark the default theme for visitors and players without a saved theme; every Glass theme remains available in the theme menu.
 - Sign-in now accepts either a username or a verified email address.
 - Added secure account email changes and verification resends. A verified address stays active until its replacement is verified, and the previous address receives a security notice after the change.
 - Anonymous and unverified players can keep using browser-local Builder storage as before. Signing out of account storage restores only the anonymous characters already saved on that device.
@@ -24,13 +26,17 @@ with version 2.6.0.
 
 ### Fixed
 
+- Restored the Builder's default Strength, Mind, Dexterity, Constitution, Perception, Spirit, Armor Class, Alignment, and Rent columns for fresh account storage.
+- Made the local Builder data copy notice readable in every theme, summarized large profile sets in scrollable dialogs, transitioned supported Builder preferences automatically, let players dismiss the notice without refreshing, and stopped preference changes from prompting players to copy the same profiles again.
+- Kept the email reminder from blocking the email-verification page.
+- Aligned Account Settings actions and aligned and widened the labels and entry fields across the sign-in and registration forms.
 - Kept the 3.1 account-storage database upgrade starting correctly on the MySQL version used by LegendHUB servers.
 - Kept account verification, recovery, and synced Builder records out of the public game-content copy while retaining them in private database backups.
 - Kept older exact usernames usable for sign-in and recovery while preventing a new email address from shadowing another player's username.
 - Hardened verification and password-reset transitions so copied action links, concurrent password changes, and older pending actions cannot retain unintended account access.
 - Added an accessible 60-second countdown after successful or rate-limited verification resends, and kept verification/reset result navigation in sync with the current sign-in state.
 - Preserved both versions of a Builder character when devices edit the same profile, saving the attempted edit as a clearly named conflict copy instead of overwriting either version.
-- Restored the Builder item-name cell as a full-size click target while keeping the item name and separate details link keyboard accessible.
+- Restored Builder and item-picker name cells as full-size click targets while keeping item names and separate details links keyboard accessible.
 - Included Increased Potential ranks in the Builder's visible Strength, Mind, Dexterity, Constitution, Perception, and Spirit cap totals.
 
 ## [3.0.0] - 2026-08-26

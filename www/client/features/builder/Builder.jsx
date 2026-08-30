@@ -15,7 +15,7 @@ import {
 } from "../../lib/account-preferences-store.js";
 import {deriveItemRestrictions, deriveRuneCharmStats} from "./builder-derivations.js";
 import {decodeBuilderEntries, decodeBuilderLists, encodeBuilderLists, encodeBuilderVariant} from "./builder-encoding.js";
-import {buildImportRequest, classifyAnonymousData, defaultMigrationPreferencesChoice, fingerprintAnonymousData, migrationAcknowledgementKey, normalizeMigrationResult, shouldOfferMigration, writeMigrationAcknowledgement} from "./builder-migration.js";
+import {buildImportRequest, classifyAnonymousData, defaultMigrationPreferencesChoice, fingerprintAnonymousData, normalizeMigrationResult, readMigrationAcknowledgement, shouldOfferMigration, writeMigrationAcknowledgement} from "./builder-migration.js";
 import {accountPreferenceColumns, applyBuilderPersistencePlan, applySelectedColumns, calculateStorageSize, createBuilderAccountPreferencePatch, createBuilderPersistencePlan, formatStorageSize, readBuilderPersistence} from "./builder-persistence.js";
 import {builderReducer, createDefaultVariant, createInitialBuilderState, selectStatRestrictions, selectStatTotal} from "./builder-reducer.js";
 import {RUNE_CHARM_ID} from "./item-constants.js";
@@ -52,12 +52,13 @@ function builderPreferencePresentation(mode, preferences, lists, defaultStatInfo
             list.account?.id && list.account.id === preferences.selectedProfileId), 0);
         variantIndex = Math.max(lists[listIndex].variants.findIndex(variant =>
             variant.name === preferences.selectedVariant), 0);
-        columns = preferences.builderColumns?.[lists[listIndex].account?.id] || preferences.itemColumns;
     }
     return {
         listIndex,
         variantIndex,
-        statInfo: applySelectedColumns(columns, defaultStatInfo),
+        statInfo: mode === "account"
+            ? accountPreferenceColumns(preferences, lists[listIndex], defaultStatInfo)
+            : applySelectedColumns(columns, defaultStatInfo),
         itemsPerPage: preferences.itemsPerPage
     };
 }
@@ -158,9 +159,11 @@ export default function Builder({
                     typeof accountContext.storageNamespace === "string" && accountContext.storageNamespace) {
                     try {
                         const fingerprint = await fingerprintAnonymousData(source.anonymousSnapshot, globalThis.crypto);
-                        const acknowledgedFingerprint = localStorage.getItem(
-                            migrationAcknowledgementKey(accountContext.storageNamespace)
-                        );
+                        const acknowledgedFingerprint = readMigrationAcknowledgement({
+                            storage: localStorage,
+                            storageNamespace: accountContext.storageNamespace,
+                            fingerprint
+                        });
                         if (shouldOfferMigration({
                             snapshot: source.anonymousSnapshot,
                             fingerprint,
@@ -493,11 +496,8 @@ export default function Builder({
     function closeMigration() {
         if (state.migration.status === "pending")
             return;
-        if (state.migration.status === "succeeded") {
-            dispatch({type: "migration/closed"});
-            return;
-        }
-        acknowledgeMigration();
+        if (state.migration.status !== "succeeded")
+            acknowledgeMigration();
         dispatch({type: "migration/dismissed"});
     }
     async function copyMigration() {
@@ -692,5 +692,5 @@ export default function Builder({
     if (state.requestStatus === "pending" && !state.initialized) return <main className="container-fluid"><p role="status">Loading Builder…</p></main>;
     if (!selected) return <main className="container-fluid">{requestAlert}</main>;
     const storageStatus = <BuilderSyncStatus mode={state.storageMode} status={state.syncStatus} message={state.syncMessage} onExport={() => openDialog("export")} onReload={() => window.location.reload()} />;
-    return <main className="container-fluid"><div className="row"><CharacterPanel state={state} columnsOpen={state.currentDialog === "columns"} columnsTriggerRef={columnsTriggerRef} storageStatus={storageStatus} onAction={action} onDialog={openDialog} /><StatsPanel state={state} onAction={action} /></div>{requestAlert}<BuilderMigrationOffer migration={state.migration} onOpen={() => dispatch({type: "migration/opened"})} /><EquipmentPanel state={state} totals={totals} restrictions={restrictions} statRestrictions={statRestrictions} onAction={action} onToggleLocks={requestToggleLocks} onOpen={openItem} onPick={pickItem} onClose={close} />{state.currentDialog === "export" && <ImportExportDialog mode="export" value={exportValue()} onClose={close} />}{state.currentDialog === "import" && <ImportExportDialog mode="import" value={state.importModel || {input: "", lists: [], message: "", loading: false}} onChange={importChange} onClose={close} onSubmit={submitImport} />}{state.currentDialog === "columns" && <ColumnsDialog categories={itemStatCategories} open onClose={close} onReset={resetColumns} onToggle={toggleColumn} selectedColumns={state.statInfo.filter(stat => stat.showColumn).map(stat => stat.short)} triggerRef={columnsTriggerRef} />}{state.currentDialog && !["columns", "import", "export"].includes(state.currentDialog) && <BuilderListsDialog dialog={state.currentDialog} state={state} onClose={close} onSubmit={listsDialog} />}{state.confirmMessage && <BuilderModal label={`Confirm ${state.confirmMessage.includes("unlock") ? "unlock" : "lock"} all items`} onClose={closeConfirmation}><div className="modal-body"><p>{state.confirmMessage}</p><button className="btn btn-primary" type="button" onClick={confirmAction}>Yes</button></div></BuilderModal>}<BuilderMigrationDialog migration={state.migration} onClose={closeMigration} onCopy={copyMigration} onPreferenceChange={value => dispatch({type: "migration/preferences-changed", value})} /></main>;
+    return <main className="container-fluid"><div className="row"><CharacterPanel state={state} columnsOpen={state.currentDialog === "columns"} columnsTriggerRef={columnsTriggerRef} storageStatus={storageStatus} onAction={action} onDialog={openDialog} /><StatsPanel state={state} onAction={action} /></div>{requestAlert}<BuilderMigrationOffer migration={state.migration} onOpen={() => dispatch({type: "migration/opened"})} /><EquipmentPanel state={state} totals={totals} restrictions={restrictions} statRestrictions={statRestrictions} onAction={action} onToggleLocks={requestToggleLocks} onOpen={openItem} onPick={pickItem} onClose={close} />{state.currentDialog === "export" && <ImportExportDialog mode="export" value={exportValue()} onClose={close} />}{state.currentDialog === "import" && <ImportExportDialog mode="import" value={state.importModel || {input: "", lists: [], message: "", loading: false}} onChange={importChange} onClose={close} onSubmit={submitImport} />}{state.currentDialog === "columns" && <ColumnsDialog categories={itemStatCategories} open onClose={close} onReset={resetColumns} onToggle={toggleColumn} selectedColumns={state.statInfo.filter(stat => stat.showColumn).map(stat => stat.short)} triggerRef={columnsTriggerRef} />}{state.currentDialog && !["columns", "import", "export"].includes(state.currentDialog) && <BuilderListsDialog dialog={state.currentDialog} state={state} onClose={close} onSubmit={listsDialog} />}{state.confirmMessage && <BuilderModal label={`Confirm ${state.confirmMessage.includes("unlock") ? "unlock" : "lock"} all items`} onClose={closeConfirmation}><div className="modal-body"><p>{state.confirmMessage}</p><button className="btn btn-primary" type="button" onClick={confirmAction}>Yes</button></div></BuilderModal>}<BuilderMigrationDialog migration={state.migration} onClose={closeMigration} onCopy={copyMigration} /></main>;
 }

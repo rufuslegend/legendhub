@@ -36,7 +36,10 @@ export function accountPreferenceColumns(document, character, statInfo) {
     const profileId = typeof character?.account?.id === "string" && character.account.id
         ? character.account.id
         : null;
-    const columns = (profileId && document?.builderColumns?.[profileId]) || document?.itemColumns;
+    const hasProfileColumns = profileId && hasOwn(document?.builderColumns, profileId);
+    const columns = hasProfileColumns
+        ? document.builderColumns[profileId]
+        : (document?.itemColumns?.length ? document.itemColumns : null);
     return applySelectedColumns(columns, statInfo);
 }
 

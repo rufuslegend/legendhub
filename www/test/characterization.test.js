@@ -240,18 +240,20 @@ test("login page requires email registration and safely preserves entered identi
     assert.equal(html.includes(`value="${email}"`), false);
 });
 
-test("Glass Blue is the default while saved themes remain unchanged", async function() {
+test("Dark is the default while saved themes remain unchanged", async function() {
     const defaultHtml = await renderHome();
     assert.match(defaultHtml,
-        /href="\/css\/bootstrap-glass-blue\.min\.css\?v=test"/);
+        /href="\/css\/bootstrap-dark\.min\.css\?v=test"/);
     assert.match(defaultHtml,
-        /<meta property="theme-color" content="#0d1f30" \/>/);
+        /<meta property="theme-color" content="#343a40" \/>/);
 
-    for (const theme of ["light", "dark", "solarized-dark", "high-contrast"]) {
+    for (const theme of [
+        "light", "dark", "solarized-dark", "high-contrast",
+        "glass-blue", "glass-emerald", "glass-ruby", "glass-amethyst", "glass-amber"
+    ]) {
         const html = await renderHome({theme});
         assert.match(html, new RegExp(
             `href="/css/bootstrap-${theme}\\.min\\.css\\?v=test"`));
-        assert.doesNotMatch(html, /bootstrap-glass-blue\.min\.css/);
     }
 });
 
@@ -266,11 +268,11 @@ test("theme chooser exposes the Glass family and preserves standard choices", as
     }
 });
 
-test("installable app metadata uses the Glass Blue browser colors", function() {
+test("installable app metadata uses the Dark browser colors", function() {
     const manifest = JSON.parse(fs.readFileSync(path.join(
         __dirname, "../src/public/site.webmanifest"), "utf8"));
-    assert.equal(manifest.theme_color, "#0d1f30");
-    assert.equal(manifest.background_color, "#05070b");
+    assert.equal(manifest.theme_color, "#343a40");
+    assert.equal(manifest.background_color, "#212529");
 });
 
 test("fatal error page renders without request locals", async function() {

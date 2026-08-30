@@ -1,4 +1,5 @@
 import {initializeCookieConsent} from "../lib/cookie-consent.js";
+import {initializeEmailVerificationPrompt} from "../lib/email-verification-prompt.js";
 import {initializeNotifications} from "../lib/notifications.js";
 import {initializeResponsiveCategoryLists} from "../lib/responsive-category-list.js";
 import {initializeThemeMenu} from "../lib/theme-menu.js";
@@ -27,6 +28,7 @@ const accountPreferencesStore = createAccountPreferencesStore({
 setPageAccountPreferencesStore(accountPreferencesStore);
 
 initializeThemeMenu(document, {accountPreferencesStore});
+initializeEmailVerificationPrompt();
 initializeNotifications();
 initializeCookieConsent();
 initializeResponsiveCategoryLists();

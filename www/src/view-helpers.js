@@ -13,7 +13,7 @@ const THEMES = new Set([
 ]);
 
 function normalizeTheme(value) {
-    return typeof value === "string" && THEMES.has(value) ? value : "glass-blue";
+    return typeof value === "string" && THEMES.has(value) ? value : "dark";
 }
 
 function serializeJsonForHtml(value) {

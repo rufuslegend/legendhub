@@ -26,9 +26,9 @@ const snapshot = {
     futureDeviceValue: "private-unknown"
 };
 
-// Catches hashing raw persistence state, device-only values, or a non-SHA-256
-// algorithm instead of the canonical list and syncable preference document.
-test("anonymous fingerprint hashes only canonical lists and syncable preferences with SHA-256", async function() {
+// Catches browser preferences or raw persistence state being included in the
+// acknowledgement instead of hashing only the canonical local profiles.
+test("anonymous fingerprint hashes only canonical local profiles with SHA-256", async function() {
     const {fingerprintAnonymousData} = await loadMigration();
     let algorithm;
     let input;
@@ -45,21 +45,7 @@ test("anonymous fingerprint hashes only canonical lists and syncable preferences
     const fingerprint = await fingerprintAnonymousData(snapshot, crypto);
 
     assert.equal(algorithm, "SHA-256");
-    assert.equal(input, JSON.stringify({
-        encodedLists: snapshot.encodedLists,
-        preferences: {
-            version: 1,
-            theme: "dark",
-            itemsPerPage: 50,
-            itemColumns: ["Slot", "Ac", "Hp"],
-            builderColumns: {
-                "local-1": ["Name", "Str"],
-                "local-2": ["Rent", "Name"]
-            },
-            selectedProfileId: "local-1",
-            selectedVariant: "Tank"
-        }
-    }));
+    assert.equal(input, JSON.stringify({encodedLists: snapshot.encodedLists}));
     assert.equal(fingerprint, "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
     assert.equal(input.includes("private-login-token"), false);
     assert.equal(input.includes("America/Chicago"), false);
@@ -78,7 +64,7 @@ test("migration acknowledgement key is scoped only by opaque storage namespace",
 
 // Catches acknowledgement storage availability being treated as part of the
 // already-committed server transaction.
-test("acknowledgement writes are best effort and never expose storage failures", async function() {
+test("acknowledgement writes use the versioned profile fingerprint format", async function() {
     const {writeMigrationAcknowledgement} = await loadMigration();
     const fingerprint = "a".repeat(64);
     const written = [];
@@ -89,7 +75,7 @@ test("acknowledgement writes are best effort and never expose storage failures",
     }), true);
     assert.deepEqual(written, [[
         "legendhub-builder-import:opaque-namespace",
-        fingerprint
+        `profiles-v1:${fingerprint}`
     ]]);
     assert.equal(writeMigrationAcknowledgement({
         storage: {setItem() { throw new Error("private quota diagnostic"); }},
@@ -103,17 +89,68 @@ test("acknowledgement writes are best effort and never expose storage failures",
     }), false);
 });
 
-// Catches unchanged acknowledged anonymous data being offered on every login,
-// while still allowing a changed syncable value to produce a new offer.
-test("unchanged acknowledged anonymous data is not offered twice", async function() {
+// Catches acknowledgements written by the preference-sensitive format being
+// discarded and asking players to import the same profiles one more time.
+test("legacy acknowledgements suppress the offer and upgrade to profile-only format", async function() {
+    const {readMigrationAcknowledgement} = await loadMigration();
+    const fingerprint = "b".repeat(64);
+    const legacyFingerprint = "a".repeat(64);
+    const written = [];
+    const acknowledged = readMigrationAcknowledgement({
+        storage: {
+            getItem: () => legacyFingerprint,
+            setItem: (key, value) => written.push([key, value])
+        },
+        storageNamespace: "opaque-namespace",
+        fingerprint
+    });
+
+    assert.equal(acknowledged, fingerprint);
+    assert.deepEqual(written, [[
+        "legendhub-builder-import:opaque-namespace",
+        `profiles-v1:${fingerprint}`
+    ]]);
+});
+
+// Catches a versioned acknowledgement suppressing a genuinely changed local
+// profile set instead of matching only its exact profile fingerprint.
+test("versioned acknowledgements match only the current local profiles", async function() {
+    const {readMigrationAcknowledgement} = await loadMigration();
+    const fingerprint = "b".repeat(64);
+    const read = value => readMigrationAcknowledgement({
+        storage: {getItem: () => value, setItem() {}},
+        storageNamespace: "opaque-namespace",
+        fingerprint
+    });
+
+    assert.equal(read(`profiles-v1:${fingerprint}`), fingerprint);
+    assert.equal(read(`profiles-v1:${"c".repeat(64)}`), null);
+    assert.equal(read("invalid"), null);
+});
+
+// Catches a browser-preference change re-offering already imported profiles,
+// while retaining another offer when the actual local profiles change.
+test("only changed local profiles are offered after acknowledgement", async function() {
     const {fingerprintAnonymousData, shouldOfferMigration} = await loadMigration();
     const fingerprint = await fingerprintAnonymousData(snapshot, webcrypto);
-    const changedSnapshot = {...snapshot, itemsPerPage: 100};
-    const changedFingerprint = await fingerprintAnonymousData(changedSnapshot, webcrypto);
+    const preferenceChange = {...snapshot, itemsPerPage: 100};
+    const profileChange = {...snapshot, encodedLists: `6*${hero}*`};
+    const preferenceFingerprint = await fingerprintAnonymousData(preferenceChange, webcrypto);
+    const profileFingerprint = await fingerprintAnonymousData(profileChange, webcrypto);
 
     assert.equal(shouldOfferMigration({snapshot, fingerprint, acknowledgedFingerprint: fingerprint}), false);
-    assert.equal(shouldOfferMigration({snapshot: changedSnapshot, fingerprint: changedFingerprint, acknowledgedFingerprint: fingerprint}), true);
-    assert.notEqual(changedFingerprint, fingerprint);
+    assert.equal(shouldOfferMigration({
+        snapshot: preferenceChange,
+        fingerprint: preferenceFingerprint,
+        acknowledgedFingerprint: fingerprint
+    }), false);
+    assert.equal(shouldOfferMigration({
+        snapshot: profileChange,
+        fingerprint: profileFingerprint,
+        acknowledgedFingerprint: fingerprint
+    }), true);
+    assert.equal(preferenceFingerprint, fingerprint);
+    assert.notEqual(profileFingerprint, fingerprint);
 });
 
 // Catches empty, corrupt, or not-yet-fingerprinted anonymous sources producing

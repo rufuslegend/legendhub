@@ -420,6 +420,8 @@ test("account Builder sync follows a verified player from work to home", async f
     try {
         const workPage = await work.newPage();
         await workPage.goto(`${baseUrl}/builder/`);
+        await expect(workPage.locator(".builder-equipment-table thead tr").first()
+            .getByRole("columnheader")).toHaveText(["Slot", "Lock", "Name", "Str", "Min", "Rent"]);
         await expect(workPage.getByLabel("Character", {exact: true})).toContainText("Untitled");
         await renameCharacter(workPage, "Work Hero");
         await expect(workPage.getByText("Saved to account", {exact: true})).toBeVisible({timeout: 3000});
@@ -511,7 +513,14 @@ test("account Builder sync leaves anonymous and unverified players in browser st
 
         const unverifiedPage = await unverified.newPage();
         await unverifiedPage.goto(`${baseUrl}/builder/`);
-        await expect(unverifiedPage.getByRole("heading", {name: "Verify your email address"})).toBeVisible();
+        const verificationPrompt = unverifiedPage.getByRole("dialog", {
+            name: "Verify your email address"
+        });
+        await expect(verificationPrompt).toBeVisible();
+        await verificationPrompt.getByRole("button", {
+            name: "Dismiss for this login"
+        }).click();
+        await expect(verificationPrompt).toHaveCount(0);
         await expect(unverifiedPage.getByText("Saved in this browser", {exact: true})).toBeVisible();
         await expect(unverifiedPage.getByLabel("Character", {exact: true})).toContainText("Local Hero");
         await unverifiedPage.locator("#minInput").fill("27");
@@ -599,14 +608,18 @@ test("account Builder sync explicitly migrates and reports every server outcome"
         const page = await device.newPage();
         await page.goto(`${baseUrl}/builder/`);
         const offer = page.getByRole("region", {name: "Local Builder data"});
-        await expect(offer).toContainText("Hero");
-        await expect(offer).toContainText("Scout");
-        await expect(offer).toContainText("Guest");
-        await expect(offer).toContainText("Rejected");
+        await expect(offer).toContainText("4 profiles");
+        await expect(offer).not.toContainText("Hero");
         expect(backend.mutationLog).toEqual([]);
 
         await offer.getByRole("button", {name: "Review local Builder data"}).click();
         const dialog = page.getByRole("dialog", {name: "Copy local Builder data"});
+        const profileList = dialog.getByRole("region", {name: "4 local Builder profiles"});
+        await expect(profileList).toContainText("Hero");
+        await expect(profileList).toContainText("Scout");
+        await expect(profileList).toContainText("Guest");
+        await expect(profileList).toContainText("Rejected");
+        await expect(dialog.getByRole("group", {name: "Builder preferences"})).toHaveCount(0);
         await dialog.getByRole("button", {name: "Copy all to my account"}).click();
 
         await expect(dialog.getByRole("heading", {name: "Copied"})).toBeVisible();
@@ -624,7 +637,7 @@ test("account Builder sync explicitly migrates and reports every server outcome"
             expected: payload
         }), migrationPayload)).toEqual({
             source: migrationPayload,
-            acknowledgement: expect.stringMatching(/^[a-f0-9]{64}$/),
+            acknowledgement: expect.stringMatching(/^profiles-v1:[a-f0-9]{64}$/),
             expected: migrationPayload
         });
         expect(backend.mutationLog.map(entry => entry.operation)).toContain("import");
@@ -634,6 +647,12 @@ test("account Builder sync explicitly migrates and reports every server outcome"
             "Hero Local",
             "Scout"
         ]);
+
+        await dialog.getByRole("button", {name: "Close results"}).click();
+        await device.addCookies([{name: "ipp", value: "100", url: baseUrl}]);
+        await page.reload();
+        await expect(page.getByLabel("Character", {exact: true})).toContainText("Hero Local");
+        await expect(page.getByRole("region", {name: "Local Builder data"})).toHaveCount(0);
     }
     finally {
         await device.close();

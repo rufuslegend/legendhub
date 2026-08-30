@@ -179,6 +179,36 @@ function expectGraphqlContract(body, expected) {
     expect(responseSelection(mutation.selectionSet)).toEqual(expected.response);
 }
 
+// Catches the Email action drifting into the summary column instead of lining
+// up with the other Account Settings actions.
+test("account email summary aligns its action with notification and password actions", async function({page}) {
+    await openAccount(page);
+
+    const emailSection = page.locator('section[aria-labelledby="email-heading"]');
+    const current = emailSection.locator("p").filter({hasText: "Current:"}).first();
+    const add = emailSection.getByRole("button", {name: "Add email address"});
+    const edit = page.getByRole("button", {name: "Edit notification settings"});
+    const change = page.getByRole("button", {name: "Change password"});
+    const [currentBox, addBox, editBox, changeBox] = await Promise.all([
+        current.boundingBox(),
+        add.boundingBox(),
+        edit.boundingBox(),
+        change.boundingBox()
+    ]);
+
+    expect(currentBox).not.toBeNull();
+    expect(addBox).not.toBeNull();
+    expect(editBox).not.toBeNull();
+    expect(changeBox).not.toBeNull();
+    expect(currentBox.x + currentBox.width).toBeLessThanOrEqual(addBox.x + 1);
+    expect(Math.abs(addBox.x - editBox.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(addBox.x - changeBox.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(addBox.width - editBox.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(addBox.width - changeBox.width)).toBeLessThanOrEqual(1);
+    expect(Math.min(currentBox.y + currentBox.height, addBox.y + addBox.height) -
+        Math.max(currentBox.y, addBox.y)).toBeGreaterThan(0);
+});
+
 test("account notification settings mount from props and save once with keyboard controls", async function({context, page}) {
     let releaseSave;
     let notificationRequests = 0;
