@@ -156,7 +156,7 @@ for (const pageUnderTest of pages) {
     test(`${pageUnderTest.name} has no detectable WCAG A or AA violations in High Contrast`, async function({ page }) {
         await expectHighContrastPage(page, pageUnderTest);
         if (pageUnderTest.name === "login") {
-            await expect(page.locator("#login_username")).toHaveAccessibleName("Username");
+            await expect(page.locator("#login_username")).toHaveAccessibleName("Username or email");
             await expect(page.locator("#login_username")).toHaveAccessibleDescription("");
             await expect(page.locator("#login_password")).toHaveAccessibleName("Password");
             await expect(page.locator("#login_password")).toHaveAccessibleDescription("");
@@ -230,6 +230,7 @@ test("registration error state has no detectable WCAG A or AA violations in High
         page.waitForNavigation(),
         page.locator('form[name="register"]').evaluate(function(form) {
             form.elements.register_username.value = "accessibility-check";
+            form.elements.register_email.value = "accessibility@example.test";
             form.elements.register_password.value = "test-password";
             form.elements.register_confirmPassword.value = "test-password";
             form.submit();
@@ -246,6 +247,8 @@ test("registration error state has no detectable WCAG A or AA violations in High
     );
     await expect(page.locator("#register_username")).toHaveAccessibleName("Username");
     await expect(page.locator("#register_username")).toHaveAccessibleDescription("");
+    await expect(page.locator("#register_email")).toHaveAccessibleName("Email");
+    await expect(page.locator("#register_email")).toHaveAccessibleDescription("");
     await expect(page.locator("#register_password")).toHaveAccessibleName("Password");
     await expect(page.locator("#register_password")).toHaveAccessibleDescription("");
     await expect(page.locator("#register_confirmPassword")).toHaveAccessibleName("Confirm");

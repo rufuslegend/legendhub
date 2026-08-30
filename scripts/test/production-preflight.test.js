@@ -417,7 +417,7 @@ test("runs read-only production checks without exposing secrets", () => {
 
     const commands = fs.readFileSync(commandLog, "utf8").trim().split("\n");
     const curlCommands = commands.filter((line) => line.startsWith("curl "));
-    assert.equal(curlCommands.length, 18);
+    assert.equal(curlCommands.length, 22);
     assert.equal(curlCommands.every((line) => line.includes("--connect-timeout 5 --max-time 15")), true);
     assert.equal(curlCommands.every((line) => !line.includes(" -L ")), true);
     assert.deepEqual(curlCommands.map((line) => line.split(" ").at(-1)), [
@@ -430,6 +430,8 @@ test("runs read-only production checks without exposing secrets", () => {
         "http://127.0.0.1:7000/quests/",
         "http://127.0.0.1:7000/wiki/",
         "http://127.0.0.1:7000/login.html",
+        "http://127.0.0.1:7000/forgot-password.html",
+        "http://127.0.0.1:7000/verify-email.html",
         "https://www.legendhub.org/",
         "https://www.legendhub.org/feedback.html",
         "https://www.legendhub.org/changelog",
@@ -439,6 +441,8 @@ test("runs read-only production checks without exposing secrets", () => {
         "https://www.legendhub.org/quests/",
         "https://www.legendhub.org/wiki/",
         "https://www.legendhub.org/login.html",
+        "https://www.legendhub.org/forgot-password.html",
+        "https://www.legendhub.org/verify-email.html",
     ]);
     assert.equal(commands.filter((line) => line.startsWith("docker exec ")).length, 1);
     assert.equal(commands.some((line) => /docker-compose .* (up|down|pull|push|stop|start|restart)\b/.test(line)), false);

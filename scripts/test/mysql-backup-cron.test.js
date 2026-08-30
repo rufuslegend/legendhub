@@ -140,6 +140,55 @@ function runBackup(fakeDumpBody) {
         image, "bash", "-c", command]);
 }
 
+// Catches private account data leaking into the public content snapshot. The
+// private artifact remains a complete database dump, including these tables.
+test("backup keeps account storage private and excludes it from public content", () => {
+    const privateAccountTables = [
+        "AccountActionTokens",
+        "AccountActionAttempts",
+        "BuilderProfiles",
+        "AccountPreferences",
+        "BuilderImportReceipts",
+    ];
+    const intentionalExclusions = [
+        "AuthTokens",
+        "MemberRoleMap",
+        "Members",
+        "NotificationChanges",
+        "NotificationQueue",
+        "NotificationSettings",
+        "Notifications",
+        "Permissions",
+        "PersistentLogins",
+    ];
+    const fakeDumpBody = [
+        "printf '%s\\n' \"$*\" >> /tmp/mysqldump-arguments",
+        "printf 'CREATE TABLE backup_test (id int);\\n'",
+    ].join("; ");
+    const command = [
+        "fake_bin=$(mktemp -d)",
+        "trap 'rm -rf -- \"$fake_bin\"' EXIT",
+        "printf '%s\\n' '#!/bin/sh' " +
+            `'${fakeDumpBody.replaceAll("'", "'\\''")}' > \"$fake_bin/mysqldump\"`,
+        "chmod +x \"$fake_bin/mysqldump\"",
+        "PATH=\"$fake_bin:$PATH\" /usr/local/bin/backup-mysql",
+        "sed -n '1p;3p' /tmp/mysqldump-arguments",
+    ].join("; ");
+    const result = docker(["run", "--rm", ...environmentArguments(),
+        image, "bash", "-c", command]);
+    assert.equal(result.status, 0, result.stderr);
+
+    const lines = result.stdout.trim().split("\n");
+    const privateArguments = lines.at(-2);
+    const publicDataArguments = lines.at(-1);
+    assert.match(privateArguments, /(?:^| )-B legendhub(?: |$)/);
+    assert.doesNotMatch(privateArguments, /--ignore-table=/);
+    const exclusions = [...publicDataArguments.matchAll(
+        /--ignore-table=legendhub\.([A-Za-z0-9_]+)/g,
+    )].map(match => match[1]);
+    assert.deepEqual(exclusions, [...privateAccountTables, ...intentionalExclusions]);
+});
+
 function runBackupFailureAtInvocation(failingInvocation) {
     const fakeDumpBody = [
         "count=0",

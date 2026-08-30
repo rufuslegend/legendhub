@@ -80,6 +80,16 @@ test("application HTTP smoke test", async function(t) {
         assert.equal(feedbackResponse.status, 200);
         assert.match(feedbackResponse.headers.get("content-type"), /^text\/html/);
         assert.match(await feedbackResponse.text(), /Send Feedback/);
+
+        const recoveryResponse = await fetch(`${baseUrl}/forgot-password.html`);
+        assert.equal(recoveryResponse.status, 200);
+        assert.match(recoveryResponse.headers.get("content-type"), /^text\/html/);
+        assert.match(await recoveryResponse.text(), /Forgot your password\?/);
+
+        const verificationResponse = await fetch(`${baseUrl}/verify-email.html`);
+        assert.equal(verificationResponse.status, 200);
+        assert.match(verificationResponse.headers.get("content-type"), /^text\/html/);
+        assert.match(await verificationResponse.text(), /Verify your email address/);
     });
 
     await t.test("serves a static asset", async function() {

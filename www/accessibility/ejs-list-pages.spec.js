@@ -208,7 +208,7 @@ test("failed login keeps credentials in variables and never repopulates the pass
     expect(call).toBeDefined();
     expect(call.query).not.toContain(reflectedPayload);
     expect(call.variables).toEqual({
-        username: reflectedPayload,
+        identity: reflectedPayload,
         password,
         stayLoggedIn: false
     });

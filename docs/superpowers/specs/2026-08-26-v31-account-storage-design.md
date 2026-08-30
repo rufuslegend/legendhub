@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-26
 
-**Status:** Approved; implementation planned
+**Status:** Implemented
 
 **Target:** LegendHUB 3.1.0
 

@@ -273,6 +273,8 @@ run_remote() {
     /quests/
     /wiki/
     /login.html
+    /forgot-password.html
+    /verify-email.html
   )
 
   for route in "${routes[@]}"; do

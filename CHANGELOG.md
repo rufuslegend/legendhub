@@ -10,17 +10,21 @@ with version 2.6.0.
 - Added verified email addresses to accounts. New accounts now require an email address and receive a verification link before email-only features become available.
 - Added a dismissible email-verification reminder after each login for existing accounts without a verified address; all features available before 3.1 continue to work without one.
 - Added password recovery through a verified email address, with one-hour reset links that sign out every existing session after the password changes.
-- Added account-backed Builder storage for players with a verified email address. Characters are stored separately, can be used across devices, and share a 10 MB account limit.
+- Added account-backed Builder storage for players with a verified email address. Characters autosave separately, follow the player between work, home, and other browsers, and share a 10 MB account limit.
 - Added cross-device Builder and site preferences for account storage, including themes, paging, visible columns, and the last selected character and variant.
+- Added account controls to download a fresh export of every synced Builder character or permanently delete all synced Builder data after a separate confirmation.
 
 ### Changed
 
 - Sign-in now accepts either a username or a verified email address.
 - Added secure account email changes and verification resends. A verified address stays active until its replacement is verified, and the previous address receives a security notice after the change.
+- Anonymous and unverified players can keep using browser-local Builder storage as before. Signing out of account storage restores only the anonymous characters already saved on that device.
 - Copying Builder characters saved in a browser to an account now requires an explicit player action, keeps the browser copy intact, and safely reports copied, renamed, duplicate, or invalid characters.
+- Account Builder saves now retry temporary network problems with visible status while validation, quota, conflict, and deleted-storage errors keep unsaved edits available for export instead of retrying indefinitely.
 
 ### Fixed
 
+- Kept account verification, recovery, and synced Builder records out of the public game-content copy while retaining them in private database backups.
 - Kept older exact usernames usable for sign-in and recovery while preventing a new email address from shadowing another player's username.
 - Hardened verification and password-reset transitions so copied action links, concurrent password changes, and older pending actions cannot retain unintended account access.
 - Added an accessible 60-second countdown after successful or rate-limited verification resends, and kept verification/reset result navigation in sync with the current sign-in state.

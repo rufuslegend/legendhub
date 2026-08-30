@@ -113,6 +113,11 @@ mysqldump \
     --no-tablespaces \
     --no-create-info \
     --skip-triggers \
+    --ignore-table="${MYSQL_DATABASE}.AccountActionTokens" \
+    --ignore-table="${MYSQL_DATABASE}.AccountActionAttempts" \
+    --ignore-table="${MYSQL_DATABASE}.BuilderProfiles" \
+    --ignore-table="${MYSQL_DATABASE}.AccountPreferences" \
+    --ignore-table="${MYSQL_DATABASE}.BuilderImportReceipts" \
     --ignore-table="${MYSQL_DATABASE}.AuthTokens" \
     --ignore-table="${MYSQL_DATABASE}.MemberRoleMap" \
     --ignore-table="${MYSQL_DATABASE}.Members" \
