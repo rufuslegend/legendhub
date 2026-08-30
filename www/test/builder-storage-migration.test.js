@@ -236,6 +236,24 @@ test("storage migration verification accepts MySQL 5.7 integer display widths", 
     assert.equal(await migration.verify(context), true);
 });
 
+// Catches MySQL 5.7's native JSON metadata being rejected because it reports
+// no character set, unlike newer MySQL releases that report utf8mb4.
+test("storage migration verification accepts MySQL 5.7 JSON metadata", async function() {
+    const context = createSchemaContext({
+        tables: Object.keys(EXPECTED_TABLES),
+        mutateSchema: function(schemas) {
+            for (const schema of schemas.values()) {
+                for (const column of schema.columns) {
+                    if (column.COLUMN_TYPE === "json")
+                        column.CHARACTER_SET_NAME = null;
+                }
+            }
+        }
+    });
+
+    assert.equal(await migration.verify(context), true);
+});
+
 test("storage migration verification rejects an incorrect column default", async function() {
     const context = createSchemaContext({
         tables: Object.keys(EXPECTED_TABLES),

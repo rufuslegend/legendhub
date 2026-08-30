@@ -191,11 +191,15 @@ async function tableIndexesMatch(query, tableName, expectedIndexes) {
 }
 
 function columnSignature(column) {
+    const type = normalizeIntegerDisplayWidth(column.COLUMN_TYPE || column.type);
+    const characterSet = column.CHARACTER_SET_NAME === undefined
+        ? column.characterSet || null
+        : column.CHARACTER_SET_NAME;
     return [
         column.COLUMN_NAME || column.name,
-        normalizeIntegerDisplayWidth(column.COLUMN_TYPE || column.type),
+        type,
         column.IS_NULLABLE || column.nullable,
-        column.CHARACTER_SET_NAME === undefined ? column.characterSet || null : column.CHARACTER_SET_NAME,
+        type === "json" && characterSet === null ? "utf8mb4" : characterSet,
         normalizeColumnDefault(column.COLUMN_DEFAULT === undefined ? column.defaultValue : column.COLUMN_DEFAULT),
         column.EXTRA === undefined ? column.autoIncrement ? "auto_increment" : "" : column.EXTRA
     ].join("|");

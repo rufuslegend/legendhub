@@ -24,6 +24,7 @@ with version 2.6.0.
 
 ### Fixed
 
+- Kept the 3.1 account-storage database upgrade starting correctly on the MySQL version used by LegendHUB servers.
 - Kept account verification, recovery, and synced Builder records out of the public game-content copy while retaining them in private database backups.
 - Kept older exact usernames usable for sign-in and recovery while preventing a new email address from shadowing another player's username.
 - Hardened verification and password-reset transitions so copied action links, concurrent password changes, and older pending actions cannot retain unintended account access.
