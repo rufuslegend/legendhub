@@ -9,6 +9,8 @@ const publicPageData = require("./support/public-page-data");
 const encodedLists = "7*Hero~Tank~1c0K0K0K0J0J1-10000___00H00N00T00000100.00s00o00o-BHKAA_00t00u00v00w________00p00q01b_________________*Hero~Caster~0U0m0U0U0U0U000000___0000000000000000000f__00g_________________________________*Scout~Original~0X0X0X0X0X0X000000___0000000000000000000f____________________________________*";
 const currentHeroExport = "7*Hero~Tank~1c0K0K0K0J0J1-10000___00H00N00T00000100.00s00o00o-BHKAA_00t00u00v00w________00p00q01b_________________*Hero~Caster~0U0m0U0U0U0U000000___0000000000000000000f__00g_________________________________*";
 const currentTankExport = "7*Hero~Tank~1c0K0K0K0J0J1-10000___00H00N00T00000100.00s00o00o-BHKAA_00t00u00v00w________00p00q01b_________________*";
+const capacitySafeTankExport = "7*Hero~Tank~1c0K0K0K0J0J1-10000___00H00N00T00000100.00s00o00o-BHKAA_00t00u00v00w____________________________*";
+const capacitySafeLists = encodedLists.replace(currentTankExport, capacitySafeTankExport);
 const guestImport = "7*Guest~Imported~0X0X0X0X0X0X000000___0000000000000000000f__-BHKAA_________________________________*";
 const duplicateTankImport = "7*Hero~Tank~0X0X0X0X0X0X000000___0000000000000000000f____________________________________*";
 const newHeroVariantImport = "7*Hero~Newcomer~0i0X0X0X0X0X000000___0000000000000000000g____________________________________*";
@@ -60,7 +62,7 @@ const canonicalDefaultPreferences = JSON.stringify({
     selectedProfileId: null,
     selectedVariant: null
 });
-const itemFragment = "fragment ItemAll on Item { id name slot strength strengthCap hit dam hp ma mv ac rent weight uniqueWear isLimited twoHanded fauxObject isLight alignRestriction weaponStat }";
+const itemFragment = "fragment ItemAll on Item { id name slot slots strength strengthCap hit dam hp ma mv ac rent weight uniqueWear isLimited twoHanded fauxObject isLight alignRestriction weaponStat }";
 const itemStatInfo = [
     {display: "Name", short: "Name", var: "name", type: "string", showColumnDefault: true},
     {display: "Strength", short: "Str", var: "strength", type: "int", showColumnDefault: true},
@@ -86,31 +88,31 @@ const itemStatCategories = [
     {name: "Future", getItemStatInfo: [itemStatInfo[9]]}
 ];
 const hydratedItems = [
-    {id: 41, name: "Brass lantern", slot: 0, strength: 2, isLight: 1},
-    {id: 42, name: "Faux moonlight", slot: 0, strength: 4, hp: 20, fauxObject: 1, isLight: 1},
-    {id: 50, name: "Singular ring", slot: 1, uniqueWear: 1},
-    {id: 51, name: "Massive greatsword", slot: 14, strength: 10, strengthCap: 4, weight: 30, twoHanded: 1, weaponStat: 1},
-    {id: 52, name: "Tower shield", slot: 10, twoHanded: 1},
-    {id: 54, name: "Limited light", slot: 0, isLimited: 1},
-    {id: 55, name: "Limited body", slot: 3, isLimited: 1},
-    {id: 56, name: "Limited head", slot: 4, isLimited: 1},
-    {id: 57, name: "Limited face", slot: 5, isLimited: 1},
-    {id: 58, name: "Limited legs", slot: 6, isLimited: 1}
+    {id: 41, name: "Brass lantern", slot: 0, slots: [0], strength: 2, isLight: 1},
+    {id: 42, name: "Faux moonlight", slot: 0, slots: [0], strength: 4, hp: 20, fauxObject: 1, isLight: 1},
+    {id: 50, name: "Singular ring", slot: 1, slots: [1], uniqueWear: 1},
+    {id: 51, name: "Massive greatsword", slot: 14, slots: [14, 15], strength: 10, strengthCap: 4, weight: 30, twoHanded: 1, weaponStat: 1},
+    {id: 52, name: "Tower shield", slot: 10, slots: [10], twoHanded: 1},
+    {id: 54, name: "Limited light", slot: 0, slots: [0], isLimited: 1},
+    {id: 55, name: "Limited body", slot: 3, slots: [3], isLimited: 1},
+    {id: 56, name: "Limited head", slot: 4, slots: [4], isLimited: 1},
+    {id: 57, name: "Limited face", slot: 5, slots: [5], isLimited: 1},
+    {id: 58, name: "Limited legs", slot: 6, slots: [6], isLimited: 1}
 ];
 
 function pickerItems(slotId) {
-    if (slotId === 14) {
-        return [
-            hydratedItems.find(item => item.id === 51),
-            {id: 61, name: "Balanced blade", slot: 14, strength: 3, weight: 4, twoHanded: 0},
-            {id: 62, name: "Offhand focus", slot: 15, strength: 7, twoHanded: 0},
-            {id: 63, name: "Defender shield", slot: 10, strength: 5, twoHanded: 0}
-        ];
-    }
+    const handCandidates = [
+        hydratedItems.find(item => item.id === 51),
+        {id: 61, name: "Balanced blade", slot: 14, slots: [14], strength: 3, weight: 4, twoHanded: 0},
+        {id: 62, name: "Offhand focus", slot: 15, slots: [15], strength: 7, twoHanded: 0},
+        {id: 63, name: "Guard shield", slot: 10, slots: [10], strength: 5, twoHanded: 0}
+    ];
+    if ([10, 14, 15].includes(slotId))
+        return handCandidates.filter(item => item.slots.includes(slotId));
     return [
         hydratedItems.find(item => item.id === 41),
         hydratedItems.find(item => item.id === 42),
-        ...Array.from({length: 19}, (_, index) => ({id: 200 + index, name: `Fixture light ${String(index + 1).padStart(2, "0")}`, slot: 0, strength: index % 8}))
+        ...Array.from({length: 19}, (_, index) => ({id: 200 + index, name: `Fixture light ${String(index + 1).padStart(2, "0")}`, slot: 0, slots: [0], strength: index % 8}))
     ];
 }
 
@@ -1859,7 +1861,7 @@ test("Builder bulk lock controls confirm cancel and apply for both lock states",
     await page.goto(`${baseUrl}/builder/`);
     const table = equipmentTable(page);
     const itemLocks = table.getByRole("button", {name: /^Toggle lock for /});
-    await expect(itemLocks).toHaveCount(35);
+    await expect(itemLocks).toHaveCount(37);
     expect((await itemLocks.evaluateAll(buttons => buttons.map(button => button.getAttribute("aria-pressed")))).some(value => value === "false")).toBe(true);
 
     let bulk = table.getByRole("button", {name: "Lock all items", exact: true});
@@ -1987,6 +1989,12 @@ test("Builder item picker restores result-table and sort affordances", async fun
 // result grid cannot currently replace the equipped item.
 test("Builder item picker explains and consistently styles locked choices", async function({context, page}) {
     await context.addCookies([{name: "theme", value: "glass-blue", url: baseUrl}]);
+    const lockedLightPayload = "7*Hero~Tank~1c0K0K0K0J0J1-10000___00H00N00T00000100.00s00o00o-BHKAA_00t00u00v00w____________________________*";
+    await page.goto(`${baseUrl}/cookies.html`);
+    await page.evaluate(payload => {
+        localStorage.setItem("cln", payload);
+        localStorage.setItem("scl", "Hero!Tank");
+    }, lockedLightPayload);
     await page.goto(`${baseUrl}/builder/`);
     await equipmentTable(page).locator("tbody tr").nth(1).getByRole("button", {name: "Limited light", exact: true}).click();
 
@@ -2046,7 +2054,7 @@ test("Builder hydrates persisted and imported equipment without changing its enc
     const rows = equipmentTable(page).locator("tbody tr");
     await expect(rows.nth(2)).toContainText("Singular ring");
     await expect(rows.nth(4)).toContainText("Runecharm (Uruz/Eihwaz/Gebo)");
-    await expect(rows.nth(19)).toContainText("DELETED");
+    await expect(rows.nth(20)).toContainText("DELETED");
 
     await page.getByLabel("Variant", {exact: true}).selectOption("1");
     await expect(rows.nth(1)).toContainText("Brass lantern");
@@ -2062,7 +2070,7 @@ test("Builder hydrates persisted and imported equipment without changing its enc
     await expect(rows.nth(4)).toContainText("Faux moonlight");
     await page.getByLabel("Variant", {exact: true}).selectOption({label: "Tank Variant"});
     await expect(rows.nth(4)).toContainText("Runecharm (Uruz/Eihwaz/Gebo)");
-    await expect(rows.nth(19)).toContainText("DELETED");
+    await expect(rows.nth(20)).toContainText("DELETED");
 
     await page.getByRole("button", {name: "Import", exact: true}).click();
     await page.locator("#builder-import").fill(guestImport);
@@ -2150,6 +2158,8 @@ test("Builder leaves malformed and unsupported saved character bytes untouched",
 // comparison, wield, sort, pagination, detail, unlock, and rune workflows.
 test("Builder picker selects schema-shaped normal, faux, wield, and rune choices", async function({context, page}) {
     await context.addCookies([{name: "ipp", value: "2", url: baseUrl}]);
+    await page.goto(`${baseUrl}/cookies.html`);
+    await page.evaluate(payload => localStorage.setItem("cln", payload), capacitySafeLists);
     await page.goto(`${baseUrl}/builder/`);
     const rows = equipmentTable(page).locator("tbody tr");
     await page.getByLabel("Variant", {exact: true}).selectOption("1");
@@ -2168,29 +2178,27 @@ test("Builder picker selects schema-shaped normal, faux, wield, and rune choices
     await page.keyboard.press("Escape");
 
     await page.getByLabel("Variant", {exact: true}).selectOption("0");
-    await rows.nth(17).getByRole("button", {name: "Massive greatsword", exact: true}).click();
+    const wieldRowIndex = await rows.evaluateAll(elements =>
+        elements.findIndex(row => row.cells[0]?.textContent.trim() === "Wield")
+    );
+    const wieldRow = rows.nth(wieldRowIndex);
+    await wieldRow.locator('th[scope="row"] > button').click();
     dialog = page.getByRole("dialog", {name: "Choose Item"});
-    await dialog.getByLabel("Slot Filter").selectOption("1");
     const resultTable = dialog.locator("table.mt-3");
     await expect(resultTable.getByRole("link", {name: "Open details for Balanced blade in a new tab", exact: true})).toHaveAttribute("href", "/items/details.html?id=61");
     await expect(dialog.getByRole("button", {name: "Offhand focus", exact: true})).toHaveCount(0);
-    await expect(dialog.getByRole("button", {name: "Defender shield", exact: true})).toHaveCount(0);
-    await dialog.getByLabel("Slot Filter").selectOption("2");
-    await expect(dialog.getByRole("button", {name: "Offhand focus", exact: true})).toBeVisible();
-    await expect(dialog.getByRole("button", {name: "Balanced blade", exact: true})).toHaveCount(0);
-    await dialog.getByLabel("Search items").fill("Str>6");
-    await expect(dialog.getByRole("button", {name: "Offhand focus", exact: true})).toBeVisible();
-    await dialog.getByLabel("Slot Filter").selectOption("3");
-    await expect(dialog.getByRole("button", {name: "Defender shield", exact: true})).toHaveCount(0);
-    await dialog.getByLabel("Search items").fill("");
-    await expect(dialog.getByRole("button", {name: "Defender shield", exact: true})).toBeVisible();
+    await expect(dialog.getByRole("button", {name: "Guard shield", exact: true})).toHaveCount(0);
+    await expect(dialog.getByLabel("Slot Filter")).toHaveCount(0);
+    await expect(dialog.getByRole("button", {name: "Balanced blade", exact: true})).toBeEnabled();
     await dialog.getByRole("button", {name: /Name/}).click();
     await expect(dialog.getByRole("button", {name: "Name descending", exact: true})).toBeVisible();
-    await dialog.getByRole("button", {name: "Defender shield", exact: true}).click();
-    await expect(rows.nth(17)).toContainText("Defender shield");
+    await dialog.getByLabel("Search items").fill("Balanced blade");
+    await dialog.getByRole("button", {name: "Balanced blade", exact: true}).click();
+    await expect(wieldRow).toContainText("Balanced blade");
 
     await rows.nth(1).getByRole("button", {name: "Limited light", exact: true}).click();
     dialog = page.getByRole("dialog", {name: "Choose Item"});
+    await dialog.getByLabel("Search items").fill("Brass lantern");
     await expect(dialog.getByRole("button", {name: "Brass lantern", exact: true})).toBeDisabled();
     await dialog.getByRole("button", {name: "Unlock current item", exact: true}).click();
     await expect(dialog.getByRole("button", {name: "Brass lantern", exact: true})).toBeEnabled();
@@ -2204,6 +2212,74 @@ test("Builder picker selects schema-shaped normal, faux, wield, and rune choices
     await expect(dialog.getByLabel("Rune charm 3")).toHaveValue("K");
     await dialog.getByRole("button", {name: "Save Runecharm", exact: true}).click();
     await expect(rows.nth(4)).toContainText("Runecharm (Uruz/Eihwaz/Gebo)");
+});
+
+// Catches the Builder reverting to duplicate Wield/Hold filters or treating
+// Legend's five hand-role rows as independent capacity instead of three hands.
+test("Builder models five hand rows with one three-hand pool", async function({context, page}) {
+    const emptyHandPayload = "7*Hero~Tank~1c0K0K0K0J0J1-10000___00H00N00T00000100_____________________________________*";
+    await context.addCookies([
+        {name: "theme", value: "high-contrast", url: baseUrl},
+        {name: "sc-Hero", value: "Name-", url: baseUrl}
+    ]);
+    await page.goto(`${baseUrl}/cookies.html`);
+    await page.evaluate(function(payload) {
+        localStorage.setItem("cln", payload);
+        localStorage.setItem("scl", "Hero!Tank");
+    }, emptyHandPayload);
+    await page.goto(`${baseUrl}/builder/`);
+
+    await expect(equipmentTable(page)).toBeVisible();
+    const rows = equipmentTable(page).locator("tbody tr");
+    const handRowIndexes = await rows.evaluateAll(elements => elements.flatMap((row, index) =>
+        ["Shield", "Wield", "Hold"].includes(row.cells[0]?.textContent.trim()) ? [index] : []
+    ));
+    expect(await Promise.all(handRowIndexes.map(index => rows.nth(index).locator("td:first-child").innerText()))).toEqual([
+        "Shield", "Wield", "Hold", "Hold", "Hold"
+    ]);
+    const shieldRow = rows.nth(handRowIndexes[0]);
+    const wieldRow = rows.nth(handRowIndexes[1]);
+    const firstHoldRow = rows.nth(handRowIndexes[2]);
+
+    await shieldRow.locator('th[scope="row"] > button').click();
+    let dialog = page.getByRole("dialog", {name: "Choose Item"});
+    await dialog.getByRole("button", {name: "Guard shield", exact: true}).click();
+
+    await wieldRow.locator('th[scope="row"] > button').click();
+    dialog = page.getByRole("dialog", {name: "Choose Item"});
+    await expect(dialog.getByRole("button", {name: "Massive greatsword", exact: true})).toBeVisible();
+    await expect(dialog.getByLabel("Slot Filter")).toHaveCount(0);
+    await dialog.getByRole("button", {name: "Massive greatsword", exact: true}).click();
+
+    const emptyHoldButton = firstHoldRow.locator('th[scope="row"] > button');
+    await expect(emptyHoldButton).toBeDisabled();
+    const rowExplanationId = await emptyHoldButton.getAttribute("aria-describedby");
+    expect(rowExplanationId).toBeTruthy();
+    await expect(page.locator(`#${rowExplanationId}`)).toHaveText("All three hands are already in use.");
+
+    await wieldRow.locator('th[scope="row"] > button').click();
+    dialog = page.getByRole("dialog", {name: "Choose Item"});
+    const balancedBlade = dialog.getByRole("button", {name: "Balanced blade", exact: true});
+    await expect(balancedBlade).toBeEnabled();
+    await balancedBlade.click();
+
+    await expect(emptyHoldButton).toBeEnabled();
+    await emptyHoldButton.click();
+    dialog = page.getByRole("dialog", {name: "Choose Item"});
+    const dualRoleCandidate = dialog.getByRole("button", {name: "Massive greatsword", exact: true});
+    await expect(dualRoleCandidate).toBeVisible();
+    await expect(dualRoleCandidate).toBeDisabled();
+    const candidateExplanationId = await dualRoleCandidate.getAttribute("aria-describedby");
+    expect(candidateExplanationId).toBeTruthy();
+    await expect(page.locator(`#${candidateExplanationId}`)).toHaveText(
+        "This item would use more than your character's three hands."
+    );
+
+    const results = await new AxeBuilder({page})
+        .include('[role="dialog"]')
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa"])
+        .analyze();
+    expect(results.violations, JSON.stringify(results.violations)).toEqual([]);
 });
 
 // Catches list dialogs that scope duplicate checks to the wrong entity type,
@@ -2307,7 +2383,7 @@ test("Builder renders literal totals, modifiers, abilities, and associated warni
     expect(await totalFor(page, "Rent")).toContain("1553");
     expect(await totalFor(page, "Light")).toBe("");
 
-    const heavyCell = equipmentTable(page).locator("tbody tr").nth(17).locator("td").first();
+    const heavyCell = equipmentTable(page).locator("tbody tr").nth(18).locator("td").first();
     await expect(heavyCell).toHaveClass(/bg-danger/);
     await expect(page.getByRole("tooltip")).toHaveCount(0);
     await heavyCell.hover();

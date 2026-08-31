@@ -71,6 +71,7 @@ const editFixtures = {
         questId: 301,
         rent: 19,
         slot: 14,
+        slots: [14, 15],
         weaponType: 1,
         weight: 2.5
     }
@@ -102,6 +103,15 @@ let server;
 
 function editorPageData(query, ip, variables) {
     const timestamp = "2026-08-22T12:00:00.000Z";
+    if (query.includes("AccountPreferenceBootstrap")) {
+        return {
+            getBuilderAccountPreferences: {
+                preferences: JSON.stringify({theme: "high-contrast"}),
+                preferenceRevision: 1,
+                storageGeneration: 1
+            }
+        };
+    }
     for (const revert of [
         {field: "revertItem", id: 101, token: "item-revert-token"},
         {field: "revertMob", id: 201, token: "mob-revert-token"},
@@ -227,7 +237,12 @@ function loadAppWithEditorFixtures() {
         const originalPostAsync = apiUtils.postAsync;
 
         authApi.utils.authToken = async function() {
-            return {memberId: 7, username: "Editor Tester"};
+            return {
+                memberId: 7,
+                username: "Editor Tester",
+                email: "editor@example.test",
+                emailVerified: true
+            };
         };
         authApi.utils.getPermissions = async function() {
             return {hasPermission: function() { return false; }};
@@ -470,7 +485,11 @@ test("React migration: item editor preserves fields, independent required valida
 
     await openEditor(page, "/items/add.html", "Add Item");
     const save = page.getByRole("button", {name: "Save", exact: true});
-    await expect(page.locator('select[name="slot"]')).toHaveValue("14");
+    const addSlots = page.getByRole("group", {name: "Slots", exact: true});
+    await expect(addSlots.getByRole("checkbox", {name: "Wield", exact: true})).toBeChecked();
+    expect(await addSlots.getByRole("checkbox").evaluateAll(inputs =>
+        inputs.filter(input => input.checked).map(input => input.value)
+    )).toEqual(["14"]);
     await expect(page.locator('input[name="rent"]')).toHaveValue("0");
     await expect(page.locator('input[name="weight"]')).toHaveValue("1.25");
     await expect(page.locator('input[name="accuracy"]')).toHaveValue("0");
@@ -530,7 +549,7 @@ test("React migration: item editor preserves fields, independent required valida
         field: "insertItem",
         args: {
             accuracy: 0, authToken: "editor-token", mobId: 202, name: "Archive blade",
-            notes: "**Fresh** steel", questId: 302, rent: 0, slot: 14, weaponType: 1, weight: 1.25
+            notes: "**Fresh** steel", questId: 302, rent: 0, slots: [14], weaponType: 1, weight: 1.25
         }
     });
 
@@ -556,9 +575,56 @@ test("React migration: item editor preserves fields, independent required valida
         field: "updateItem",
         args: {
             accuracy: 0, authToken: "item-add-token", id: 101, mobId: 201, name: "Ember blade",
-            notes: "**Warm** steel", questId: 301, rent: 20, slot: 14, weaponType: 1, weight: 2.5
+            notes: "**Warm** steel", questId: 301, rent: 20, slots: [14, 15], weaponType: 1, weight: 2.5
         }
     });
+});
+
+// Catches the item editor collapsing capabilities back to one select, losing
+// keyboard toggling, or allowing Other to coexist with wearable slots.
+test("React migration: multi-slot editor exposes exclusive keyboard-operable choices", async function({page}) {
+    await openEditor(page, "/items/edit.html?id=101", "Edit Item");
+    const slots = page.getByRole("group", {name: "Slots", exact: true});
+    const checkboxes = slots.getByRole("checkbox");
+    await expect(checkboxes).toHaveCount(22);
+    expect(await checkboxes.evaluateAll(inputs => inputs.map(input => input.labels?.[0]?.textContent.trim()))).toEqual([
+        "Light", "Finger", "Neck", "Body", "Head", "Face", "Legs", "Feet", "Hands", "Arms", "Shield",
+        "About", "Waist", "Wrist", "Wield", "Hold", "Ear", "Arm", "Amulet", "Aux", "Familiar", "Other"
+    ]);
+
+    const wield = slots.getByRole("checkbox", {name: "Wield", exact: true});
+    const hold = slots.getByRole("checkbox", {name: "Hold", exact: true});
+    const neck = slots.getByRole("checkbox", {name: "Neck", exact: true});
+    const other = slots.getByRole("checkbox", {name: "Other", exact: true});
+    await expect(wield).toBeChecked();
+    await expect(hold).toBeChecked();
+    await neck.focus();
+    await page.keyboard.press("Space");
+    await expect(neck).toBeChecked();
+    await page.keyboard.press("Space");
+    await expect(neck).not.toBeChecked();
+
+    await other.focus();
+    await page.keyboard.press("Space");
+    await expect(other).toBeChecked();
+    await expect(wield).not.toBeChecked();
+    await expect(hold).not.toBeChecked();
+    expect(await checkboxes.evaluateAll(inputs => inputs.filter(input => input.checked).map(input => input.value))).toEqual(["21"]);
+
+    const save = page.getByRole("button", {name: "Save", exact: true});
+    await page.keyboard.press("Space");
+    await expect(other).not.toBeChecked();
+    await expect(save).toBeDisabled();
+    await wield.focus();
+    await page.keyboard.press("Space");
+    await expect(wield).toBeChecked();
+    await expect(save).toBeEnabled();
+
+    const results = await new AxeBuilder({page})
+        .include('[data-react-root="item-editor"]')
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa"])
+        .analyze();
+    expect(results.violations, JSON.stringify(results.violations)).toEqual([]);
 });
 
 // Catches a delayed obsolete lookup result replacing the result for the latest search.
