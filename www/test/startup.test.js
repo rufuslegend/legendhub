@@ -225,7 +225,8 @@ test("default migration operation closes its pool after database work finishes",
         {Id: 7},
         {Id: 8},
         {Id: 9},
-        {Id: 10}
+        {Id: 10},
+        {Id: 11}
     ]);
     await migrationPromise;
 
