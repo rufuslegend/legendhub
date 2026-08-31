@@ -11,6 +11,12 @@ import {createInitialItemSearchState, itemSearchReducer, searchUrl} from "./item
 function resultValue(item, stat, constants) {
     if (stat.type === "bool")
         return <i className={Number(item[stat.var]) === 1 ? "text-success fas fa-check" : "text-danger fas fa-times"} aria-label={Number(item[stat.var]) === 1 ? "yes" : "no"} />;
+    if (stat.var === "slot") {
+        const labels = (item.slots || [item.slot])
+            .map(slot => constants.selectShortOptions.slot?.[slot])
+            .filter(Boolean);
+        return <span>{labels.join(", ")}</span>;
+    }
     if (stat.type === "select")
         return <span style={stat.var === "alignRestriction" ? {whiteSpace: "pre"} : undefined}>{constants.selectShortOptions[stat.var]?.[item[stat.var]] || ""}</span>;
     return <span>{item[stat.var]}</span>;

@@ -261,12 +261,12 @@ function itemGraphQLType(stat) {
 
 function editableItemStats(itemStatCategories) {
     return itemStatCategories.flatMap(category => category.getItemStatInfo || [])
-        .filter(stat => stat.editable && !["mobId", "questId", "notes"].includes(stat.var));
+        .filter(stat => stat.editable && !["mobId", "questId", "notes", "slot"].includes(stat.var));
 }
 
 function itemMutation(itemStatCategories, edit) {
     const requiredInsertStats = new Set([
-        "name", "slot", "alignRestriction", "isLight", "isHeroic"
+        "name", "alignRestriction", "isLight", "isHeroic"
     ]);
     const fields = [
         {name: "authToken", type: "String", required: true},
@@ -274,6 +274,7 @@ function itemMutation(itemStatCategories, edit) {
         {name: "mobId", type: "Int"},
         {name: "questId", type: "Int"},
         {name: "notes", type: "String"},
+        {name: "slots", type: "[Int!]"},
         ...editableItemStats(itemStatCategories).map(stat => ({
             name: stat.var,
             type: itemGraphQLType(stat),
@@ -303,7 +304,8 @@ function itemVariables(item, itemStatCategories, document) {
         authToken: currentToken(document),
         mobId: integer(item.mobId) ?? 0,
         questId: integer(item.questId) ?? 0,
-        notes: item.notes ?? ""
+        notes: item.notes ?? "",
+        slots: item.slots.map(Number)
     };
     for (const stat of editableItemStats(itemStatCategories))
         variables[stat.var] = itemValue(stat, item[stat.var]);

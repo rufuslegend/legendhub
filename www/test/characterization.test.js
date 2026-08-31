@@ -299,7 +299,7 @@ test("authorized content pages render named delete buttons with valid closing ta
     const fixtures = [
         ["items", "item", {
             item: {
-                id: 7, name: "Test item", slot: 0, rent: 0, ac: 0,
+                id: 7, name: "Test item", slot: 0, slots: [0], rent: 0, ac: 0,
                 strength: 0, mind: 0, dexterity: 0, constitution: 0,
                 perception: 0, spirit: 0, getHistories: [], getMob: null,
                 getQuest: null, modifiedBy: "Tester", notes: ""
@@ -344,6 +344,77 @@ test("authorized content pages render named delete buttons with valid closing ta
             `<button[^>]+data-target="#deleteModal"[^>]+aria-label="Delete ${resourceName}"[^>]*>` +
             `<i[^>]+aria-hidden="true"[^>]*><\\/i><\\/button>`));
     }
+});
+
+// Catches item details and audited history rendering only the compatible
+// primary slot instead of the complete eligibility list supplied by GraphQL.
+test("item details and history display every slot capability", async function() {
+    const ejs = require("ejs");
+    const {normalizeTheme} = require("../src/view-helpers");
+    const slots = Array(16).fill("");
+    slots[14] = "Wield";
+    slots[15] = "Hold";
+    const item = {
+        id: 7, name: "Dual capability blade", slot: 14, slots: [14, 15], rent: 0, ac: 0,
+        strength: 0, mind: 0, dexterity: 0, constitution: 0, perception: 0, spirit: 0,
+        getHistories: [], getMob: null, getQuest: null, modifiedBy: "Tester", notes: ""
+    };
+    const shared = {
+        cookies: {}, displayDateTime: function() { return ""; }, normalizeTheme,
+        permissions: {hasPermission: function() { return false; }}, title: "Details",
+        url: {path: "/items/details.html"}, user: null, version: "test"
+    };
+
+    for (const historyId of [null, 70]) {
+        const html = await ejs.renderFile(path.join(__dirname, "../src/views/items/display.ejs"), {
+            ...shared,
+            locals: shared,
+            vm: {
+                historyId, item, itemNotesHtml: "", statCategories: [],
+                constants: {selectOptions: {alignRestriction: ["No restriction"], slot: slots}}
+            }
+        });
+        assert.match(html, /Slot:\s*Wield, Hold/);
+        assert.match(html, /<dt class="col-8">Slot<\/dt>\s*<dd class="col-4">Wield, Hold<\/dd>/);
+    }
+});
+
+// Catches weapon details following the legacy primary slot, which hides a Hold
+// item's accuracy whenever its compatible scalar key is another capability.
+test("item details use slot membership for Hold weapon fields", async function() {
+    const ejs = require("ejs");
+    const {normalizeTheme} = require("../src/view-helpers");
+    const slots = Array(16).fill("");
+    slots[2] = "Neck";
+    slots[15] = "Hold";
+    const item = {
+        ac: 0, accuracy: 4, alignRestriction: 0, constitution: 0, dexterity: 0,
+        getHistories: [], getMob: null, getQuest: null, id: 8, mind: 0,
+        modifiedBy: "Tester", name: "Held focus", notes: "", perception: 0,
+        rent: 0, slot: 2, slots: [15], spirit: 0, strength: 0, weaponType: 0
+    };
+    const shared = {
+        cookies: {}, displayDateTime: function() { return ""; }, normalizeTheme,
+        permissions: {hasPermission: function() { return false; }}, title: "Details",
+        url: {path: "/items/details.html"}, user: null, version: "test"
+    };
+    const html = await ejs.renderFile(path.join(__dirname, "../src/views/items/display.ejs"), {
+        ...shared,
+        locals: shared,
+        vm: {
+            item, itemNotesHtml: "", historyId: null,
+            statCategories: [{name: "Weapon", getItemStatInfo: [
+                {display: "Accuracy", type: "int", var: "accuracy"},
+                {display: "Weapon Type", type: "select", var: "weaponType"}
+            ]}],
+            constants: {selectOptions: {
+                alignRestriction: ["No restriction"], slot: slots, weaponType: ["Sword"]
+            }}
+        }
+    });
+
+    assert.match(html, />Accuracy<\/dt>\s*<dd[^>]*>4<\/dd>/);
+    assert.doesNotMatch(html, />Weapon Type<\/dt>/);
 });
 
 test("API error types retain their public status codes", function() {

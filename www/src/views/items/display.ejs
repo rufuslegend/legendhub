@@ -11,7 +11,7 @@ Mob: <%=vm.item.getMob.name_%>
 &nbsp;(Area unspecified)
 <%_ }}_%>
 
-Slot: <%- vm.constants.selectOptions.slot[vm.item.slot] %>
+Slot: <%- vm.item.slots.map(slot => vm.constants.selectOptions.slot[slot]).join(", ") %>
 Rent: <%- vm.item.rent %>
 
 <% if (vm.item.strength !== 0) { _%>
@@ -111,7 +111,7 @@ AC: <%-vm.item.ac%>" />
                             <div class="col-12 col-sm-6">
                                 <div class="row">
                                     <dt class="col-8">Slot</dt>
-                                    <dd class="col-4"><%=vm.constants.selectOptions.slot[vm.item.slot]%></dd>
+                                    <dd class="col-4"><%=vm.item.slots.map(slot => vm.constants.selectOptions.slot[slot]).join(", ")%></dd>
                                 </div>
                                 <% if (vm.item.uniqueWear) { _%>
                                 <div class="row">
@@ -160,7 +160,7 @@ AC: <%-vm.item.ac%>" />
                         <%_
                             for (let i = 0; i < vm.statCategories.length; ++i) {
                                 let category = vm.statCategories[i];
-                                if (category.name === "Weapon" && !(vm.item.slot === 14 || (vm.item.slot == 15 && vm.item.accuracy > 0))) {
+                                if (category.name === "Weapon" && !(vm.item.slots.includes(14) || vm.item.slots.includes(15))) {
                                     continue;
                                 }
                         %>
@@ -190,9 +190,9 @@ AC: <%-vm.item.ac%>" />
                                         continue;
                                     if ((stat.type === "string" || stat.type === "bool" || stat.type === "select") && !vm.item[stat.var])
                                         continue;
-                                    if ((stat.var === "holdable" || stat.var === "weaponType" || stat.var === "weaponStat" || stat.var === "speedFactor" || stat.var === "quality") && vm.item.slot !== 14)
+                                    if ((stat.var === "holdable" || stat.var === "weaponType" || stat.var === "weaponStat" || stat.var === "speedFactor" || stat.var === "quality") && !vm.item.slots.includes(14))
                                         continue;
-                                    else if (stat.var === "accuracy" && (vm.item.slot !== 14 && vm.item.slot !== 15))
+                                    else if (stat.var === "accuracy" && !vm.item.slots.includes(14) && !vm.item.slots.includes(15))
                                         continue;
                                 %>
                             <div class="col-sm-6 col-12 mb-1">

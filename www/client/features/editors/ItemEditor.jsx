@@ -17,7 +17,8 @@ function defaultValue(stat) {
 }
 
 function initialItem(item, itemStatCategories) {
-    const initial = {notes: "", ...item};
+    const slots = item.slots || (item.slot == null ? [] : [item.slot]);
+    const initial = {notes: "", ...item, slots: [...slots]};
     for (const category of itemStatCategories) {
         for (const stat of category.getItemStatInfo || []) {
             if (stat.editable && !Object.hasOwn(initial, stat.var))
@@ -27,15 +28,28 @@ function initialItem(item, itemStatCategories) {
     return initial;
 }
 
+export function toggleSlot(slots, slot) {
+    if (slot === 21)
+        return slots.includes(21) ? [] : [21];
+    const next = slots.filter(value => value !== 21);
+    if (next.includes(slot))
+        return next.filter(value => value !== slot);
+    return [...next, slot].sort((left, right) => left - right);
+}
+
+function hasSlot(item, slot) {
+    return item.slots.includes(slot);
+}
+
 function weaponVisible(item) {
-    return Number(item.slot) === 14 || (Number(item.slot) === 15 && Number(item.accuracy) > 0);
+    return hasSlot(item, 14) || hasSlot(item, 15);
 }
 
 function statVisible(stat, item) {
     if (["holdable", "weaponType", "weaponStat", "speedFactor", "quality"].includes(stat.var))
-        return Number(item.slot) === 14;
+        return hasSlot(item, 14);
     if (stat.var === "accuracy")
-        return Number(item.slot) === 14 || Number(item.slot) === 15;
+        return hasSlot(item, 14) || hasSlot(item, 15);
     return true;
 }
 
@@ -44,10 +58,12 @@ function requiredStat(stat, category, item) {
         return true;
     if (stat.type === "int" || stat.type === "decimal")
         return statVisible(stat, item);
-    return stat.type === "select" && category.name === "Weapon" && Number(item.slot) === 14;
+    return stat.type === "select" && category.name === "Weapon" && hasSlot(item, 14);
 }
 
 function itemValid(item, itemStatCategories) {
+    if (item.slots.length === 0)
+        return false;
     for (const category of itemStatCategories) {
         if (category.name === "Weapon" && !weaponVisible(item))
             continue;
@@ -65,7 +81,7 @@ function itemValid(item, itemStatCategories) {
 }
 
 function ItemStatField({category, constants, item, onChange, stat}) {
-    if (!stat.editable)
+    if (!stat.editable || stat.var === "slot")
         return null;
     const visible = statVisible(stat, item);
     const id = `item-${stat.var}`;
@@ -191,6 +207,24 @@ export default function ItemEditor({constants = {selectOptions: {}}, item = {}, 
                         <section key={category.name} hidden={!categoryVisible}>
                             <div className="form-row"><h2 className="h4">{category.name}</h2></div>
                             <div className="form-row">
+                                {category.name === "Basic" && (
+                                    <fieldset className="form-group col-12">
+                                        <legend className="h6">Slots</legend>
+                                        <div className="row">
+                                            {(constants.selectOptions.slot || []).map((label, slot) => (
+                                                <label className="col-6 col-md-3" key={slot}>
+                                                    <input
+                                                        type="checkbox"
+                                                        name="slots"
+                                                        value={slot}
+                                                        checked={state.draft.slots.includes(slot)}
+                                                        onChange={() => change("slots", toggleSlot(state.draft.slots, slot))}
+                                                    /> {label}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </fieldset>
+                                )}
                                 {(category.getItemStatInfo || []).map(stat => (
                                     <ItemStatField
                                         key={stat.var}
