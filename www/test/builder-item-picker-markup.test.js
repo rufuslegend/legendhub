@@ -164,6 +164,23 @@ test("Builder hand controls expose and enforce three-hand capacity", async funct
         assert.match(pickerMarkup,
             /disabled="" aria-describedby="builder-picker-hand-status"[^>]*>Great blade<\/button>/);
         assert.doesNotMatch(pickerMarkup, /disabled=""[^>]*>(?:-|Dagger)<\/button>/);
+
+        const lockedItems = items.map((item, index) =>
+            index === 2 ? {...item, locked: true} : item);
+        const lockedState = {
+            ...state,
+            currentItem: lockedItems[2],
+            selectedList: {items: lockedItems}
+        };
+        const lockedRendered = renderToStaticMarkup(React.createElement(EquipmentPanel, {
+            onAction() {}, onClose() {}, onOpen() {}, onPick() {}, onToggleLocks() {},
+            restrictions: lockedItems.map(() => []), state: lockedState,
+            statRestrictions: {strength: []}, totals: {strength: 0}
+        }));
+        const lockedPickerMarkup = lockedRendered.slice(
+            lockedRendered.indexOf("builder-picker-results"));
+        assert.match(lockedPickerMarkup,
+            /aria-describedby="builder-picker-lock-status builder-picker-hand-status"[^>]*>Great blade<\/button>/);
     }
     finally {
         await vite.close();

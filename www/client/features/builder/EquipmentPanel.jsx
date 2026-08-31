@@ -529,6 +529,10 @@ export default function EquipmentPanel({
                           item,
                         );
                         const disabled = current.locked || capacityBlocked;
+                        const describedBy = [
+                          current.locked && "builder-picker-lock-status",
+                          capacityBlocked && "builder-picker-hand-status",
+                        ].filter(Boolean).join(" ") || undefined;
                         return (
                           <tr
                             key={item.id}
@@ -540,13 +544,7 @@ export default function EquipmentPanel({
                                 className="btn btn-link p-0 builder-table-action"
                                 type="button"
                                 disabled={disabled}
-                                aria-describedby={
-                                  current.locked
-                                    ? "builder-picker-lock-status"
-                                    : capacityBlocked
-                                      ? "builder-picker-hand-status"
-                                    : undefined
-                                }
+                                aria-describedby={describedBy}
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   if (!disabled) onPick(item);
