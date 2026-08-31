@@ -220,3 +220,26 @@ test("item search sends criteria as GraphQL variables and returns page results",
         globalThis.fetch = originalFetch;
     }
 });
+
+// Catches live result queries selecting only the legacy sortable slot and
+// dropping secondary capabilities before the refreshed table can render them.
+test("item search requests computed slots without exposing slot masks", async function() {
+    const {loadItems} = await loadApi();
+    const originalFetch = globalThis.fetch;
+    let request;
+    globalThis.fetch = async function(url, options) {
+        request = {url, options};
+        return {status: 200, json: async () => ({data: {getItems: {items: [], moreResults: false}}})};
+    };
+    try {
+        await loadItems({
+            search: null, filters: {}, sortBy: "slot", sortAsc: false, page: 2
+        }, metadata.statInfo);
+        const body = JSON.parse(request.options.body);
+        assert.match(body.query, /items\s*\{\s*id name slot slots\s*\}/);
+        assert.doesNotMatch(body.query, /slotMask/);
+    }
+    finally {
+        globalThis.fetch = originalFetch;
+    }
+});

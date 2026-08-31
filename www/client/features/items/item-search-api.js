@@ -7,7 +7,7 @@ function filterString(filters) {
 }
 
 export async function loadItems(criteria, statInfo, signal) {
-    const fields = [...new Set(["id", ...statInfo.map(stat => stat.var)])].join(" ");
+    const fields = [...new Set(["id", ...statInfo.map(stat => stat.var), "slots"])].join(" ");
     const data = await graphqlRequest({
         query: `query ItemSearch($searchString: String, $filterString: String, $sortBy: String, $sortAsc: Boolean, $page: Int!, $rows: Int!) {
             getItems(searchString: $searchString, filterString: $filterString, sortBy: $sortBy, sortAsc: $sortAsc, page: $page, rows: $rows) {
