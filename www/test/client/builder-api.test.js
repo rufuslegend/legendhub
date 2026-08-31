@@ -63,7 +63,7 @@ test("Builder hydration restores saved items and rune charms without changing th
     const variant = {
         runeCharms: {charm1: "BHKAA"},
         items: [
-            {id: 41, slot: 14, locked: true},
+            {id: 41, slot: 15, locked: true},
             {id: 0, slot: 1, locked: false},
             {id: 0, slot: 1, locked: false},
             {id: -5, slot: 2, locked: false},
@@ -71,14 +71,16 @@ test("Builder hydration restores saved items and rune charms without changing th
         ]
     };
     const hydrated = hydrateBuilderVariant(variant, [{
-        id: 41, name: "Axe of the fox", slot: 14, strengthCap: 3,
+        id: 41, name: "Axe of the fox", slot: 14, slots: [14, 15], strengthCap: 3,
         alignmentRestriction: "good", fauxObject: 1
     }]);
 
     assert.deepEqual(hydrated.items[0], {
-        id: 41, name: "Axe of the fox", slot: 14, locked: true, strengthCap: 3,
+        id: 41, name: "Axe of the fox", slot: 15, slots: [14, 15], locked: true, strengthCap: 3,
         alignmentRestriction: "good", fauxObject: 1
     });
+    assert.deepEqual(hydrated.items[0].slots, [14, 15]);
+    assert.equal(hydrated.items[0].slot, 15);
     assert.equal(hydrated.items[3].name, "Runecharm (Uruz/Eihwaz/Gebo)");
     assert.equal(hydrated.items[3].strength, 1);
     assert.equal(hydrated.items[3].hit, 2);

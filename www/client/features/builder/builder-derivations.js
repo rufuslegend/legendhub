@@ -7,6 +7,33 @@ const EMPTY_RUNE_CHARM_STATS = {
     manaReduction: 0, concentration: 0, rent: 225, charmName: ""
 };
 
+const HAND_SLOTS = new Set([10, 14, 15]);
+
+export function handCost(item) {
+    if (!item || item.id === 0 || !HAND_SLOTS.has(Number(item.slot)))
+        return 0;
+    return item.twoHanded ? 2 : 1;
+}
+
+export function handUnits(items) {
+    return items.reduce((total, item) => total + handCost(item), 0);
+}
+
+export function handUnitsAfterReplacement(items, index, candidate) {
+    return items.reduce((total, item, itemIndex) =>
+        total + handCost(itemIndex === index ? candidate : item), 0);
+}
+
+export function canOpenEquipmentRow(items, index) {
+    const current = items[index];
+    return handCost(current) > 0 || !HAND_SLOTS.has(Number(current?.slot)) ||
+        handUnits(items) < 3;
+}
+
+export function canEquipHandCandidate(items, index, candidate) {
+    return handUnitsAfterReplacement(items, index, candidate) <= 3;
+}
+
 export function deriveRuneCharmStats(charmString) {
     const stats = {...EMPTY_RUNE_CHARM_STATS};
     for (const charmId of String(charmString || "")) {
@@ -25,23 +52,19 @@ export function deriveRuneCharmStats(charmString) {
 export function deriveItemRestrictions({items = [], strength = 0} = {}) {
     const restrictions = items.map(() => []);
     let limitedCount = 0;
-    let handCount = 0;
-    let handApplied = false;
 
     for (let index = 0; index < items.length; ++index) {
         const item = items[index];
         if (!item)
             continue;
 
-        if (item.slot == 1 || item.slot == 2 || item.slot == 13 || item.slot == 14 || item.slot == 15 || item.slot == 16) {
-            if (item.uniqueWear) {
-                for (let otherIndex = 0; otherIndex < items.length; ++otherIndex) {
-                    if (index == otherIndex)
-                        continue;
-                    if (item.id != 0 && item.id == items[otherIndex]?.id) {
-                        restrictions[index].push("unique");
-                        break;
-                    }
+        if (item.uniqueWear) {
+            for (let otherIndex = 0; otherIndex < items.length; ++otherIndex) {
+                if (index == otherIndex)
+                    continue;
+                if (item.id != 0 && item.id == items[otherIndex]?.id) {
+                    restrictions[index].push("unique");
+                    break;
                 }
             }
         }
@@ -54,18 +77,12 @@ export function deriveItemRestrictions({items = [], strength = 0} = {}) {
             if (limitedCount > 3)
                 restrictions[index].push("limited");
         }
+    }
 
-        // Preserve the live builder's original operator precedence for slot 15.
-        if ((!handApplied && item.slot == 14) || item.slot == 15) {
-            if (item.twoHanded !== undefined)
-                handCount += item.twoHanded ? 2 : 1;
-            if (handCount > 3) {
-                for (let otherIndex = 0; otherIndex < items.length; ++otherIndex) {
-                    if ((items[otherIndex]?.slot == 14 || items[otherIndex]?.slot == 15) && !restrictions[otherIndex].includes("twohanded"))
-                        restrictions[otherIndex].push("twohanded");
-                }
-                handApplied = true;
-            }
+    if (handUnits(items) > 3) {
+        for (let index = 0; index < items.length; ++index) {
+            if (handCost(items[index]) > 0)
+                restrictions[index].push("twohanded");
         }
     }
     return restrictions;

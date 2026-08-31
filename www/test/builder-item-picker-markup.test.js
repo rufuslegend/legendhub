@@ -45,7 +45,6 @@ async function renderLockedPicker() {
                 {display: "Name", short: "Name", showColumn: true, type: "string", var: "name"},
                 {display: "Strength", short: "Str", showColumn: true, type: "int", var: "strength"}
             ],
-            wieldSlotFilter: 0
         };
         return renderToStaticMarkup(React.createElement(EquipmentPanel, {
             onAction() {},
@@ -79,4 +78,94 @@ test("locked Builder item picker renders the approved comparison workflow", asyn
     assert.match(rendered,
         /This slot is locked\. Unlock the current item to choose a replacement\./);
     assert.equal((rendered.match(/class="builder-picker-result-disabled"/g) || []).length, 2);
+});
+
+// Catches the Hold picker inferring one role from a multi-role candidate instead
+// of trusting the role selected by the row that opened the picker.
+test("Hold picker keeps multi-role candidates without a hand-role filter", async function() {
+    const {createServer} = await import("vite");
+    const vite = await createServer({
+        appType: "custom",
+        root,
+        server: {hmr: false, middlewareMode: true, ws: false}
+    });
+    try {
+        const {default: EquipmentPanel} = await vite.ssrLoadModule(
+            "/client/features/builder/EquipmentPanel.jsx");
+        const currentItem = {id: 0, name: "-", slot: 15};
+        const candidate = {id: 41, name: "Versatile blade", slot: 15, slots: [14, 15]};
+        const itemsBySlot = [];
+        itemsBySlot[15] = [currentItem, candidate];
+        const state = {
+            charmSelectors: [], currentItem, currentItemIndex: 0, currentPage: 1,
+            isRuneCrafting: false, itemsBySlot, itemsPerPage: 20, searchString: "",
+            selectedList: {items: [currentItem]}, sortDir: "-", sortStat: "",
+            statInfo: []
+        };
+        const rendered = renderToStaticMarkup(React.createElement(EquipmentPanel, {
+            onAction() {}, onClose() {}, onOpen() {}, onPick() {}, onToggleLocks() {},
+            restrictions: [[]], state, statRestrictions: {}, totals: {}
+        }));
+
+        assert.match(rendered, /Versatile blade/);
+        assert.doesNotMatch(rendered, /Slot Filter|wield-slot-filter|realSlot/);
+    }
+    finally {
+        await vite.close();
+    }
+});
+
+// Catches full-capacity empty hand rows opening, occupied legacy rows becoming
+// inaccessible, or picker choices ignoring replacement-adjusted hand usage.
+test("Builder hand controls expose and enforce three-hand capacity", async function() {
+    const {createServer} = await import("vite");
+    const vite = await createServer({
+        appType: "custom",
+        root,
+        server: {hmr: false, middlewareMode: true, ws: false}
+    });
+    try {
+        const {default: EquipmentPanel} = await vite.ssrLoadModule(
+            "/client/features/builder/EquipmentPanel.jsx");
+        const items = [
+            {id: 1, name: "Buckler", slot: 10, strength: 0},
+            {id: 2, name: "Sword", slot: 14, strength: 0},
+            {id: 3, name: "Torch", slot: 15, twoHanded: true, strength: 0},
+            {id: 0, name: "-", slot: 15, strength: 0}
+        ];
+        const itemsBySlot = [];
+        itemsBySlot[15] = [
+            {id: 0, name: "-", slot: 15, strength: 0},
+            {id: 4, name: "Great blade", slot: 15, twoHanded: true, strength: 4},
+            {id: 5, name: "Dagger", slot: 15, strength: 1}
+        ];
+        const state = {
+            charmSelectors: [], currentItem: items[2], currentItemIndex: 2,
+            currentPage: 1, isRuneCrafting: false, itemsBySlot, itemsPerPage: 20,
+            searchString: "", selectedList: {items}, sortDir: "-", sortStat: "",
+            statInfo: [
+                {display: "Strength", short: "Str", showColumn: true, type: "int", var: "strength"}
+            ]
+        };
+        const rendered = renderToStaticMarkup(React.createElement(EquipmentPanel, {
+            onAction() {}, onClose() {}, onOpen() {}, onPick() {}, onToggleLocks() {},
+            restrictions: items.map(() => []), state, statRestrictions: {strength: []},
+            totals: {strength: 0}
+        }));
+
+        assert.match(rendered,
+            /id="builder-equipment-hand-status-3"[^>]*>All three hands are already in use\.<\/span>/);
+        assert.match(rendered,
+            /aria-label="Choose empty item by Strength"[^>]*disabled=""[^>]*aria-describedby="builder-equipment-hand-status-3"/);
+        assert.doesNotMatch(rendered, /aria-label="Choose (?:Buckler|Sword|Torch) by Strength"[^>]*disabled/);
+        assert.match(rendered,
+            /id="builder-picker-hand-status"[^>]*>This item would use more than your character&#x27;s three hands\.<\/p>/);
+        const pickerMarkup = rendered.slice(rendered.indexOf("builder-picker-results"));
+        assert.match(pickerMarkup,
+            /disabled="" aria-describedby="builder-picker-hand-status"[^>]*>Great blade<\/button>/);
+        assert.doesNotMatch(pickerMarkup, /disabled=""[^>]*>(?:-|Dagger)<\/button>/);
+    }
+    finally {
+        await vite.close();
+    }
 });

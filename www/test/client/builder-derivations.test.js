@@ -40,30 +40,77 @@ function blank(slot) {
 test("builder derives literal equipment restrictions and warning text", async function() {
     const {deriveItemRestrictions, getItemRestrictionText} = await loadDerivations();
     const items = [
-        {id: 101, slot: 1, uniqueWear: true},
-        {id: 101, slot: 1, uniqueWear: true},
+        {id: 101, slot: 10, uniqueWear: true},
+        {id: 101, slot: 15, uniqueWear: true},
         {id: 201, slot: 14, weight: 30, twoHanded: true},
-        {id: 202, slot: 15, twoHanded: true},
-        {id: 301, slot: 3, isLimited: true},
-        {id: 302, slot: 4, isLimited: true},
-        {id: 303, slot: 5, isLimited: true},
-        {id: 304, slot: 6, isLimited: true},
-        blank(7),
+        {id: 102, slot: 3, uniqueWear: true},
+        {id: 102, slot: 21, uniqueWear: true},
+        {id: 301, slot: 4, isLimited: true},
+        {id: 302, slot: 5, isLimited: true},
+        {id: 303, slot: 6, isLimited: true},
+        {id: 304, slot: 7, isLimited: true},
         blank(15)
     ];
 
     const restrictions = deriveItemRestrictions({items, strength: 100});
 
     assert.deepEqual(restrictions, [
-        ["unique"], ["unique"], ["weight", "twohanded"], ["twohanded"],
-        [], [], [], ["limited"], [], ["twohanded"]
+        ["unique", "twohanded"], ["unique", "twohanded"], ["weight", "twohanded"],
+        ["unique"], ["unique"], [], [], [], ["limited"], []
     ]);
     assert.equal(
         getItemRestrictionText(restrictions[2], items[2]),
         "You need 120 strength to wield this.<br /><br />You do not have enough hands to hold this item."
     );
     assert.equal(
-        getItemRestrictionText(restrictions[7], items[7]),
+        getItemRestrictionText(restrictions[8], items[8]),
         "You can only have three limited items equipped."
     );
+});
+
+// Catches hand capacity ignoring Shield, charging empty rows, or failing to
+// credit the occupied item that a picker candidate replaces.
+test("builder calculates three shared hand units around replacements", async function() {
+    const {
+        canEquipHandCandidate, canOpenEquipmentRow, handCost, handUnits,
+        handUnitsAfterReplacement
+    } = await loadDerivations();
+
+    assert.equal(handCost({id: 1, slot: 10}), 1);
+    assert.equal(handCost({id: 2, slot: 14, twoHanded: true}), 2);
+    assert.equal(handCost({id: 0, slot: 15, twoHanded: true}), 0);
+    assert.equal(handCost({id: 3, slot: 3, twoHanded: true}), 0);
+    assert.equal(handUnits([
+        {id: 1, slot: 10}, {id: 2, slot: 14}, {id: 3, slot: 15}
+    ]), 3);
+    assert.equal(handUnitsAfterReplacement([
+        {id: 1, slot: 10}, {id: 2, slot: 14}, {id: 3, slot: 15}
+    ], 2, {id: 4, slot: 15}), 3);
+    assert.equal(handUnitsAfterReplacement([
+        {id: 1, slot: 10}, {id: 2, slot: 14, twoHanded: true}, {id: 0, slot: 15}
+    ], 2, {id: 3, slot: 15}), 4);
+    assert.equal(handUnitsAfterReplacement([
+        {id: 1, slot: 10}, {id: 2, slot: 14, twoHanded: true}, {id: 3, slot: 15}
+    ], 1, {id: 4, slot: 14}), 3);
+
+    const emptyShield = [
+        blank(10), {id: 2, slot: 14, twoHanded: true}, {id: 3, slot: 15}
+    ];
+    const emptyWield = [
+        {id: 1, slot: 10}, blank(14), {id: 3, slot: 15, twoHanded: true}
+    ];
+    const emptyHold = [
+        {id: 1, slot: 10}, {id: 2, slot: 14, twoHanded: true}, blank(15)
+    ];
+    assert.equal(canOpenEquipmentRow(emptyShield, 0), false);
+    assert.equal(canOpenEquipmentRow(emptyWield, 1), false);
+    assert.equal(canOpenEquipmentRow(emptyHold, 2), false);
+
+    const occupiedOverCapacity = [
+        {id: 1, slot: 10}, {id: 2, slot: 14, twoHanded: true}, {id: 3, slot: 15}
+    ];
+    assert.deepEqual(occupiedOverCapacity.map((item, index) =>
+        canOpenEquipmentRow(occupiedOverCapacity, index)), [true, true, true]);
+    assert.equal(canEquipHandCandidate(emptyHold, 2, {id: 3, slot: 15}), false);
+    assert.equal(canEquipHandCandidate(occupiedOverCapacity, 1, {id: 4, slot: 14}), true);
 });

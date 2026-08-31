@@ -33,7 +33,6 @@ test("builder initial state owns list, equipment, search, dialog, and request st
         searchString: "",
         sortStat: "",
         sortDir: "",
-        wieldSlotFilter: 0,
         itemRestrictions: [],
         statRestrictions: {},
         isRuneCrafting: false,
@@ -733,22 +732,21 @@ test("builder reducer unlocks the current picker item in canonical state", async
 test("builder reducer and selectors own item search transitions", async function() {
     const {builderReducer, createInitialBuilderState, selectFilteredItems, selectPagedItems} = await loadReducer();
     const items = [
-        {id: 1, name: "Sword", slot: 14, realSlot: 14, strength: 3},
-        {id: 2, name: "Axe", slot: 14, realSlot: 15, strength: 5},
-        {id: 3, name: "Spear", slot: 14, realSlot: 14, strength: 7}
+        {id: 1, name: "Sword", slot: 15, slots: [14, 15], strength: 3},
+        {id: 2, name: "Axe", slot: 15, slots: [14, 15], strength: 5},
+        {id: 3, name: "Spear", slot: 15, slots: [14, 15], strength: 7}
     ];
     let state = {
         ...createInitialBuilderState(), itemsBySlot: Array.from({length: 22}, () => []),
         statInfo: [{short: "Str", var: "strength"}], itemsPerPage: 1
     };
-    state.itemsBySlot[14] = items;
+    state.itemsBySlot[15] = items;
     state = builderReducer(state, {type: "search/open", item: items[0], index: 0});
     state = builderReducer(state, {type: "search/text", value: "str>3"});
-    state = builderReducer(state, {type: "search/wield", value: 1});
     state = {...state, filteredItems: items};
     state = builderReducer(state, {type: "search/sort", stat: "strength"});
 
-    assert.deepEqual(selectFilteredItems(state).map(item => item.id), [3]);
+    assert.deepEqual(selectFilteredItems(state).map(item => item.id), [2, 3]);
     assert.deepEqual(state.filteredItems.map(item => item.id), [3, 2, 1]);
     assert.deepEqual(selectPagedItems({...state, filteredItems: items}, 2).map(item => item.id), [2]);
     assert.equal(state.currentItemIndex, 0);

@@ -177,7 +177,6 @@ export function createInitialBuilderState() {
         searchString: "",
         sortStat: "",
         sortDir: "",
-        wieldSlotFilter: 0,
         itemRestrictions: [],
         statRestrictions: {},
         isRuneCrafting: false,
@@ -562,8 +561,6 @@ export function builderReducer(state, action) {
                     ? (state.selectedList.runeCharms[RUNE_CHARM_ITEM_INDEX[action.index]] || "AAAAA").split("")
                     : ["A", "A", "A", "A", "A"]
             };
-        case "search/wield":
-            return {...state, wieldSlotFilter: action.value};
         case "search/sort": {
             const sortDir = state.sortStat === action.stat && state.sortDir === "-" ? "+" : "-";
             return {
@@ -665,12 +662,7 @@ export function selectFilteredItems(state) {
         const filteredBySearch = comparisons
             ? comparisons.some(expression => comparisonFiltersItem(expression, item, state.statInfo))
             : Boolean(state.searchString && !item.name.toLowerCase().includes(state.searchString.toLowerCase()));
-        let filteredByWield = false;
-        if (state.currentItem.slot === 14 || state.currentItem.slot === 15) {
-            const slots = {1: 14, 2: 15, 3: 10};
-            filteredByWield = Boolean(slots[state.wieldSlotFilter] && item.realSlot !== slots[state.wieldSlotFilter]);
-        }
-        return !filteredBySearch && !filteredByWield;
+        return !filteredBySearch;
     });
     return filtered;
 }

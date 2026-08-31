@@ -684,7 +684,7 @@ export default function Builder({
         dispatch({type: "search/open", item, index});
         if (state.itemsBySlot[item.slot]?.length) return;
         dispatch({type: "request/pending"});
-        try { const data = await graphqlRequest({query: createItemsBySlotQuery(state.itemFragment), variables: {slotId: item.slot}}); const itemsBySlot = state.itemsBySlot.slice(); itemsBySlot[item.slot] = [{id: 0, name: "-", slot: item.slot, realSlot: -1}, ...data.getItemsBySlotId.map(result => ({...result, realSlot: result.slot, slot: item.slot}))]; dispatch({type: "ui/patch", value: {itemsBySlot}}); dispatch({type: "request/succeeded"}); }
+        try { const data = await graphqlRequest({query: createItemsBySlotQuery(state.itemFragment), variables: {slotId: item.slot}}); const itemsBySlot = state.itemsBySlot.slice(); itemsBySlot[item.slot] = [{id: 0, name: "-", slot: item.slot}, ...data.getItemsBySlotId.map(result => ({...result, slot: item.slot}))]; dispatch({type: "ui/patch", value: {itemsBySlot}}); dispatch({type: "request/succeeded"}); }
         catch (error) { dispatch({type: "request/failed", error: error.message || "Items could not be loaded. Try again."}); }
     }
     function pickItem(item, rune) { if (rune) { const charm = state.charmSelectors.join(""); dispatch({type: "rune/update", index: state.currentItemIndex, charm, runeId: RUNE_CHARM_ID, runeStats: deriveRuneCharmStats(charm)}); } else dispatch({type: "item/select", index: state.currentItemIndex, item}); close(); }

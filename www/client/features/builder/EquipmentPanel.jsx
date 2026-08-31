@@ -5,7 +5,11 @@ import {
   SLOT_LABELS,
 } from "./item-constants.js";
 import { useEffect, useRef } from "react";
-import { getItemRestrictionText } from "./builder-derivations.js";
+import {
+  canEquipHandCandidate,
+  canOpenEquipmentRow,
+  getItemRestrictionText,
+} from "./builder-derivations.js";
 import { BuilderModal } from "./ImportExportDialog.jsx";
 import { selectFilteredItems } from "./builder-reducer.js";
 
@@ -235,6 +239,11 @@ export default function EquipmentPanel({
                 restrictions[index],
                 item,
               ).replaceAll("<br /><br />", " ");
+              const canOpen = canOpenEquipmentRow(
+                state.selectedList.items,
+                index,
+              );
+              const handStatusId = `builder-equipment-hand-status-${index}`;
               return (
                 <tr key={index}>
                   <WarningCell
@@ -261,28 +270,37 @@ export default function EquipmentPanel({
                   </td>
                   <th
                     scope="row"
-                    className="clickable py-1 py-lg-0"
-                    onClick={() => onOpen(index)}
+                    className={`${canOpen ? "clickable " : ""}py-1 py-lg-0`}
+                    onClick={canOpen ? () => onOpen(index) : undefined}
                   >
                     <button
                       type="button"
                       className="btn btn-link p-0 text-reset font-weight-bold builder-table-action"
+                      disabled={!canOpen}
+                      aria-describedby={!canOpen ? handStatusId : undefined}
                       onClick={(event) => {
                         event.stopPropagation();
-                        onOpen(index);
+                        if (canOpen) onOpen(index);
                       }}
                     >
                       {item.name || "-"}
                     </button>
                     <DetailsLink item={item} />
+                    {!canOpen && (
+                      <span id={handStatusId} className="sr-only">
+                        All three hands are already in use.
+                      </span>
+                    )}
                   </th>
                   {stats.map((stat) => (
                     <td key={stat.var} className="p-0">
                       <button
                         type="button"
                         className="btn btn-link btn-block rounded-0 px-1 py-1 py-lg-0 builder-table-action builder-stat-action"
-                        aria-label={`Choose ${item.name || "empty item"} by ${stat.display}`}
-                        onClick={() => onOpen(index)}
+                        aria-label={`Choose ${item.id === 0 ? "empty item" : item.name || "empty item"} by ${stat.display}`}
+                        disabled={!canOpen}
+                        aria-describedby={!canOpen ? handStatusId : undefined}
+                        onClick={canOpen ? () => onOpen(index) : undefined}
                       >
                         {displayValue(item, stat)}
                       </button>
@@ -390,28 +408,22 @@ export default function EquipmentPanel({
                   replacement.
                 </p>
               )}
-            </div>
-            {(current.slot === 14 || current.slot === 15) && (
-              <label className="d-block mt-3" htmlFor="wield-slot-filter">
-                Slot Filter
-                <select
-                  id="wield-slot-filter"
-                  className="custom-select"
-                  value={state.wieldSlotFilter}
-                  onChange={(event) =>
-                    onAction({
-                      type: "search/wield",
-                      value: Number(event.target.value),
-                    })
-                  }
+              {choices.some((item) =>
+                !canEquipHandCandidate(
+                  state.selectedList.items,
+                  state.currentItemIndex,
+                  item,
+                ),
+              ) && (
+                <p
+                  id="builder-picker-hand-status"
+                  className="text-warning mx-3 mb-3"
+                  role="status"
                 >
-                  <option value="0">Wield, Hold, &amp; Shield slots</option>
-                  <option value="1">Wield slot only</option>
-                  <option value="2">Hold slot only</option>
-                  <option value="3">Shield slot only</option>
-                </select>
-              </label>
-            )}
+                  This item would use more than your character's three hands.
+                </p>
+              )}
+            </div>
             {(current.slot === 13 || current.slot === 2) && (
               <button
                 type="button"
@@ -510,42 +522,46 @@ export default function EquipmentPanel({
                       </tr>
                     </thead>
                     <tbody>
-                      {choices.map((item) => (
-                        <tr
-                          key={item.id}
-                          className={
-                            current.locked
-                              ? "builder-picker-result-disabled"
-                              : "clickable"
-                          }
-                          onClick={
-                            current.locked ? undefined : () => onPick(item)
-                          }
-                        >
-                          <td>
-                            <button
-                              className="btn btn-link p-0 builder-table-action"
-                              type="button"
-                              disabled={current.locked}
-                              aria-describedby={
-                                current.locked
-                                  ? "builder-picker-lock-status"
-                                  : undefined
-                              }
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                onPick(item);
-                              }}
-                            >
-                              {item.name}
-                            </button>
-                            <DetailsLink item={item} />
-                          </td>
-                          {stats.map((stat) => (
-                            <td key={stat.var}>{displayValue(item, stat)}</td>
-                          ))}
-                        </tr>
-                      ))}
+                      {choices.map((item) => {
+                        const capacityBlocked = !canEquipHandCandidate(
+                          state.selectedList.items,
+                          state.currentItemIndex,
+                          item,
+                        );
+                        const disabled = current.locked || capacityBlocked;
+                        return (
+                          <tr
+                            key={item.id}
+                            className={disabled ? "builder-picker-result-disabled" : "clickable"}
+                            onClick={disabled ? undefined : () => onPick(item)}
+                          >
+                            <td>
+                              <button
+                                className="btn btn-link p-0 builder-table-action"
+                                type="button"
+                                disabled={disabled}
+                                aria-describedby={
+                                  current.locked
+                                    ? "builder-picker-lock-status"
+                                    : capacityBlocked
+                                      ? "builder-picker-hand-status"
+                                    : undefined
+                                }
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  if (!disabled) onPick(item);
+                                }}
+                              >
+                                {item.name}
+                              </button>
+                              <DetailsLink item={item} />
+                            </td>
+                            {stats.map((stat) => (
+                              <td key={stat.var}>{displayValue(item, stat)}</td>
+                            ))}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
