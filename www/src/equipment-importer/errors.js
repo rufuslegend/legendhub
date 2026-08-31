@@ -9,4 +9,13 @@ class ImportValidationError extends Error {
     }
 }
 
-module.exports = {ImportValidationError};
+class EquipmentImportError extends Error {
+    constructor(code, message) {
+        super(message);
+        this.name = "EquipmentImportError";
+        this.code = code;
+        this.paths = [];
+    }
+}
+
+module.exports = {EquipmentImportError, ImportValidationError};
