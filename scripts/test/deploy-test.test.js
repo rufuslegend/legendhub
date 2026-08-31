@@ -55,6 +55,16 @@ if [[ "${dollar}*" == "ls-tree --name-only ${dollar}FAKE_FULL_SHA -- docker-comp
   exit 0
 fi
 
+if [[ "${dollar}*" == "ls-tree --name-only ${dollar}FAKE_FULL_SHA -- docker-compose.equipment-importer.yaml" ]]; then
+  if [[ "${dollar}{FAKE_EQUIPMENT_GIT_TREE_EXIT_STATUS:-0}" != 0 ]]; then
+    exit "${dollar}FAKE_EQUIPMENT_GIT_TREE_EXIT_STATUS"
+  fi
+  if [[ "${dollar}{FAKE_TRACKS_EQUIPMENT_IMPORTER:-0}" == 1 ]]; then
+    printf '%s\n' docker-compose.equipment-importer.yaml
+  fi
+  exit 0
+fi
+
 printf 'unexpected git command: %s\n' "${dollar}*" >&2
 exit 64
 `;
@@ -66,9 +76,14 @@ printf '\036' >> "${dollar}FAKE_DOCKER_LOG"
 printf '%s\n' "${dollar}{COMPOSE_PROJECT_NAME:-<unset>}" >> \
   "${dollar}FAKE_PROJECT_NAME_LOG"
 
-if [[ "${dollar}1" == ps ]]; then
+if [[ "${dollar}1" == ps && "${dollar}*" == *"service=content-sync"* ]]; then
   [[ -z "${dollar}{FAKE_CONTENT_SYNC_IDS:-}" ]] ||
     printf '%s\n' "${dollar}FAKE_CONTENT_SYNC_IDS"
+fi
+
+if [[ "${dollar}1" == ps && "${dollar}*" == *"service=equipment-importer"* ]]; then
+  [[ -z "${dollar}{FAKE_EQUIPMENT_IMPORTER_IDS:-}" ]] ||
+    printf '%s\n' "${dollar}FAKE_EQUIPMENT_IMPORTER_IDS"
 fi
 
 if [[ "${dollar}1" == rm && "${dollar}{FAKE_REMOVE_EXIT_STATUS:-0}" != 0 ]]; then
@@ -131,6 +146,8 @@ function environment(overrides = {}) {
         PATH: `${fakeBin}:${process.env.PATH}`,
         FAKE_CHECKED_OUT_STATE: checkedOutState,
         FAKE_CONTENT_SYNC_IDS: "",
+        FAKE_EQUIPMENT_IMPORTER_IDS: "",
+        FAKE_TRACKS_EQUIPMENT_IMPORTER: "0",
         FAKE_DOCKER_LOG: dockerLog,
         FAKE_FULL_SHA: fullSha,
         FAKE_GIT_LOG: gitLog,
@@ -203,26 +220,56 @@ test("checks out the expanded commit before validating and deploying Compose", (
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout.includes("do-not-print"), false);
     assert.equal(result.stderr.includes("do-not-print"), false);
-    assert.equal(readIfPresent(projectNameLog), "legendhub-test\n".repeat(3));
+    assert.equal(readIfPresent(projectNameLog), "legendhub-test\n".repeat(4));
     assert.equal(readIfPresent(gitLog), [
         "fetch origin",
         `rev-parse --verify ${releaseSha}^{commit}`,
         `checkout --detach ${fullSha}`,
         "rev-parse --short=12 HEAD",
         `ls-tree --name-only ${fullSha} -- docker-compose.content-sync.yaml`,
+        `ls-tree --name-only ${fullSha} -- docker-compose.equipment-importer.yaml`,
         "",
     ].join("\n"));
     assert.deepEqual(readDockerCalls(), [
         ["compose", "-f", "docker-compose.yaml", "-f", "docker-compose.test.yaml",
-            "-f", "docker-compose.registry.yaml", "-f",
-            "docker-compose.content-sync.yaml", "config", "--quiet"],
+            "-f", "docker-compose.content-sync.yaml", "-f",
+            "docker-compose.registry.yaml", "config", "--quiet"],
+        ["ps", "--all", "--quiet", "--no-trunc",
+            "--filter", "label=com.docker.compose.project=legendhub-test",
+            "--filter", "label=com.docker.compose.service=equipment-importer"],
         ["compose", "-f", "docker-compose.yaml", "-f", "docker-compose.test.yaml",
-            "-f", "docker-compose.registry.yaml", "-f",
-            "docker-compose.content-sync.yaml", "pull", "www", "python",
+            "-f", "docker-compose.content-sync.yaml", "-f",
+            "docker-compose.registry.yaml", "pull", "www", "python",
             "mysql-backup", "content-sync"],
         ["compose", "-f", "docker-compose.yaml", "-f", "docker-compose.test.yaml",
-            "-f", "docker-compose.registry.yaml", "-f",
-            "docker-compose.content-sync.yaml", "up", "-d", "--no-build"],
+            "-f", "docker-compose.content-sync.yaml", "-f",
+            "docker-compose.registry.yaml", "up", "-d", "--no-build"],
+    ]);
+});
+
+test("a current target composes the importer before the registry override", () => {
+    writeProjectEnvironment();
+    for (const name of [
+        "docker-compose.test.yaml",
+        "docker-compose.registry.yaml",
+        "docker-compose.content-sync.yaml",
+        "docker-compose.equipment-importer.yaml",
+    ]) {
+        fs.writeFileSync(path.join(remoteRoot, name), "services: {}\n");
+    }
+
+    const result = runRemote({FAKE_TRACKS_EQUIPMENT_IMPORTER: "1"});
+
+    assert.equal(result.status, 0, result.stderr);
+    const currentCompose = [
+        "compose", "-f", "docker-compose.yaml", "-f", "docker-compose.test.yaml",
+        "-f", "docker-compose.content-sync.yaml", "-f",
+        "docker-compose.equipment-importer.yaml", "-f", "docker-compose.registry.yaml",
+    ];
+    assert.deepEqual(readDockerCalls(), [
+        [...currentCompose, "config", "--quiet"],
+        [...currentCompose, "pull", "www", "python", "mysql-backup", "content-sync"],
+        [...currentCompose, "up", "-d", "--no-build"],
     ]);
 });
 
@@ -312,6 +359,11 @@ const legacyDiscovery = [
     "--filter", "label=com.docker.compose.project=legendhub-test",
     "--filter", "label=com.docker.compose.service=content-sync",
 ];
+const equipmentImporterDiscovery = [
+    "ps", "--all", "--quiet", "--no-trunc",
+    "--filter", "label=com.docker.compose.project=legendhub-test",
+    "--filter", "label=com.docker.compose.service=equipment-importer",
+];
 
 test("a legacy target uses three overlays when its Git tree predates content sync", () => {
     writeLegacyRemoteFiles();
@@ -325,10 +377,11 @@ test("a legacy target uses three overlays when its Git tree predates content syn
     });
 
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(readIfPresent(projectNameLog), "legendhub-test\n".repeat(4));
+    assert.equal(readIfPresent(projectNameLog), "legendhub-test\n".repeat(5));
     assert.deepEqual(readDockerCalls(), [
         [...legacyCompose, "config", "--quiet"],
         legacyDiscovery,
+        equipmentImporterDiscovery,
         [...legacyCompose, "pull", "www", "python", "mysql-backup"],
         [...legacyCompose, "up", "-d", "--no-build"],
     ]);
@@ -350,6 +403,30 @@ test("legacy rollback removes exactly one content-sync container by exact labels
     assert.deepEqual(readDockerCalls(), [
         [...legacyCompose, "config", "--quiet"],
         legacyDiscovery,
+        equipmentImporterDiscovery,
+        [...legacyCompose, "pull", "www", "python", "mysql-backup"],
+        ["rm", "--force", "--", containerId],
+        [...legacyCompose, "up", "-d", "--no-build"],
+    ]);
+});
+
+test("legacy rollback removes exactly one equipment importer container by exact labels", () => {
+    writeLegacyRemoteFiles();
+    const containerId = "b".repeat(64);
+
+    const result = spawnSync("bash", [deployer, "--remote", releaseSha, remoteRoot], {
+        env: environment({
+            FAKE_EQUIPMENT_IMPORTER_IDS: containerId,
+            FAKE_TRACKS_CONTENT_SYNC: "0",
+        }),
+        encoding: "utf8",
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(readDockerCalls(), [
+        [...legacyCompose, "config", "--quiet"],
+        legacyDiscovery,
+        equipmentImporterDiscovery,
         [...legacyCompose, "pull", "www", "python", "mysql-backup"],
         ["rm", "--force", "--", containerId],
         [...legacyCompose, "up", "-d", "--no-build"],
@@ -392,6 +469,7 @@ test("legacy rollback stops before startup when stale-service removal fails", ()
     assert.deepEqual(readDockerCalls(), [
         [...legacyCompose, "config", "--quiet"],
         legacyDiscovery,
+        equipmentImporterDiscovery,
         [...legacyCompose, "pull", "www", "python", "mysql-backup"],
         ["rm", "--force", "--", containerId],
     ]);
