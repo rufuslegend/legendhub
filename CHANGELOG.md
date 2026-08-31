@@ -14,6 +14,7 @@ with version 2.6.0.
 - Added account-backed Builder storage for players with a verified email address. Characters autosave separately, follow the player between work, home, and other browsers, and share a 10 MB account limit.
 - Added cross-device Builder and site preferences for account storage, including themes, paging, visible columns, and the last selected character and variant.
 - Added account controls to download a fresh export of every synced Builder character or permanently delete all synced Builder data after a separate confirmation.
+- Added official Legend-submitted equipment to Item Search and Builder filters. Distinct observed versions of the same item remain available as separate variants.
 
 ### Changed
 
