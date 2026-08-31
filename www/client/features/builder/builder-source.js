@@ -1,5 +1,5 @@
 export const BUILDER_ACCOUNT_LOAD_ERROR = "Builder account data could not be loaded.";
-const SUPPORTED_PAYLOAD_VERSIONS = new Set([1, 2, 3, 4, 5, 6]);
+const SUPPORTED_PAYLOAD_VERSIONS = new Set([1, 2, 3, 4, 5, 6, 7]);
 
 function accountLoadError() {
     return new Error(BUILDER_ACCOUNT_LOAD_ERROR);

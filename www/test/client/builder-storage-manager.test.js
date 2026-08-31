@@ -39,7 +39,7 @@ test("account storage management reuses the Builder export and delete adapters",
 test("each account export requests a fresh canonical Builder payload", async function(t) {
     const accountApi = await loadAccountApi();
     const bodies = [];
-    let response = "6*First~Original~encoded*";
+    let response = "7*First~Original~encoded*";
     t.mock.method(globalThis, "fetch", async function(_url, options) {
         bodies.push(JSON.parse(options.body));
         return jsonResponse({exportBuilderData: response});
@@ -47,7 +47,7 @@ test("each account export requests a fresh canonical Builder payload", async fun
     const document = {cookie: "loginToken=account-session"};
 
     assert.equal(await accountApi.exportAccountBuilderData(document), response);
-    response = "6*Fresh~Original~newer*";
+    response = "7*Fresh~Original~newer*";
     assert.equal(await accountApi.exportAccountBuilderData(document), response);
 
     assert.equal(bodies.length, 2);
@@ -84,7 +84,7 @@ test("account storage state retains only display-safe profile metadata", async f
             name: "Hero",
             revision: 4,
             updatedOn: "2026-08-28T00:00:00.000Z",
-            payload: "6*private-payload*",
+            payload: "7*private-payload*",
             memberId: 7,
             storageNamespace: "private-namespace"
         }],

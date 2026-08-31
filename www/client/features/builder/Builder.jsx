@@ -18,7 +18,7 @@ import {decodeBuilderEntries, decodeBuilderLists, encodeBuilderLists, encodeBuil
 import {buildImportRequest, classifyAnonymousData, defaultMigrationPreferencesChoice, fingerprintAnonymousData, normalizeMigrationResult, readMigrationAcknowledgement, shouldOfferMigration, writeMigrationAcknowledgement} from "./builder-migration.js";
 import {accountPreferenceColumns, applyBuilderPersistencePlan, applySelectedColumns, calculateStorageSize, createBuilderAccountPreferencePatch, createBuilderPersistencePlan, formatStorageSize, readBuilderPersistence} from "./builder-persistence.js";
 import {builderReducer, createDefaultVariant, createInitialBuilderState, selectStatRestrictions, selectStatTotal} from "./builder-reducer.js";
-import {RUNE_CHARM_ID} from "./item-constants.js";
+import {BUILDER_LIST_VERSION, RUNE_CHARM_ID} from "./item-constants.js";
 import {createItemsBySlotQuery, createItemsInIdsQuery, hydrateBuilderVariant} from "./builder-api.js";
 import {createAccountProfile, deleteAccountProfile, importAccountProfiles, loadBuilderAccountState, updateAccountProfile} from "./builder-account-api.js";
 import {BUILDER_ACCOUNT_LOAD_ERROR, loadBuilderSource} from "./builder-source.js";
@@ -68,7 +68,7 @@ function decodeAccountProfile(profile) {
         typeof profile.id !== "string" || !profile.id ||
         typeof profile.name !== "string" || !profile.name ||
         typeof profile.payload !== "string" || !profile.payload ||
-        !Number.isInteger(profile.payloadVersion) || profile.payloadVersion < 1 || profile.payloadVersion > 6 ||
+        !Number.isInteger(profile.payloadVersion) || profile.payloadVersion < 1 || profile.payloadVersion > BUILDER_LIST_VERSION ||
         !Number.isInteger(profile.revision) || profile.revision < 1 ||
         typeof profile.updatedOn !== "string" || !profile.updatedOn || Number.isNaN(Date.parse(profile.updatedOn)))
         throw new Error("Builder account data could not be loaded.");
@@ -649,7 +649,7 @@ export default function Builder({
         }
         close();
     }
-    function exportValue() { const character = state.allLists[state.selectedListIndex]; const exportLists = state.allLists.map(({account: _account, ...list}) => list); return {allLists: encodeBuilderLists(exportLists), curList: `6*${character.variants.map(variant => encodeBuilderVariant(character.name, variant)).join("*")}*`, curVariant: `6*${encodeBuilderVariant(character.name, selected)}*`, characterName: character.name, variantName: selected.name}; }
+    function exportValue() { const character = state.allLists[state.selectedListIndex]; const exportLists = state.allLists.map(({account: _account, ...list}) => list); return {allLists: encodeBuilderLists(exportLists), curList: `${BUILDER_LIST_VERSION}*${character.variants.map(variant => encodeBuilderVariant(character.name, variant)).join("*")}*`, curVariant: `${BUILDER_LIST_VERSION}*${encodeBuilderVariant(character.name, selected)}*`, characterName: character.name, variantName: selected.name}; }
     function importChange(input, overwriteIndex, overwrite) {
         let lists = [];
         let message = "";

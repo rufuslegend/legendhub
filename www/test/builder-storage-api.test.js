@@ -34,10 +34,10 @@ const AUTH = {
     storageNamespace: "00112233445566778899aabbccddeeff"
 };
 const BASE_STATS = "0U0U0U0U0U0U";
-const BLANK_ITEMS = "_".repeat(35);
-const HERO = `6*Hero~Tank~${BASE_STATS}000000___00000000000000000${BLANK_ITEMS}*` +
+const BLANK_ITEMS = "_".repeat(37);
+const HERO = `7*Hero~Tank~${BASE_STATS}000000___00000000000000000${BLANK_ITEMS}*` +
     `Hero~Caster~${BASE_STATS}000000___00000000000000000${BLANK_ITEMS}*`;
-const SCOUT = `6*Scout~Original~${BASE_STATS}000000___00000000000000000${BLANK_ITEMS}*`;
+const SCOUT = `7*Scout~Original~${BASE_STATS}000000___00000000000000000${BLANK_ITEMS}*`;
 const CANONICAL_DEFAULT_PREFERENCES = {
     version: 1,
     theme: "dark",
@@ -53,7 +53,7 @@ function profile(overrides = {}) {
         id: "profile-id",
         name: "Hero",
         payload: HERO,
-        payloadVersion: 6,
+        payloadVersion: 7,
         payloadBytes: Buffer.byteLength(HERO, "utf8"),
         revision: 4,
         createdOn: NOW,
@@ -587,7 +587,7 @@ test("every storage resolver authenticates without renewal then calls one servic
                 },
                 loadCodec: async () => ({
                     decodeBuilderLists() { return []; },
-                    encodeBuilderLists() { return "6*"; }
+                    encodeBuilderLists() { return "7*"; }
                 }),
                 storageService
             });
@@ -628,7 +628,7 @@ test("export combines every active profile and variant in current canonical form
     );
     const decoded = codec.decodeBuilderLists(value);
 
-    assert.match(value, /^6\*/);
+    assert.match(value, /^7\*/);
     assert.deepEqual(decoded.map(list => list.name), ["Hero", "Scout"]);
     assert.deepEqual(decoded[0].variants.map(variant => variant.name), ["Tank", "Caster"]);
     assert.equal(value, codec.encodeBuilderLists(decoded));
@@ -640,7 +640,7 @@ test("export combines every active profile and variant in current canonical form
     });
     assert.equal(await emptyFields.queryFields.exportBuilderData.resolve(
         null, {authToken: "selector-validator"}, {ip: "request"}
-    ), "6*");
+    ), "7*");
 });
 
 // Catches a malformed stored row reflecting account payload data through a

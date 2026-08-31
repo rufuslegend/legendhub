@@ -16,9 +16,9 @@ const auth = {
     storageNamespace: "00112233445566778899aabbccddeeff"
 };
 const baseStats = "0U0U0U0U0U0U";
-const blanks35 = "_".repeat(35);
-const multiVariantHero = `6*Hero~Tank~${baseStats}000000___00000000000000000${blanks35}*` +
-    `Hero~Caster~${baseStats}000000___00000000000000000${blanks35}*`;
+const blanks37 = "_".repeat(37);
+const multiVariantHero = `7*Hero~Tank~${baseStats}000000___00000000000000000${blanks37}*` +
+    `Hero~Caster~${baseStats}000000___00000000000000000${blanks37}*`;
 
 function deferred() {
     let resolve;
@@ -33,7 +33,7 @@ function profile(overrides = {}) {
         id: "profile-id",
         name: "Hero",
         payload: "canonical-server-payload",
-        payloadVersion: 6,
+        payloadVersion: 7,
         payloadBytes: 24,
         revision: 4,
         createdOn: NOW,
@@ -267,7 +267,7 @@ function createHarness(overrides = {}) {
         return {
             name: input.name,
             payload: profileValidated.payload || `canonical-${input.payload}`,
-            payloadVersion: profileValidated.payloadVersion || 6,
+            payloadVersion: profileValidated.payloadVersion || 7,
             byteLength: profileValidated.byteLength === undefined
                 ? 70
                 : profileValidated.byteLength,
@@ -417,7 +417,7 @@ function createSimultaneousImportHarness() {
         return {
             name: input.name,
             payload: `canonical-${input.payload}`,
-            payloadVersion: 6,
+            payloadVersion: 7,
             byteLength: 70,
             decoded: {name: input.name}
         };
@@ -693,7 +693,7 @@ test("real stale conflict copy renames every variant and recomputes canonical me
         .map(entry => entry.name), ["Hero Conflict 2", "Hero Conflict 2"]);
     assert.deepEqual(codec.decodeBuilderLists(result.conflictProfile.payload)[0].variants
         .map(variant => variant.name), ["Tank", "Caster"]);
-    assert.equal(result.conflictProfile.payloadVersion, 6);
+    assert.equal(result.conflictProfile.payloadVersion, 7);
     assert.equal(result.conflictProfile.payloadBytes,
         Buffer.byteLength(result.conflictProfile.payload, "utf8"));
     assert.deepEqual(inserted, {...result.conflictProfile, memberId: auth.memberId});

@@ -8,10 +8,10 @@ async function loadMigration() {
     return import("../../client/features/builder/builder-migration.js");
 }
 
-const hero = "Hero~Tank~0U0U0U0U0U0U000000___0000000000000000000f__________________________________";
-const scout = "Scout~Original~0X0X0X0X0X0X000000___0000000000000000000f__________________________________";
+const hero = "Hero~Tank~0U0U0U0U0U0U000000___0000000000000000000f____________________________________";
+const scout = "Scout~Original~0X0X0X0X0X0X000000___0000000000000000000f____________________________________";
 const snapshot = {
-    encodedLists: `6*${hero}*${scout}*`,
+    encodedLists: `7*${hero}*${scout}*`,
     selectedList: "Hero!Tank",
     theme: "dark",
     itemsPerPage: 50,
@@ -134,7 +134,7 @@ test("only changed local profiles are offered after acknowledgement", async func
     const {fingerprintAnonymousData, shouldOfferMigration} = await loadMigration();
     const fingerprint = await fingerprintAnonymousData(snapshot, webcrypto);
     const preferenceChange = {...snapshot, itemsPerPage: 100};
-    const profileChange = {...snapshot, encodedLists: `6*${hero}*`};
+    const profileChange = {...snapshot, encodedLists: `7*${hero}*`};
     const preferenceFingerprint = await fingerprintAnonymousData(preferenceChange, webcrypto);
     const profileFingerprint = await fingerprintAnonymousData(profileChange, webcrypto);
 
@@ -158,7 +158,7 @@ test("only changed local profiles are offered after acknowledgement", async func
 test("migration offer requires a nonempty valid anonymous list and a completed fingerprint", async function() {
     const {shouldOfferMigration} = await loadMigration();
     assert.equal(shouldOfferMigration({snapshot: {...snapshot, encodedLists: null}, fingerprint: "a", acknowledgedFingerprint: null}), false);
-    assert.equal(shouldOfferMigration({snapshot: {...snapshot, encodedLists: "6*broken"}, fingerprint: "a", acknowledgedFingerprint: null}), false);
+    assert.equal(shouldOfferMigration({snapshot: {...snapshot, encodedLists: "7*broken"}, fingerprint: "a", acknowledgedFingerprint: null}), false);
     assert.equal(shouldOfferMigration({snapshot, fingerprint: "", acknowledgedFingerprint: null}), false);
 });
 
@@ -169,7 +169,7 @@ test("mixed anonymous rows keep valid profiles importable and label invalid rows
     const privateMalformedRow = "private<malformed>payload";
     const mixedSnapshot = {
         ...snapshot,
-        encodedLists: `6*${hero}*${privateMalformedRow}*${scout}*`
+        encodedLists: `7*${hero}*${privateMalformedRow}*${scout}*`
     };
 
     assert.equal(shouldOfferMigration({
@@ -199,7 +199,7 @@ test("mixed anonymous rows keep valid profiles importable and label invalid rows
             return new Uint8Array(32).buffer;
         }}
     });
-    assert.equal(JSON.parse(fingerprintInput).encodedLists, `6*${hero}*${scout}*`);
+    assert.equal(JSON.parse(fingerprintInput).encodedLists, `7*${hero}*${scout}*`);
     assert.equal(fingerprintInput.includes(privateMalformedRow), false);
 });
 
@@ -210,8 +210,8 @@ test("migration request creates per-profile payloads and strips device-only valu
     const request = buildImportRequest({snapshot, preferencesChoice: "browser", storageGeneration: 3});
 
     assert.deepEqual(request.profiles, [
-        {id: "local-1", name: "Hero", payload: `6*${hero}*`},
-        {id: "local-2", name: "Scout", payload: `6*${scout}*`}
+        {id: "local-1", name: "Hero", payload: `7*${hero}*`},
+        {id: "local-2", name: "Scout", payload: `7*${scout}*`}
     ]);
     assert.deepEqual(request.preferences, {
         version: 1,
@@ -298,7 +298,7 @@ test("preference choice defaults to browser for a fresh canonical account and ot
 // Catches raw server result/error text reaching the accessible result report.
 test("migration result keeps safe outcome fields and replaces rejected diagnostics", async function() {
     const {normalizeMigrationResult} = await loadMigration();
-    const privatePayload = "6*private-builder-payload";
+    const privatePayload = "7*private-builder-payload";
     const result = normalizeMigrationResult(JSON.stringify({
         copied: ["Scout"],
         renamed: [{from: "Hero", to: "Hero Local"}],

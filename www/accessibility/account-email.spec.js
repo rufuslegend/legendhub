@@ -128,8 +128,8 @@ test.beforeEach(async function({context, page}) {
         profiles: [{
             id: "profile-1",
             name: "Hero",
-            payload: "6*private-builder-payload*",
-            payloadVersion: 6,
+            payload: "7*private-builder-payload*",
+            payloadVersion: 7,
             payloadBytes: 4096,
             revision: 4,
             createdOn: "2026-08-26T00:00:00.000Z",
@@ -167,7 +167,7 @@ test("Builder storage exports fresh data and separately confirms generation-safe
         url: baseUrl
     }]);
     await page.addInitScript(function() {
-        localStorage.setItem("cln", "6*Anonymous~Original~keep-local*");
+        localStorage.setItem("cln", "7*Anonymous~Original~keep-local*");
         localStorage.setItem(
             "legendhub-builder-import:private-storage-namespace",
             "a".repeat(64)
@@ -210,7 +210,7 @@ test("Builder storage exports fresh data and separately confirms generation-safe
             return route.fulfill({
                 contentType: "application/json",
                 body: JSON.stringify({data: {
-                    exportBuilderData: "6*Fresh~Original~protected-current*"
+                    exportBuilderData: "7*Fresh~Original~protected-current*"
                 }})
             });
         }
@@ -315,7 +315,7 @@ test("Builder storage exports fresh data and separately confirms generation-safe
             )
         };
     })).toEqual({
-        lists: "6*Anonymous~Original~keep-local*",
+        lists: "7*Anonymous~Original~keep-local*",
         acknowledgement: "a".repeat(64)
     });
     const anonymousCookie = (await context.cookies(baseUrl)).find(
@@ -343,7 +343,7 @@ test("lost Builder delete response keeps a snapshot until reload confirms server
             exportCalls += 1;
             return route.fulfill({
                 contentType: "application/json",
-                body: JSON.stringify({data: {exportBuilderData: "6*Recovery*"}})
+                body: JSON.stringify({data: {exportBuilderData: "7*Recovery*"}})
             });
         }
         return route.abort();
@@ -423,7 +423,7 @@ test("Builder storage failures stay independent and unverified accounts expose n
                 contentType: "application/json",
                 body: JSON.stringify({
                     data: {exportBuilderData: null},
-                    errors: [{message: "private export diagnostic 6*secret*"}]
+                    errors: [{message: "private export diagnostic 7*secret*"}]
                 })
             });
         }

@@ -10,7 +10,7 @@ async function loadPersistence() {
 // Catches storage reads that bypass consent or prefer obsolete list keys over the current cln payload.
 test("builder persistence gates reads on consent and preserves storage fallback order", async function() {
     const {readBuilderPersistence} = await loadPersistence();
-    const storage = {cln: "6*Current", cl2: "Old two", cl1: "Old one", cl: "Oldest", scl: "Hero!Tank"};
+    const storage = {cln: "7*Current", cl2: "Old two", cl1: "Old one", cl: "Oldest", scl: "Hero!Tank"};
 
     assert.deepEqual(readBuilderPersistence({cookies: {}, storage}), {
         encodedLists: null,
@@ -33,7 +33,7 @@ test("builder persistence gates reads on consent and preserves storage fallback 
         storage,
         characterName: "Hero"
     }), {
-        encodedLists: "6*Current",
+        encodedLists: "7*Current",
         selectedList: "Hero!Tank",
         theme: "dark",
         itemsPerPage: 50,
@@ -46,7 +46,7 @@ test("builder persistence gates reads on consent and preserves storage fallback 
 test("builder persistence reads each deployed list-key fallback in order", async function() {
     const {readBuilderPersistence} = await loadPersistence();
     const cases = [
-        [{cln: "6*Current", cl2: "Two", cl1: "One", cl: "Legacy"}, "6*Current"],
+        [{cln: "7*Current", cl2: "Two", cl1: "One", cl: "Legacy"}, "7*Current"],
         [{cl2: "Two", cl1: "One", cl: "Legacy"}, "2*Two"],
         [{cl1: "One", cl: "Legacy"}, "1*One"],
         [{cl: "Legacy"}, "Legacy"],
@@ -121,14 +121,14 @@ test("builder persistence plan preserves current keys and exact cookie options",
     const plan = createBuilderPersistencePlan({
         hasConsent: true,
         exceptionEncountered: false,
-        encodedLists: "6*Encoded*",
+        encodedLists: "7*Encoded*",
         selectedCharacter: "Hero",
         selectedVariant: "Tank",
         itemsPerPage: 50,
         selectedColumns: ["Slot", "Name"]
     }, writtenAt);
 
-    assert.deepEqual(plan.storage, {cln: "6*Encoded*", scl: "Hero!Tank"});
+    assert.deepEqual(plan.storage, {cln: "7*Encoded*", scl: "Hero!Tank"});
     assert.deepEqual(plan.removeCookies, ["cl1", "scl1"]);
     assert.deepEqual(plan.cookies.map(cookie => [cookie.name, cookie.value]), [
         ["ipp", "50"], ["sc-Hero", "Slot-Name-"]
@@ -146,7 +146,7 @@ test("builder persistence applies storage, cookie writes, and legacy removals", 
     const {applyBuilderPersistencePlan} = await loadPersistence();
     const calls = [];
     const plan = {
-        storage: {cln: "6*Encoded*", scl: "Hero!Tank"},
+        storage: {cln: "7*Encoded*", scl: "Hero!Tank"},
         cookies: [{name: "ipp", value: "50", options: {path: "/"}}],
         removeCookies: ["cl1", "scl1"]
     };
@@ -160,7 +160,7 @@ test("builder persistence applies storage, cookie writes, and legacy removals", 
     });
 
     assert.deepEqual(calls, [
-        ["storage", "cln", "6*Encoded*"],
+        ["storage", "cln", "7*Encoded*"],
         ["storage", "scl", "Hero!Tank"],
         ["put", "ipp", "50", {path: "/"}],
         ["remove", "cl1"]
@@ -173,7 +173,7 @@ test("builder persistence refuses writes without consent or after an exception",
     const input = {
         hasConsent: false,
         exceptionEncountered: false,
-        encodedLists: "6*Encoded*",
+        encodedLists: "7*Encoded*",
         selectedCharacter: "Hero",
         selectedVariant: "Original",
         itemsPerPage: 20,
@@ -190,7 +190,7 @@ test("account mode never creates an anonymous persistence plan", async function(
     const input = {
         hasConsent: true,
         exceptionEncountered: false,
-        encodedLists: "6*AccountPayload*",
+        encodedLists: "7*AccountPayload*",
         selectedCharacter: "Account Hero",
         selectedVariant: "Original",
         itemsPerPage: 50,
@@ -271,7 +271,7 @@ test("explicit anonymous mode remains byte-compatible with the deployed plan", a
     const input = {
         hasConsent: true,
         exceptionEncountered: false,
-        encodedLists: "6*Encoded*",
+        encodedLists: "7*Encoded*",
         selectedCharacter: "Hero",
         selectedVariant: "Tank",
         itemsPerPage: 50,

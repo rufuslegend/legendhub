@@ -8,13 +8,13 @@ async function loadSource() {
 }
 
 const anonymousSnapshot = {
-    encodedLists: "6*anonymous", selectedList: "Local!Original", itemsPerPage: 20, columns: null
+    encodedLists: "7*anonymous", selectedList: "Local!Original", itemsPerPage: 20, columns: null
 };
 const decodedAccountProfiles = [{name: "Account Hero", variants: [{name: "Original"}]}];
 const accountState = {
     profiles: [{
-        id: "account-profile", name: "Account Hero", payload: "6*account",
-        payloadVersion: 6, revision: 4, updatedOn: "2026-08-26T12:00:00.000Z"
+        id: "account-profile", name: "Account Hero", payload: "7*account",
+        payloadVersion: 7, revision: 4, updatedOn: "2026-08-26T12:00:00.000Z"
     }],
     preferences: "{\"theme\":\"dark\"}", preferenceRevision: 3,
     preferencesUpdatedOn: "2026-08-26T12:00:00.000Z",
@@ -29,7 +29,7 @@ test("verified source loads account profiles without returning anonymous profile
         accountContext: {canUseAccountStorage: true},
         loadAccount: async () => accountState,
         readAnonymous: () => anonymousSnapshot,
-        decode: payload => payload === "6*account" ? decodedAccountProfiles : [{name: "Local Hero"}]
+        decode: payload => payload === "7*account" ? decodedAccountProfiles : [{name: "Local Hero"}]
     });
 
     assert.equal(result.mode, "account");
@@ -69,7 +69,7 @@ test("anonymous source never calls the account API", async function() {
 test("verified source fails closed when any account profile cannot decode to one valid profile", async function(t) {
     const {loadBuilderSource} = await loadSource();
     const cases = [
-        ["decoder throws", () => { throw new Error("6*private-corrupt-payload"); }],
+        ["decoder throws", () => { throw new Error("7*private-corrupt-payload"); }],
         ["decoder returns no profiles", () => []],
         ["decoder returns multiple profiles", () => [{name: "Hero", variants: []}, {name: "Other", variants: []}]],
         ["decoder returns a malformed profile", () => [{}]],

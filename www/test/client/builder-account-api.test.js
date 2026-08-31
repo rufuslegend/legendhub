@@ -72,7 +72,7 @@ function inspectRequest(captured, expected) {
 test("Builder account API sends every exact protected operation through GraphQL variables", async function(t) {
     const api = await loadApi();
     const profile = {
-        id: "profile-id", name: "Hero \"quoted\"", payload: "6*Hero*",
+        id: "profile-id", name: "Hero \"quoted\"", payload: "7*Hero*",
         revision: 4, storageGeneration: 2
     };
     const cases = [
@@ -84,7 +84,7 @@ test("Builder account API sends every exact protected operation through GraphQL 
         }, {operation: "query", name: "GetBuilderAccountState", field: "getBuilderAccountState",
             types: {authToken: "String!"}, variables: {authToken: "account-token"}, userText: profile.name}],
         ["export", document => api.exportAccountBuilderData(document), {
-            exportBuilderData: "6*Hero*"
+            exportBuilderData: "7*Hero*"
         }, {operation: "query", name: "ExportBuilderData", field: "exportBuilderData",
             types: {authToken: "String!"}, variables: {authToken: "account-token"}, userText: profile.name}],
         ["create", document => api.createAccountProfile(profile, document), {

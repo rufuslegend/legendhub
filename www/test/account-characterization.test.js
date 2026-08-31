@@ -496,7 +496,7 @@ test("account route renders all notification settings", async function() {
                     name: "Hero",
                     revision: 4,
                     updatedOn: "2026-08-28T00:00:00.000Z",
-                    payload: "6*private-builder-payload*"
+                    payload: "7*private-builder-payload*"
                 }],
                 usedBytes: 4096,
                 quotaBytes: 10_485_760,

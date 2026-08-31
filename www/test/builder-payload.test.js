@@ -9,12 +9,15 @@ const {
 
 const baseStats = "0U0U0U0U0U0U";
 const blanks35 = "_".repeat(35);
+const blanks37 = "_".repeat(37);
 const legacyHero = "Hero!Original_30_30_30_30_30_30_-1_-1_-1_101_" +
     Array(34).fill("0").join("_");
-const encodedHero = `6*Hero~Original~${baseStats}000000___00000000000000000${blanks35}*`;
+const encodedHero = `7*Hero~Original~${baseStats}000000___00000000000000000${blanks37}*`;
 const twoCharacters = `${legacyHero}*${legacyHero.replace("Hero", "Other")}`;
-const multiVariantHero = `6*Hero~Tank~${baseStats}000000___00000000000000000${blanks35}*` +
-    `Hero~Caster~${baseStats}000000___00000000000000000${blanks35}*`;
+const multiVariantHero = `7*Hero~Tank~${baseStats}000000___00000000000000000${blanks37}*` +
+    `Hero~Caster~${baseStats}000000___00000000000000000${blanks37}*`;
+const multiVariantHeroV6 = `6*Hero~Tank~${baseStats}000000___00000000000000000${blanks35}*` +
+    `Hero~Tank~${baseStats}000000___00000000000000000${blanks35}*`;
 
 const supportedProfiles = [
     ["unversioned", legacyHero],
@@ -30,8 +33,8 @@ const supportedProfiles = [
 test("server validator canonicalizes one legacy character", async function() {
     const result = await validateBuilderProfile({name: "Hero", payload: legacyHero});
     assert.equal(result.name, "Hero");
-    assert.match(result.payload, /^6\*Hero~/);
-    assert.equal(result.payloadVersion, 6);
+    assert.match(result.payload, /^7\*Hero~/);
+    assert.equal(result.payloadVersion, 7);
     assert.equal(result.byteLength, Buffer.byteLength(result.payload, "utf8"));
 });
 
@@ -43,8 +46,8 @@ test("server validator rejects collections and mismatched names", async function
 
 // Catches collapsing valid current-format variants while validating one character profile.
 test("server validator retains all current-format variants for one character", async function() {
-    const payload = `6*Hero 2~Tank~${baseStats}000000___00000000000000000${blanks35}*` +
-        `Hero 2~Caster~${baseStats}000000___00000000000000000${blanks35}*`;
+    const payload = `7*Hero 2~Tank~${baseStats}000000___00000000000000000${blanks37}*` +
+        `Hero 2~Caster~${baseStats}000000___00000000000000000${blanks37}*`;
     const result = await validateBuilderProfile({name: "Hero 2", payload});
 
     assert.deepEqual(result.decoded.variants.map(variant => variant.name), ["Tank", "Caster"]);
@@ -63,7 +66,7 @@ test("validated profile rename re-encodes every variant canonically", async func
         "Hero Conflict 2", "Hero Conflict 2"
     ]);
     assert.deepEqual(renamed.decoded.variants.map(variant => variant.name), ["Tank", "Caster"]);
-    assert.equal(renamed.payloadVersion, 6);
+    assert.equal(renamed.payloadVersion, 7);
     assert.equal(renamed.byteLength, Buffer.byteLength(renamed.payload, "utf8"));
     assert.ok(renamed.byteLength > validated.byteLength);
 });
@@ -77,7 +80,8 @@ test("server validator rejects missing and non-numeric required Builder fields",
         "3*Hero~Original~",
         "4*Hero~Original~",
         "5*Hero~Original~",
-        "6*Hero~Original~"
+        "6*Hero~Original~",
+        "7*Hero~Original~"
     ];
 
     for (const payload of truncatedPayloads)
@@ -142,7 +146,7 @@ test("server validator preserves every supported format through a stable canonic
         const result = await validateBuilderProfile({name: "Hero", payload});
         const decoded = codec.decodeBuilderLists(result.payload);
 
-        assert.equal(result.payloadVersion, 6, label);
+        assert.equal(result.payloadVersion, 7, label);
         assert.equal(codec.encodeBuilderLists(decoded), result.payload, label);
         assert.deepEqual(
             codec.decodeBuilderLists(codec.encodeBuilderLists(decoded)),
@@ -152,7 +156,7 @@ test("server validator preserves every supported format through a stable canonic
     }
 });
 
-// Catches legacy/current values that the preview decoder can read but the v6
+// Catches legacy/current values that the preview decoder can read but the v7
 // encoder cannot preserve as the same stat, item, or rune-charm state.
 test("server validator rejects semantically unrepresentable data in every supported format", async function(t) {
     const v5Items = `${"_".repeat(3)}-AAAAA${"_".repeat(31)}`;
@@ -163,7 +167,7 @@ test("server validator rejects semantically unrepresentable data in every suppor
         ["format 3 rune charm in a non-charm slot", `3*Hero~Original~${baseStats}000000___-BCDEF`],
         ["format 4 untrimmed variant", `4*Hero~Original ~${baseStats}000000___${blanks35}`],
         ["format 5 empty rune charm item", `5*Hero~Original~${baseStats}000000___000000000${v5Items}`],
-        ["format 6 duplicate variant", multiVariantHero.replace("Caster", "Tank")]
+        ["format 6 duplicate variant", multiVariantHeroV6]
     ];
 
     for (const [label, payload] of cases) {

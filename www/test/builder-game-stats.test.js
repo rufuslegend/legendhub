@@ -84,7 +84,7 @@ function createBuilderScope() {
     scope.onExportClicked = function() {
         const character = scope.allLists[scope.selectedListIndex];
         scope.exportModel = {
-            curVariant: `6*${builderEncoding.encodeBuilderVariant(character.name, scope.selectedList)}*`
+            curVariant: `${builderConstants.BUILDER_LIST_VERSION}*${builderEncoding.encodeBuilderVariant(character.name, scope.selectedList)}*`
         };
     };
 
@@ -129,7 +129,7 @@ function createCompactImport(scope, version, sentinelIndex, sentinelId) {
     const baseStats = Array(6).fill(encoder.fromNumber(30, 2)).join("");
     const ksmStats = "0".repeat(6);
     const questSelections = "_".repeat(version >= 3 ? 3 : 2);
-    const itemCount = version === 2 ? 29 : scope.slotOrder.length;
+    const itemCount = version === 2 ? 29 : 35;
     const items = Array(itemCount).fill("_");
     items[sentinelIndex] = encoder.fromNumber(sentinelId, 3);
     return `${version}*Version ${version}~Original~${baseStats}${ksmStats}` +
@@ -137,7 +137,7 @@ function createCompactImport(scope, version, sentinelIndex, sentinelId) {
 }
 
 function createLegacyImport(scope, name, sentinelIndex, sentinelId) {
-    const items = Array(scope.slotOrder.length).fill("0");
+    const items = Array(35).fill("0");
     items[sentinelIndex] = String(sentinelId);
     const fields = [
         "30", "30", "30", "30", "30", "30",
@@ -166,7 +166,7 @@ function createVersion6Import(scope, eraRanks) {
     const ksmStats = "0".repeat(6);
     const questSelections = "_".repeat(3);
     const questResources = "0".repeat(9);
-    const items = "_".repeat(scope.slotOrder.length);
+    const items = "_".repeat(35);
 
     return `6*Version Six~Original~${baseStats}${ksmStats}` +
         `${questSelections}${questResources}${eraRanks}${items}`;
@@ -625,7 +625,7 @@ test("game stats calculates complete builder totals without AngularJS scope", fu
     });
 });
 
-test("builder version 6 round-trips quest resources and era abilities without shifting items", function() {
+test("builder version 7 round-trips quest resources and era abilities without shifting items", function() {
     const scope = createBuilderScope();
     const list = scope.getDefaultList("Original");
     Object.assign(list.baseStats, {
@@ -656,7 +656,7 @@ test("builder version 6 round-trips quest resources and era abilities without sh
     scope.selectedList = list;
 
     scope.onExportClicked();
-    assert.match(scope.exportModel.curVariant, /^6\*/);
+    assert.match(scope.exportModel.curVariant, /^7\*/);
     const compactData = scope.exportModel.curVariant.split("~")[2];
     assert.equal(compactData.slice(21, 30), "00H00Nzzz");
     assert.equal(compactData.slice(30, 38), "25431123");
@@ -692,7 +692,7 @@ test("builder version 5 imports default era abilities without shifting items", f
     const encoder = createEncoder();
     const baseStats = Array(6).fill(encoder.fromNumber(30, 2)).join("");
     const ksmStats = "0".repeat(6);
-    const items = Array(scope.slotOrder.length).fill("_");
+    const items = Array(35).fill("_");
     items[7] = encoder.fromNumber(808, 3);
     const imported = importBuilderList(
         scope,
@@ -765,8 +765,8 @@ test("builder version 4 imports its compact sentinel without shifting items", fu
     assert.equal(imported.baseStats.quest_move, 0);
     assertDefaultEraAbilities(imported);
     assert.equal(imported.items.length, scope.slotOrder.length);
-    assert.equal(imported.items[16].id, 404);
-    assert.equal(imported.items[16].slot, 14);
+    assert.equal(imported.items[17].id, 404);
+    assert.equal(imported.items[17].slot, 14);
 });
 
 test("unversioned legacy builder imports its sentinel without shifting items", function() {
@@ -781,8 +781,8 @@ test("unversioned legacy builder imports its sentinel without shifting items", f
     assert.equal(imported.baseStats.quest_move, 0);
     assertDefaultEraAbilities(imported);
     assert.equal(imported.items.length, scope.slotOrder.length);
-    assert.equal(imported.items[22].id, 505);
-    assert.equal(imported.items[22].slot, 18);
+    assert.equal(imported.items[24].id, 505);
+    assert.equal(imported.items[24].slot, 18);
 });
 
 test("unversioned legacy builder imports preserve multiple lists", function() {

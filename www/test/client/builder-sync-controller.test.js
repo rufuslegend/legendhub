@@ -60,7 +60,7 @@ function snapshot(overrides = {}) {
     return {
         id: "profile-1",
         name: "Hero",
-        payload: "6*Hero~Original~first*",
+        payload: "7*Hero~Original~first*",
         revision: 4,
         storageGeneration: 2,
         fingerprint: "first",
@@ -104,7 +104,7 @@ test("multiple edits save once 750 ms after the last edit", async function() {
         onStatus() {}
     });
     const first = snapshot();
-    const second = snapshot({payload: "6*Hero~Original~second*", fingerprint: "second"});
+    const second = snapshot({payload: "7*Hero~Original~second*", fingerprint: "second"});
 
     controller.queue(first);
     clock.tick(500);
@@ -148,13 +148,13 @@ test("network retries are bounded to 30 seconds and validation never retries", a
     assert.deepEqual(clock.delays, [750, 1000, 2000]);
 
     outcomes = [applicationError(400)];
-    controller.queue(snapshot({payload: "6*Hero~Original~invalid*", fingerprint: "invalid", revision: 5}));
+    controller.queue(snapshot({payload: "7*Hero~Original~invalid*", fingerprint: "invalid", revision: 5}));
     await clock.runAll();
     assert.equal(calls.length, 4);
     assert.deepEqual(clock.delays, [750, 1000, 2000, 750]);
 
     outcomes = [authorizationError()];
-    controller.queue(snapshot({payload: "6*Hero~Original~auth*", fingerprint: "auth", revision: 5}));
+    controller.queue(snapshot({payload: "7*Hero~Original~auth*", fingerprint: "auth", revision: 5}));
     await clock.runAll();
     assert.equal(calls.length, 5);
     assert.deepEqual(clock.delays, [750, 1000, 2000, 750, 750]);
@@ -277,8 +277,8 @@ test("profiles queue independently and an in-flight save preserves the newest ed
         onResult: value => results.push(value),
         onStatus() {}
     });
-    const scout = snapshot({id: "profile-2", name: "Scout", fingerprint: "scout", payload: "6*Scout~Original~scout*"});
-    const newestHero = snapshot({fingerprint: "newest", payload: "6*Hero~Original~newest*"});
+    const scout = snapshot({id: "profile-2", name: "Scout", fingerprint: "scout", payload: "7*Scout~Original~scout*"});
+    const newestHero = snapshot({fingerprint: "newest", payload: "7*Hero~Original~newest*"});
 
     controller.queue(snapshot());
     controller.queue(scout);
@@ -328,7 +328,7 @@ test("a stale in-flight failure immediately continues with the debounced newest 
     controller.queue(snapshot());
     clock.tick(750);
     await clock.settle();
-    controller.queue(snapshot({fingerprint: "newest", payload: "6*Hero~Original~newest*"}));
+    controller.queue(snapshot({fingerprint: "newest", payload: "7*Hero~Original~newest*"}));
     clock.tick(750);
     await clock.settle();
     assert.equal(calls.length, 1);
@@ -415,7 +415,7 @@ test("structured conflict retires the original queue before transferring newer e
         controller.queue(snapshot());
         clock.tick(750);
         await clock.settle();
-        controller.queue(snapshot({fingerprint: "newest", payload: "6*Hero~Original~newest*"}));
+        controller.queue(snapshot({fingerprint: "newest", payload: "7*Hero~Original~newest*"}));
         clock.tick(timing === "before-debounce" ? 749 : 750);
         await clock.settle();
         releaseConflict({
@@ -646,7 +646,7 @@ test("flush waits for the queued successor of an in-flight save", async function
     controller.queue(snapshot());
     clock.tick(750);
     await clock.settle();
-    controller.queue(snapshot({fingerprint: "newest", payload: "6*Hero~Original~newest*"}));
+    controller.queue(snapshot({fingerprint: "newest", payload: "7*Hero~Original~newest*"}));
     let flushed = false;
     const flushing = controller.flush().then(function() { flushed = true; });
 

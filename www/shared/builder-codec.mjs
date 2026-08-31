@@ -1,20 +1,27 @@
 import gameStats from "../src/public/js/services/game-stats.js";
 
 const BASE_62_DIGITS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-const BUILDER_LIST_VERSION = 6;
+export const BUILDER_LIST_VERSION = 7;
 const RUNE_CHARM_ID = -5;
 const ATTRIBUTE_NAMES = [
     "strength", "mind", "dexterity", "constitution", "perception", "spirit"
 ];
-const SLOT_ORDER = [
+export const LEGACY_SLOT_ORDER = [
     0, 1, 1, 2, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 13, 14, 15,
     15, 16, 16, 17, 18, 19, 20, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21
+];
+export const SLOT_ORDER = [
+    0, 1, 1, 2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 13, 14,
+    15, 15, 15, 16, 16, 17, 18, 19, 20, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21
 ];
 const EMPTY_RUNE_CHARMS = {
     charm1: "AAAAA", charm2: "AAAAA", charm3: "AAAAA", charm4: "AAAAA"
 };
-const RUNE_CHARM_ITEM_INDEX = {
+const LEGACY_RUNE_CHARM_ITEM_INDEX = {
     3: "charm1", 4: "charm2", 14: "charm3", 15: "charm4"
+};
+const RUNE_CHARM_ITEM_INDEX = {
+    3: "charm1", 4: "charm2", 15: "charm3", 16: "charm4"
 };
 
 export function fromBase62(number, minLength) {
@@ -50,8 +57,8 @@ function defaultRanks() {
     return gameStats.getDefaultEraAbilityRanks();
 }
 
-function blankItem(index) {
-    return {id: 0, slot: SLOT_ORDER[index], locked: false};
+function blankItem(index, slotOrder) {
+    return {id: 0, slot: slotOrder[index], locked: false};
 }
 
 function readLegacyNumber(value) {
@@ -66,7 +73,7 @@ function readLegacyItem(value, index) {
     const id = locked ? value.slice(1) : value;
     if (id.trim() === "" || !Number.isFinite(Number(id)))
         invalidList();
-    return {id: Number(id), slot: SLOT_ORDER[index], locked};
+    return {id: Number(id), slot: LEGACY_SLOT_ORDER[index], locked};
 }
 
 function decodeLegacy(encoded) {
@@ -85,9 +92,9 @@ function decodeLegacy(encoded) {
     baseStats.quest_hp = 0;
     baseStats.quest_mana = 0;
     baseStats.quest_move = 0;
-    const items = fields.slice(0, SLOT_ORDER.length).map(readLegacyItem);
-    while (items.length < SLOT_ORDER.length)
-        items.push(blankItem(items.length));
+    const items = fields.slice(0, LEGACY_SLOT_ORDER.length).map(readLegacyItem);
+    while (items.length < LEGACY_SLOT_ORDER.length)
+        items.push(blankItem(items.length, LEGACY_SLOT_ORDER));
     return {
         name,
         variants: [{
@@ -127,6 +134,10 @@ function takeSelection(encoded) {
 }
 
 function decodeCompact(encoded, version) {
+    const slotOrder = version >= 7 ? SLOT_ORDER : LEGACY_SLOT_ORDER;
+    const runeCharmItemIndex = version >= 7
+        ? RUNE_CHARM_ITEM_INDEX
+        : LEGACY_RUNE_CHARM_ITEM_INDEX;
     let name;
     let variantName;
     [name, encoded] = takeName(encoded);
@@ -180,7 +191,7 @@ function decodeCompact(encoded, version) {
     const items = [];
     while (encoded.length > 0) {
         const index = items.length;
-        if (version >= 5 && index >= SLOT_ORDER.length)
+        if (version >= 5 && index >= slotOrder.length)
             invalidList();
         let locked = false;
         if (encoded[0] === ".") {
@@ -190,34 +201,41 @@ function decodeCompact(encoded, version) {
         if (!encoded)
             invalidList();
         if (encoded[0] === "_") {
-            items.push({...blankItem(index), locked});
+            items.push({...blankItem(index, slotOrder), locked});
             encoded = encoded.slice(1);
         } else if (encoded[0] === "-") {
             if (encoded.length < 6 || (version >= 5 && !/^-[A-Y]{5}/.test(encoded)))
                 invalidList();
-            items.push({id: RUNE_CHARM_ID, slot: SLOT_ORDER[index], locked});
-            const charmSlot = RUNE_CHARM_ITEM_INDEX[index];
+            items.push({id: RUNE_CHARM_ID, slot: slotOrder[index], locked});
+            const charmSlot = runeCharmItemIndex[index];
             if (charmSlot)
                 runeCharms[charmSlot] = encoded.slice(1, 6);
             encoded = encoded.slice(6);
         } else {
             if (!/^[0-9A-Za-z]{3}/.test(encoded))
                 invalidList();
-            items.push({id: toBase62(encoded.slice(0, 3)), slot: SLOT_ORDER[index], locked});
+            items.push({id: toBase62(encoded.slice(0, 3)), slot: slotOrder[index], locked});
             encoded = encoded.slice(3);
         }
     }
-    if (version >= 5 && items.length !== SLOT_ORDER.length)
+    if (version >= 5 && items.length !== slotOrder.length)
         invalidList();
-    if (items.length > SLOT_ORDER.length)
+    if (items.length > slotOrder.length)
         invalidList();
-    while (items.length < SLOT_ORDER.length)
-        items.push(blankItem(items.length));
+    while (items.length < slotOrder.length)
+        items.push(blankItem(items.length, slotOrder));
 
     return {
         name,
         variants: [{name: variantName, baseStats, ksmStats, eraAbilities, runeCharms, items}]
     };
+}
+
+function upgradeLegacyItems(items) {
+    const upgraded = items.map(item => ({...item}));
+    upgraded.splice(12, 0, {id: 0, slot: 10, locked: false});
+    upgraded.splice(20, 0, {id: 0, slot: 15, locked: false});
+    return upgraded;
 }
 
 function mergeVariant(lists, decoded) {
@@ -257,6 +275,8 @@ function decodeEntries(value) {
                 decoded = decodeLegacy(listString);
             }
         }
+        if (version === null || version <= 6)
+            decoded.variants[0].items = upgradeLegacyItems(decoded.variants[0].items);
         entries.push(decoded);
     }
     return entries;

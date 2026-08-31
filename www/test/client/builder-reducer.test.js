@@ -14,7 +14,7 @@ test("builder initial state owns list, equipment, search, dialog, and request st
     const second = createDefaultVariant("Other");
     first.items[0].id = 99;
 
-    assert.equal(first.items.length, 35);
+    assert.equal(first.items.length, 37);
     assert.equal(second.items[0].id, 0);
     assert.deepEqual(createInitialBuilderState(), {
         allLists: [],
@@ -113,7 +113,7 @@ test("sync recovery statuses persist until a fresh source is loaded", async func
 // data, or result actions losing the dialog's accessible state.
 test("migration reducer reuses one atomic request through failure and retry", async function() {
     const {builderReducer, createInitialBuilderState} = await loadReducer();
-    const snapshot = {encodedLists: "6*local*"};
+    const snapshot = {encodedLists: "7*local*"};
     const request = {idempotencyKey: "one-batch-key", profiles: [{name: "Hero"}]};
     let state = builderReducer(createInitialBuilderState(), {
         type: "migration/offered",
@@ -163,7 +163,7 @@ test("migration dismissal preserves both profile sources", async function() {
         name: "Account Hero", variants: [createDefaultVariant("Original")],
         account: {id: "account-id", revision: 1}
     };
-    const snapshot = {encodedLists: "6*local*"};
+    const snapshot = {encodedLists: "7*local*"};
     let state = builderReducer(createInitialBuilderState(), {
         type: "source/loaded", mode: "account", profiles: [accountProfile],
         accountState: {storageGeneration: 1}, anonymousSnapshot: snapshot

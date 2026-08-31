@@ -6,29 +6,29 @@ const {expect, test} = require("@playwright/test");
 const fulfillLocalBrowserScript = require("./support/local-browser-scripts");
 const publicPageData = require("./support/public-page-data");
 
-const encodedLists = "6*Hero~Tank~1c0K0K0K0J0J1-10000___00H00N00T00000100.00s00o00o-BHKAA_00t00u00v00w_______00p00q01b________________*Hero~Caster~0U0m0U0U0U0U000000___0000000000000000000f__00g_______________________________*Scout~Original~0X0X0X0X0X0X000000___0000000000000000000f__________________________________*";
-const currentHeroExport = "6*Hero~Tank~1c0K0K0K0J0J1-10000___00H00N00T00000100.00s00o00o-BHKAA_00t00u00v00w_______00p00q01b________________*Hero~Caster~0U0m0U0U0U0U000000___0000000000000000000f__00g_______________________________*";
-const currentTankExport = "6*Hero~Tank~1c0K0K0K0J0J1-10000___00H00N00T00000100.00s00o00o-BHKAA_00t00u00v00w_______00p00q01b________________*";
-const guestImport = "6*Guest~Imported~0X0X0X0X0X0X000000___0000000000000000000f__-BHKAA_______________________________*";
-const duplicateTankImport = "6*Hero~Tank~0X0X0X0X0X0X000000___0000000000000000000f__________________________________*";
-const newHeroVariantImport = "6*Hero~Newcomer~0i0X0X0X0X0X000000___0000000000000000000g__________________________________*";
+const encodedLists = "7*Hero~Tank~1c0K0K0K0J0J1-10000___00H00N00T00000100.00s00o00o-BHKAA_00t00u00v00w________00p00q01b_________________*Hero~Caster~0U0m0U0U0U0U000000___0000000000000000000f__00g_________________________________*Scout~Original~0X0X0X0X0X0X000000___0000000000000000000f____________________________________*";
+const currentHeroExport = "7*Hero~Tank~1c0K0K0K0J0J1-10000___00H00N00T00000100.00s00o00o-BHKAA_00t00u00v00w________00p00q01b_________________*Hero~Caster~0U0m0U0U0U0U000000___0000000000000000000f__00g_________________________________*";
+const currentTankExport = "7*Hero~Tank~1c0K0K0K0J0J1-10000___00H00N00T00000100.00s00o00o-BHKAA_00t00u00v00w________00p00q01b_________________*";
+const guestImport = "7*Guest~Imported~0X0X0X0X0X0X000000___0000000000000000000f__-BHKAA_________________________________*";
+const duplicateTankImport = "7*Hero~Tank~0X0X0X0X0X0X000000___0000000000000000000f____________________________________*";
+const newHeroVariantImport = "7*Hero~Newcomer~0i0X0X0X0X0X000000___0000000000000000000g____________________________________*";
 const accountProfilePayload = guestImport;
 const accountProfile = {
     id: "account-profile-id",
     name: "Guest",
     payload: accountProfilePayload,
-    payloadVersion: 6,
+    payloadVersion: 7,
     revision: 4,
     updatedOn: "2026-08-26T12:00:00.000Z"
 };
-const scoutProfilePayload = "6*Scout~Original~0X0X0X0X0X0X000000___0000000000000000000f__________________________________*";
+const scoutProfilePayload = "7*Scout~Original~0X0X0X0X0X0X000000___0000000000000000000f____________________________________*";
 const importedAccountProfiles = [
     accountProfile,
     {
         id: "imported-hero-id",
         name: "Hero",
         payload: currentHeroExport,
-        payloadVersion: 6,
+        payloadVersion: 7,
         revision: 1,
         updatedOn: "2026-08-26T12:05:00.000Z"
     },
@@ -36,7 +36,7 @@ const importedAccountProfiles = [
         id: "imported-scout-id",
         name: "Scout",
         payload: scoutProfilePayload,
-        payloadVersion: 6,
+        payloadVersion: 7,
         revision: 1,
         updatedOn: "2026-08-26T12:05:00.000Z"
     }
@@ -528,7 +528,7 @@ test("Builder applies and saves canonical account preferences independently", as
         id: "scout-profile-id",
         name: "Scout",
         payload: scoutProfilePayload,
-        payloadVersion: 6,
+        payloadVersion: 7,
         revision: 2,
         updatedOn: "2026-08-28T12:00:00.000Z"
     };
@@ -911,7 +911,7 @@ test("Builder creates an empty-account profile once and updates it thereafter", 
                     id: "created-profile-id",
                     name: request.variables.name,
                     payload: request.variables.payload,
-                    payloadVersion: 6,
+                    payloadVersion: 7,
                     revision,
                     updatedOn: "2026-08-28T12:00:00.000Z"
                 },
@@ -1135,7 +1135,7 @@ test("local Builder data scales from a count into a bounded profile list", async
         (_, index) => `Profile ${String(index + 1).padStart(3, "0")}`
     );
     const tankRow = currentTankExport.split("*")[1];
-    const largeEncodedLists = `6*${profileNames.map(name =>
+    const largeEncodedLists = `7*${profileNames.map(name =>
         tankRow.replace(/^Hero~/, `${name}~`)).join("*")}*`;
     await context.addCookies([
         {name: "loginToken", value: "large-migration-account", url: baseUrl},
@@ -1228,7 +1228,7 @@ test("local Builder data migration is explicit, retry-safe, private, and reports
             markFirstImportStarted();
             await firstImportGate;
             return route.fulfill({contentType: "application/json", body: JSON.stringify({
-                errors: [{message: "database rejected 6*private-builder-payload"}]
+                errors: [{message: "database rejected 7*private-builder-payload"}]
             })});
         }
         return route.fulfill({
@@ -1241,7 +1241,7 @@ test("local Builder data migration is explicit, retry-safe, private, and reports
                         deduplicated: ["Same"],
                         rejected: [{
                             name: null,
-                            reason: "decoder rejected 6*private-builder-payload"
+                            reason: "decoder rejected 7*private-builder-payload"
                         }],
                         preferencesImported: true
                     }),
@@ -1611,15 +1611,15 @@ test("Builder preserves persisted characters, variants, totals, panels, and expo
     await page.locator("#strInput").fill("44");
     await page.locator("#strInput").blur();
     await expect.poll(() => page.evaluate(() => localStorage.getItem("scl"))).toBe("Hero!Caster");
-    await expect.poll(() => page.evaluate(() => localStorage.getItem("cln")?.startsWith("6*"))).toBe(true);
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("cln")?.startsWith("7*"))).toBe(true);
 
     await page.getByRole("button", {name: "Export", exact: true}).click();
     await expect(page.getByRole("dialog", {name: "Export Lists"})).toBeVisible();
-    await expect(page.locator("#allListsExport")).toHaveValue(/^6\*/);
+    await expect(page.locator("#allListsExport")).toHaveValue(/^7\*/);
     await expect(page.getByRole("button", {name: /^Copy /})).toHaveCount(3);
     await page.getByRole("button", {name: "Copy All Lists", exact: true}).click();
     await expect(page.getByRole("status")).toHaveText("All Lists copied.");
-    await expect(page.evaluate(() => navigator.clipboard.readText())).resolves.toMatch(/^6\*Hero~Tank~/);
+    await expect(page.evaluate(() => navigator.clipboard.readText())).resolves.toMatch(/^7\*Hero~Tank~/);
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.getByRole("button", {name: "Export", exact: true})).toBeFocused();
@@ -2129,7 +2129,7 @@ test("Builder leaves saved character bytes untouched when initial metadata fails
 // Catches malformed or future-version saved data being treated as a blank,
 // successfully hydrated Builder and persisted over the original bytes.
 test("Builder leaves malformed and unsupported saved character bytes untouched", async function({page}) {
-    for (const savedLists of ["6*malformed", "7*Future~Original~opaque*"]) {
+    for (const savedLists of ["7*malformed", "8*Future~Original~opaque*"]) {
         await page.goto(`${baseUrl}/cookies.html`);
         await page.evaluate(function(value) {
             localStorage.setItem("cln", value);

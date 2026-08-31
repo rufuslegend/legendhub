@@ -13,7 +13,7 @@ const fulfillReferenceBrowserScript = require("./reference-browser-scripts");
 const {SCENARIOS} = require("./scenarios");
 const {captureStructuralTargets, compareStructuralSnapshots} = require("./structure");
 
-const BUILDER_LISTS = "6*Hero~Tank~1c0K0K0K0J0J1-10000___00H00N00T00000100.00s00o00o-BHKAA_00t00u00v00w_______00p00q01b________________*Hero~Caster~0U0m0U0U0U0U000000___0000000000000000000f__00g_______________________________*Scout~Original~0X0X0X0X0X0X000000___0000000000000000000f__________________________________*";
+const BUILDER_LISTS = "7*Hero~Tank~1c0K0K0K0J0J1-10000___00H00N00T00000100.00s00o00o-BHKAA_00t00u00v00w________00p00q01b_________________*Hero~Caster~0U0m0U0U0U0U000000___0000000000000000000f__00g_________________________________*Scout~Original~0X0X0X0X0X0X000000___0000000000000000000f____________________________________*";
 const CAPTCHA_HOSTS = new Set([
     "www.google.com",
     "www.gstatic.com",

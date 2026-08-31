@@ -1,4 +1,4 @@
-export const BUILDER_LIST_VERSION = 6;
+export const BUILDER_LIST_VERSION = 7;
 export const RUNE_CHARM_ID = -5;
 export const ITEMS_PER_PAGE_OPTIONS = [20, 50, 100, 200, 500, 1000];
 export const ERA_ABILITY_ERAS = ["Ancient", "Medieval", "Industrial"];
@@ -6,8 +6,8 @@ export const ATTRIBUTE_NAMES = [
     "strength", "mind", "dexterity", "constitution", "perception", "spirit"
 ];
 export const SLOT_ORDER = [
-    0, 1, 1, 2, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 13, 14, 15,
-    15, 16, 16, 17, 18, 19, 20, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21
+    0, 1, 1, 2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 13, 14,
+    15, 15, 15, 16, 16, 17, 18, 19, 20, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21
 ];
 export const SLOT_LABELS = ["Light", "Finger", "Neck", "Body", "Head", "Face", "Legs", "Feet", "Hands", "Arms", "Shield", "About", "Waist", "Wrist", "Wield", "Hold", "Ear", "Arm", "Amulet", "Aux", "Familiar", "Other"];
 export const SELECT_SHORT_OPTIONS = {
@@ -38,7 +38,7 @@ export const EMPTY_RUNE_CHARMS = {
     charm1: "AAAAA", charm2: "AAAAA", charm3: "AAAAA", charm4: "AAAAA"
 };
 export const RUNE_CHARM_ITEM_INDEX = {
-    3: "charm1", 4: "charm2", 14: "charm3", 15: "charm4"
+    3: "charm1", 4: "charm2", 15: "charm3", 16: "charm4"
 };
 export const CHARM_OPTIONS = {
     B: {id: "B", label: "1 str", name: "Uruz", stats: [{statVar: "strength", value: 1}, {statVar: "rent", value: 203}]},

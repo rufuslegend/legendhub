@@ -14,9 +14,9 @@ const defaultPreferences = {
     selectedProfileId: null,
     selectedVariant: null
 };
-const anonymousPayload = "6*Local Hero~Original~0X0X0X0X0X0X000000___0000000000000000000f__________________________________*";
-const heroMigrationPayload = "6*Hero~Tank~1c0K0K0K0J0J1-10000___00H00N00T00000100.00s00o00o-BHKAA_00t00u00v00w_______00p00q01b________________*Hero~Caster~0U0m0U0U0U0U000000___0000000000000000000f__00g_______________________________*";
-const scoutMigrationPayload = "6*Scout~Original~0X0X0X0X0X0X000000___0000000000000000000f__________________________________*";
+const anonymousPayload = "7*Local Hero~Original~0X0X0X0X0X0X000000___0000000000000000000f____________________________________*";
+const heroMigrationPayload = "7*Hero~Tank~1c0K0K0K0J0J1-10000___00H00N00T00000100.00s00o00o-BHKAA_00t00u00v00w________00p00q01b_________________*Hero~Caster~0U0m0U0U0U0U000000___0000000000000000000f__00g_________________________________*";
+const scoutMigrationPayload = "7*Scout~Original~0X0X0X0X0X0X000000___0000000000000000000f____________________________________*";
 const guestMigrationEntry = "Guest~Imported~0X0X0X0X0X0X000000___0000000000000000000f__-BHKAA_______________________________*";
 const rejectedMigrationEntry = "Rejected~Original~0i0X0X0X0X0X000000___0000000000000000000g__________________________________*";
 const migrationPayload = `${heroMigrationPayload}${scoutMigrationPayload.slice(2)}${guestMigrationEntry}${rejectedMigrationEntry}`;
@@ -104,7 +104,7 @@ function savedProfile(variables, previous = null) {
         id: previous?.id || `profile-${backend.nextId++}`,
         name: variables.name,
         payload: variables.payload,
-        payloadVersion: 6,
+        payloadVersion: 7,
         revision: (previous?.revision || 0) + 1,
         updatedOn: now()
     };
@@ -124,7 +124,7 @@ function handleAccountRequest(request) {
         return {data: {getBuilderAccountState: accountState()}};
     if (request.query.includes("ExportBuilderData")) {
         backend.mutationLog.push({operation: "export", variables: clone(variables)});
-        return {data: {exportBuilderData: backend.profiles[0]?.payload || "6*"}};
+        return {data: {exportBuilderData: backend.profiles[0]?.payload || "7*"}};
     }
     if (request.query.includes("DeleteAllBuilderData")) {
         if (variables.storageGeneration !== backend.storageGeneration)
@@ -541,7 +541,7 @@ test("account Builder sync logout reveals only that device's anonymous data", as
         id: "account-hero",
         name: "Account Hero",
         payload: anonymousPayload.replace("Local Hero~", "Account Hero~"),
-        payloadVersion: 6,
+        payloadVersion: 7,
         revision: 1,
         updatedOn: now()
     }];
@@ -583,7 +583,7 @@ test("account Builder sync explicitly migrates and reports every server outcome"
             id: "existing-hero",
             name: "Hero",
             payload: heroMigrationPayload.replace("1c0K", "0X0X"),
-            payloadVersion: 6,
+            payloadVersion: 7,
             revision: 3,
             updatedOn: now()
         },
@@ -591,7 +591,7 @@ test("account Builder sync explicitly migrates and reports every server outcome"
             id: "existing-scout",
             name: "Scout",
             payload: scoutMigrationPayload,
-            payloadVersion: 6,
+            payloadVersion: 7,
             revision: 2,
             updatedOn: now()
         }
@@ -664,7 +664,7 @@ test("account Builder sync retries a transient network failure and commits", asy
         id: "retry-hero",
         name: "Retry Hero",
         payload: anonymousPayload.replace("Local Hero~", "Retry Hero~"),
-        payloadVersion: 6,
+        payloadVersion: 7,
         revision: 1,
         updatedOn: now()
     }];
@@ -692,7 +692,7 @@ test("account Builder sync stops a stale tab after account data is deleted", asy
         id: "stale-hero",
         name: "Stale Hero",
         payload: anonymousPayload.replace("Local Hero~", "Stale Hero~"),
-        payloadVersion: 6,
+        payloadVersion: 7,
         revision: 1,
         updatedOn: now()
     }];
@@ -729,7 +729,7 @@ test("account Builder sync selection rename and deletion never rewrite anonymous
             id: "isolation-hero",
             name: "Hero",
             payload: heroMigrationPayload,
-            payloadVersion: 6,
+            payloadVersion: 7,
             revision: 1,
             updatedOn: now()
         },
@@ -737,7 +737,7 @@ test("account Builder sync selection rename and deletion never rewrite anonymous
             id: "isolation-scout",
             name: "Scout",
             payload: scoutMigrationPayload,
-            payloadVersion: 6,
+            payloadVersion: 7,
             revision: 1,
             updatedOn: now()
         }
@@ -808,7 +808,7 @@ test("account Builder sync preferences follow the account but device cookies do 
         id: "preference-hero",
         name: "Hero",
         payload: heroMigrationPayload,
-        payloadVersion: 6,
+        payloadVersion: 7,
         revision: 1,
         updatedOn: now()
     }];
@@ -900,7 +900,7 @@ test("account Builder sync export and delete-all stop an open work tab", async f
         id: "delete-all-hero",
         name: "Delete All Hero",
         payload: anonymousPayload.replace("Local Hero~", "Delete All Hero~"),
-        payloadVersion: 6,
+        payloadVersion: 7,
         revision: 1,
         updatedOn: now()
     }];

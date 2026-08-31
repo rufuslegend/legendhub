@@ -11,12 +11,12 @@ const ATTRIBUTE_NAMES = [
     "strength", "mind", "dexterity", "constitution", "perception", "spirit"
 ];
 const SLOT_ORDER = [
-    0, 1, 1, 2, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 13, 14, 15,
-    15, 16, 16, 17, 18, 19, 20, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21
+    0, 1, 1, 2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 13, 14,
+    15, 15, 15, 16, 16, 17, 18, 19, 20, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21
 ];
 const RUNE_CHARM_ID = -5;
 const RUNE_CHARM_ITEM_INDEX = new Map([
-    [3, "charm1"], [4, "charm2"], [14, "charm3"], [15, "charm4"]
+    [3, "charm1"], [4, "charm2"], [15, "charm3"], [16, "charm4"]
 ]);
 const MAX_BASE_STAT = (62 ** 2) - 1;
 const MAX_KSM_STAT = 61;

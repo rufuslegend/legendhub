@@ -131,7 +131,7 @@ test("Builder delete ambiguity retains the snapshot and requires a reload check"
     state = accountReducer(state, {type: "storage/delete-requested"});
     state = accountReducer(state, {
         type: "storage/delete-failed",
-        error: "private database diagnostic 6*secret-payload*"
+        error: "private database diagnostic 7*secret-payload*"
     });
 
     assert.deepEqual({
@@ -230,7 +230,7 @@ test("Builder export failure remains isolated from destructive state", async fun
     assert.equal(state.builderStorage.exportStatus, "exporting");
     state = accountReducer(state, {
         type: "storage/export-failed",
-        error: "private export payload 6*secret*"
+        error: "private export payload 7*secret*"
     });
 
     assert.equal(state.builderStorage.exportError, "export-failed");

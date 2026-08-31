@@ -442,9 +442,9 @@ test("Builder API accepts a canonical quota-sized profile while larger API and o
         }
     }`;
 
-    const compactFields = "0U0U0U0U0U0U000000___00000000000000000" + "_".repeat(35);
+    const compactFields = "0U0U0U0U0U0U000000___00000000000000000" + "_".repeat(37);
     function canonicalProfileWithBytes(byteLength) {
-        const prefix = "6*Hero~";
+        const prefix = "7*Hero~";
         const suffix = `~${compactFields}*`;
         const variantBytes = byteLength - Buffer.byteLength(prefix + suffix, "utf8");
         assert.ok(variantBytes > 0);
@@ -481,7 +481,7 @@ test("Builder API accepts a canonical quota-sized profile while larger API and o
 
     const privateMarker = "PrivateOversizedBuilderPayload";
     const oversizedPayload = canonicalProfileWithBytes(12 * 1024 * 1024)
-        .replace("6*Hero~", `6*Hero~${privateMarker}`);
+        .replace("7*Hero~", `7*Hero~${privateMarker}`);
     const oversizedEnvelope = JSON.stringify({
         query,
         variables: {
