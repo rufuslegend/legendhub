@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "event_type": "equipment.observed",
+  "submission": {
+    "id": "fixture-357bbd00-4660-4fe7-92e5-abdce7547981",
+    "submitted_at": "2026-08-31T22:23:03Z",
+    "submitted_by": {
+      "character": "FixtureHero",
+      "account_id": "fixture-account-id"
+    }
+  },
+  "source": {
+    "server": "testmud"
+  },
+  "item": {
+    "vnum": 11852,
+    "name": "Cuchullain's shield",
+    "slots": ["arm"],
+    "alignment": "non-evil",
+    "flags": {
+      "unique_wear": false,
+      "limited": false,
+      "heroic": false,
+      "soulbound": false,
+      "bonded": false,
+      "light": false,
+      "holdable": false,
+      "two_handed": false
+    },
+    "requirements": {"level": 0},
+    "attributes": {
+      "strength": 5,
+      "mind": 0,
+      "dexterity": 0,
+      "constitution": 5,
+      "perception": -3,
+      "spirit": -2
+    },
+    "attribute_caps": {
+      "strength": 0,
+      "mind": 0,
+      "dexterity": 0,
+      "constitution": 0,
+      "perception": 0,
+      "spirit": 0
+    },
+    "resources": {
+      "hp": 0,
+      "mana": 0,
+      "movement": 0,
+      "hp_regen": 0,
+      "mana_regen": 0,
+      "movement_regen": 0
+    },
+    "combat": {
+      "armor_class": -17,
+      "hitroll": 0,
+      "damroll": 0,
+      "spell_damage": 0,
+      "spell_critical": 0,
+      "mana_reduction": 0,
+      "concentration": 0,
+      "mitigation": 0,
+      "parry": 0,
+      "damage_shield": 0,
+      "melee_critical_percent": 0,
+      "melee_critical": 0,
+      "melee_damage_cap": 0
+    },
+    "weapon": {
+      "type": null,
+      "governing_attribute": null,
+      "accuracy": 0,
+      "ranged_accuracy": 0,
+      "ammo_limit": 0,
+      "quality": 0,
+      "speed_factor": 0,
+      "minimum_damage": 0,
+      "maximum_damage": 0,
+      "average_damage": 0
+    },
+    "economy": {
+      "rent": 2161,
+      "value": 2161,
+      "weight": 10
+    },
+    "casts": []
+  }
+}

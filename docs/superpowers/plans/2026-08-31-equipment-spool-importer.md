@@ -95,7 +95,7 @@ function parseObservation(buffer) {
 
 - [ ] **Step 5: Add rejection coverage for every contract boundary**
 
-Use table-driven tests for malformed JSON, invalid UTF-8, oversized input, unknown/missing keys, invalid IDs/timestamps/enums, more than 20 slots, illegal `familiar` producer input, non-integer stats, weight precision/range, over-limit names/casts/raw text, and invalid nulls. `familiar` remains a Hub-only slot and must not be accepted from `source.server` observations even though it remains in the Hub slot vocabulary.
+Use table-driven tests for malformed JSON, invalid UTF-8, oversized input, unknown/missing keys, invalid IDs/timestamps/enums, more than 20 slots, non-integer stats, weight precision/range, over-limit names/casts/raw text, and invalid nulls. Accept `familiar` because it remains part of the immutable version-1 vocabulary, even though the Legend producer will not emit it.
 
 - [ ] **Step 6: Run contract tests**
 
