@@ -26,6 +26,8 @@ function slotsToMask(values) {
 function maskToSlots(mask) {
     if (!Number.isSafeInteger(mask) || mask <= 0 || (mask & ~VALID_MASK) !== 0)
         throw new SlotValidationError("The stored slot mask is invalid.");
+    if ((mask & slotBit(OTHER_SLOT)) !== 0 && mask !== slotBit(OTHER_SLOT))
+        throw new SlotValidationError("Other cannot be combined with another slot.");
     return Array.from({length: SLOT_COUNT}, (_, slot) => slot)
         .filter(slot => (mask & slotBit(slot)) !== 0);
 }

@@ -33,4 +33,5 @@ test("legacy creates infer only Holdable Wield and legacy updates preserve masks
 test("slot masks reject empty, unknown, and Other-combined capabilities", function() {
     for (const slots of [[], [-1], [22], [1, 21], [1.5]])
         assert.throws(() => slotsToMask(slots), SlotValidationError);
+    assert.throws(() => maskToSlots((2 ** 21) + (2 ** 1)), SlotValidationError);
 });
