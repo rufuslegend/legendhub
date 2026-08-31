@@ -124,7 +124,8 @@ runtime substitute for the capability set.
 
 ## Builder Equipment Rows
 
-Builder adds a third Hold row and therefore presents all five hand-role rows:
+Builder adds the missing Shield row and a third Hold row and therefore presents
+all five hand-role rows:
 
 ```text
 Shield x1
@@ -172,14 +173,14 @@ the player replace or remove the offending item.
 ## Saved-Builder Compatibility
 
 The compact Builder format advances from version 6 to version 7. Version 7 has
-36 equipment positions and inserts one additional Hold position next to the
-existing Hold positions.
+37 equipment positions. It inserts one Shield position and one additional Hold
+position alongside the existing hand-role positions.
 
 Versions 1 through 6 must continue decoding against their original 35-position
-slot order. After decoding, they upgrade by inserting an empty third Hold row at
-the new position. No existing item, lock flag, rune charm, or later slot shifts
-position semantically. New encoding always writes version 7 and exactly 36
-positions.
+slot order. After decoding, they upgrade by inserting an empty Shield row and an
+empty third Hold row at the new positions. No existing item, lock flag, rune
+charm, or later slot shifts position semantically. New encoding always writes
+version 7 and exactly 37 positions.
 
 The server-side Builder payload validator, account storage path, local
 persistence, import/export, migrations, and shared client/server codec all use
@@ -244,7 +245,7 @@ including Shield, Wield, and two-handed capacity.
 - At most one Shield and one Wield can be equipped.
 - Two-handed items consume two hand units, including when used in Hold.
 - Legacy Builder versions decode without shifting equipment and upgrade with an
-  empty third Hold row.
+  empty Shield row and an empty third Hold row.
 - Existing over-capacity builds remain recoverable and visibly invalid.
 - Player-facing item views, editing, and changelog describe multiple slots.
 - No JSON spool consumer, item deduplication, image publication, push, tag, or
