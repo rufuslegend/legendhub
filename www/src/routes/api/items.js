@@ -6,6 +6,12 @@ let auth = require("./auth");
 let apiUtils = require("./utils");
 let {resolveItemFilters} = require("./item-filters");
 let {resolveItemSort} = require("./item-sort");
+let {
+    SlotValidationError,
+    maskToSlots,
+    resolveSlotWrite,
+    slotBit
+} = require("./item-slots");
 
 const syncQuery = syncRpc(__dirname + "/sync-rpcs/mysql-query.js");
 const itemColumnsResults = syncQuery("SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'legendhub' AND TABLE_NAME = 'Items'");
@@ -127,15 +133,21 @@ for (let i = 0; i < itemColumns.length; ++i) {
 
 let itemFragment = "fragment ItemAll on Item {";
 for (let i = 0; i < itemColumns.length; ++i) {
+    if (itemColumns[i].name === "SlotMask")
+        continue;
     itemFragment += itemColumns[i].name[0].toLowerCase() + itemColumns[i].name.slice(1) + " ";
 }
-itemFragment += "}";
+itemFragment += "slots }";
 
 class Item {
     constructor(sqlResult) {
         for (let i = 0; i < itemColumns.length; ++i) {
             this[itemColumns[i].name[0].toLowerCase() + itemColumns[i].name.slice(1)] = sqlResult[itemColumns[i].name];
         }
+    }
+
+    slots() {
+        return maskToSlots(this.slotMask);
     }
 
     getMob() {
@@ -374,16 +386,20 @@ let getItemsBySlotId = function(slotId) {
     if (slotId == null)
         return [];
 
+    let mask;
+    try {
+        mask = slotBit(slotId);
+    }
+    catch (error) {
+        if (error instanceof SlotValidationError)
+            throw new apiUtils.BadRequestError(`Slot: ${error.message}`);
+        throw error;
+    }
+
     return new Promise(function(resolve, reject) {
-        let sql = `${itemSelectSQL} FROM Items WHERE Slot = ? AND Deleted = 0 `;
-        if (slotId == 15) {
-            sql += "OR (Slot = 14 AND Holdable = 1) OR Slot = 10 ";
-        }
-        if (slotId == 14) {
-            sql += "OR Slot = 15 OR Slot = 10 ";
-        }
-        mysql.query(`${sql}ORDER BY Name ASC`,
-            [slotId],
+        mysql.query(`${itemSelectSQL} FROM Items ` +
+            "WHERE (SlotMask & ?) <> 0 AND Deleted = 0 ORDER BY Name ASC",
+            [mask],
             function(error, results, fields) {
                 if (error) {
                     reject(new graphql.GraphQLError(error.sqlMessage));
@@ -514,6 +530,23 @@ let insertItem = function(args) {
     let statValues = {};
     let ip = auth.utils.getIPFromRequest(args["req"]);
     return new Promise(function(resolve, reject) {
+        let slotWrite;
+        try {
+            slotWrite = resolveSlotWrite({
+                slots: args["slots"],
+                slot: args["slot"],
+                holdable: args["holdable"],
+                insert: true
+            });
+        }
+        catch (error) {
+            if (error instanceof SlotValidationError)
+                reject(new apiUtils.BadRequestError(`Slots: ${error.message}`));
+            else
+                reject(error);
+            return;
+        }
+
         auth.utils.authToken(args["authToken"], ip).then(
             function(response) {
                 let authResponse = response;
@@ -558,12 +591,15 @@ let insertItem = function(args) {
                             let keys = [];
                             let values = [];
                             for (let key in statValues) {
-                                if (key !== "netStat" && statValues.hasOwnProperty(key)) {
+                                if (key !== "netStat" && key !== "slot" &&
+                                    key !== "slotMask" && statValues.hasOwnProperty(key)) {
                                     keys.push(key[0].toUpperCase() + key.slice(1));
                                     values.push(statValues[key]);
                                 }
                             }
                             keys.push(
+                                "Slot",
+                                "SlotMask",
                                 "Notes",
                                 "MobId",
                                 "QuestId",
@@ -573,6 +609,8 @@ let insertItem = function(args) {
                                 "ModifiedByIP"
                             );
                             values.push(
+                                slotWrite.slot,
+                                slotWrite.slotMask,
                                 args["notes"],
                                 args["mobId"],
                                 args["questId"],
@@ -629,6 +667,25 @@ let updateItem = function(args) {
                                             reject(new graphql.GraphQLError(itemError));
                                         else
                                             reject(new apiUtils.NotFoundError("Could not find item."));
+                                        return;
+                                    }
+
+                                    let slotWrite;
+                                    try {
+                                        slotWrite = resolveSlotWrite({
+                                            slots: args["slots"],
+                                            slot: args["slot"],
+                                            currentSlot: itemResults[0].Slot,
+                                            currentMask: itemResults[0].SlotMask,
+                                            insert: false
+                                        });
+                                    }
+                                    catch (error) {
+                                        if (error instanceof SlotValidationError)
+                                            reject(new apiUtils.BadRequestError(`Slots: ${error.message}`));
+                                        else
+                                            reject(error);
+                                        return;
                                     }
 
                                     let netStat = 0;
@@ -650,7 +707,8 @@ let updateItem = function(args) {
                                     let placeholders = [];
                                     let placeholderValues = [];
                                     for (let key in statValues) {
-                                        if (key !== "netStat" && statValues.hasOwnProperty(key)) {
+                                        if (key !== "netStat" && key !== "slot" &&
+                                            key !== "slotMask" && statValues.hasOwnProperty(key)) {
                                             placeholders.push("?? = ?");
                                             placeholderValues.push(key[0].toUpperCase() + key.slice(1));
                                             placeholderValues.push(statValues[key]);
@@ -665,9 +723,15 @@ let updateItem = function(args) {
                                         "?? = ?",
                                         "?? = ?",
                                         "?? = ?",
+                                        "?? = ?",
+                                        "?? = ?",
                                         "?? = ?"
                                     );
                                     placeholderValues.push(
+                                        "Slot",
+                                        slotWrite.slot,
+                                        "SlotMask",
+                                        slotWrite.slotMask,
                                         "Notes",
                                         args["notes"],
                                         "MobId",
@@ -742,7 +806,7 @@ let revertItem = function(req, authToken, historyId) {
                                 let statVar = "";
                                 let netStat = 0;
                                 for (let i = 0; i < results.length; ++i) {
-                                    if (results[i].Var === "netStat")
+                                    if (["netStat", "slot", "slotMask"].includes(results[i].Var))
                                         continue;
 
                                     sql.push("?? = ?,");
@@ -755,6 +819,10 @@ let revertItem = function(req, authToken, historyId) {
                                         netStat += historyResults[0][statVar] / results[i].NetStat;
                                 }
 
+                                sql.push("?? = ?,");
+                                placeholderValues.push("Slot", historyResults[0].Slot);
+                                sql.push("?? = ?,");
+                                placeholderValues.push("SlotMask", historyResults[0].SlotMask);
                                 sql.push("NetStat = ?,");
                                 placeholderValues.push(netStat);
                                 sql.push("ModifiedBy = ?,");
@@ -822,6 +890,9 @@ function getItemFields(withId, withDeleted, optional) {
         if (!withDeleted && itemColumns[i].name === "Deleted")
             continue;
 
+        if (itemColumns[i].name === "SlotMask")
+            continue;
+
         switch (itemColumns[i].type) {
             case "int":
                 t = graphql.GraphQLInt;
@@ -861,6 +932,12 @@ let itemType = new graphql.GraphQLObjectType({
     name: "Item",
     fields: () => {
         let f = getItemFields(true, true);
+
+        f.slots = {
+            type: new graphql.GraphQLNonNull(
+                new graphql.GraphQLList(new graphql.GraphQLNonNull(graphql.GraphQLInt))
+            )
+        };
 
         f.getMob = { type: mobSchema.types.mobType },
         f.getQuest = { type: questSchema.types.questType },
@@ -994,9 +1071,16 @@ let qFields = {
 };
 
 let insertItemArgs = getItemFields(false, false);
+insertItemArgs.slot = { type: graphql.GraphQLInt };
+insertItemArgs.slots = {
+    type: new graphql.GraphQLList(new graphql.GraphQLNonNull(graphql.GraphQLInt))
+};
 insertItemArgs.authToken = { type: new graphql.GraphQLNonNull(graphql.GraphQLString) };
 
 let updateItemArgs = getItemFields(false, false, true);
+updateItemArgs.slots = {
+    type: new graphql.GraphQLList(new graphql.GraphQLNonNull(graphql.GraphQLInt))
+};
 updateItemArgs.authToken = { type: new graphql.GraphQLNonNull(graphql.GraphQLString) };
 updateItemArgs.id = { type: new graphql.GraphQLNonNull(graphql.GraphQLInt) };
 

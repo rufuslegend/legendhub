@@ -1,5 +1,7 @@
 "use strict";
 
+const {SLOT_COUNT, slotBit} = require("./item-slots");
+
 const identifierPattern = /^[a-z][A-Za-z0-9]*$/;
 const numericClausePattern = /^(?:=|<>|!=|>=|<=|>|<) -?\d+(?:\.\d+)?$/;
 const stringClausePattern = /^(?:=|<>|!=) ''$/;
@@ -48,6 +50,13 @@ function resolveItemFilters(filterString, metadataRows) {
             const value = Number(parts[1]);
             if (!Number.isSafeInteger(value))
                 continue;
+            if (metadata.Var === "slot") {
+                if (value < 0 || value >= SLOT_COUNT)
+                    continue;
+                clause += " AND ((SlotMask & ?) <> 0)";
+                values.push(slotBit(value));
+                continue;
+            }
             values.push(value);
         }
         else if (parts.length !== 1) {

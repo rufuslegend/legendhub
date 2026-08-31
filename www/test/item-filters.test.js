@@ -17,9 +17,9 @@ test("item filters preserve deployed metadata clauses and parameterize select va
     assert.deepEqual(
         resolveItemFilters("isLight,slot_3,name,strength,weight", deployedFilterMetadata),
         {
-            clause: " AND (IsLight = 1) AND (Slot = ?) AND (Name <> '')" +
+            clause: " AND (IsLight = 1) AND ((SlotMask & ?) <> 0) AND (Name <> '')" +
                 " AND (Strength <> 0) AND (Weight > 0)",
-            values: [3]
+            values: [8]
         }
     );
 });
@@ -32,7 +32,7 @@ test("item filters ignore malformed tokens and unsafe metadata without emitting 
     ]);
 
     const resolved = resolveItemFilters(
-        ",slot_3 OR 1=1,slot_1_2,isLight_extra,unknown_7," +
+        ",slot_3 OR 1=1,slot_1_2,slot_22,isLight_extra,unknown_7," +
             "bad-column;DROP,casts,weaponType_2",
         metadata
     );

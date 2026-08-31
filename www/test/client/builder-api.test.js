@@ -16,6 +16,7 @@ function loadItemApi(mysql) {
                 {COLUMN_NAME: "Id", DATA_TYPE: "int", IS_NULLABLE: "NO"},
                 {COLUMN_NAME: "Name", DATA_TYPE: "varchar", IS_NULLABLE: "NO"},
                 {COLUMN_NAME: "Slot", DATA_TYPE: "int", IS_NULLABLE: "NO"},
+                {COLUMN_NAME: "SlotMask", DATA_TYPE: "int", IS_NULLABLE: "NO"},
                 {COLUMN_NAME: "Strength", DATA_TYPE: "int", IS_NULLABLE: "YES"},
                 {COLUMN_NAME: "AlignmentRestriction", DATA_TYPE: "varchar", IS_NULLABLE: "YES"},
                 {COLUMN_NAME: "StrengthCap", DATA_TYPE: "int", IS_NULLABLE: "YES"},
@@ -99,4 +100,46 @@ test("production item hydration resolves an empty list when every id is missing"
     const result = await itemApi.queryFields.getItemsInIds.resolve(null, {ids: [404, 405]});
 
     assert.deepEqual(result, []);
+});
+
+// Catches Builder retrieval falling back to scalar Slot/Holdable inference
+// instead of querying the authoritative capability mask.
+test("Builder item retrieval uses one validated slot-mask membership predicate", async function() {
+    const statements = [];
+    const itemApi = loadItemApi({
+        query(sql, values, callback) {
+            statements.push({sql, values});
+            callback(null, []);
+        }
+    });
+
+    assert.deepEqual(
+        await itemApi.queryFields.getItemsBySlotId.resolve(null, {slotId: 14}),
+        []
+    );
+    assert.equal(statements.length, 1);
+    assert.match(
+        statements[0].sql,
+        /FROM Items WHERE \(SlotMask & \?\) <> 0 AND Deleted = 0 ORDER BY Name ASC$/
+    );
+    assert.doesNotMatch(statements[0].sql, /Holdable|\bOR\b|WHERE Slot =/);
+    assert.deepEqual(statements[0].values, [16384]);
+});
+
+// Catches malformed or unsupported Builder slot identifiers reaching MySQL.
+test("Builder item retrieval rejects slot IDs outside the supported range", async function() {
+    let queryCount = 0;
+    const itemApi = loadItemApi({
+        query() { queryCount += 1; }
+    });
+
+    for (const slotId of [-1, 22, 1.5]) {
+        await assert.rejects(
+            Promise.resolve().then(() =>
+                itemApi.queryFields.getItemsBySlotId.resolve(null, {slotId})
+            ),
+            error => error.extensions?.code === 400
+        );
+    }
+    assert.equal(queryCount, 0);
 });
