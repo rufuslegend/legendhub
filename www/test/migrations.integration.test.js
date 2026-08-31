@@ -175,6 +175,8 @@ test("slot mask migration backfills legacy items and resumes after its additive 
             pool,
             `
                 DROP TRIGGER IF EXISTS Items_BEFORE_UPDATE;
+                DROP TABLE IF EXISTS NotificationQueue;
+                DROP TABLE IF EXISTS Members;
                 DROP TABLE IF EXISTS Items_AuditTrail;
                 DROP TABLE IF EXISTS Items;
                 DROP TABLE IF EXISTS MigrationRuns;
@@ -184,6 +186,7 @@ test("slot mask migration backfills legacy items and resumes after its additive 
                     Name VARCHAR(255) NOT NULL,
                     Slot INT NOT NULL,
                     Holdable TINYINT NOT NULL,
+                    ModifiedBy VARCHAR(64) NOT NULL,
                     PRIMARY KEY (Id)
                 ) ENGINE=InnoDB;
                 CREATE TABLE Items_AuditTrail (
@@ -192,6 +195,7 @@ test("slot mask migration backfills legacy items and resumes after its additive 
                     Name VARCHAR(255) NOT NULL,
                     Slot INT NOT NULL,
                     Holdable TINYINT NOT NULL,
+                    ModifiedBy VARCHAR(64) NOT NULL,
                     PRIMARY KEY (Id)
                 ) ENGINE=InnoDB;
                 CREATE TABLE Migrations (
@@ -209,36 +213,58 @@ test("slot mask migration backfills legacy items and resumes after its additive 
             `
         );
         await query(pool, `
-            INSERT INTO Items (Id, Name, Slot, Holdable)
+            INSERT INTO Items (Id, Name, Slot, Holdable, ModifiedBy)
             VALUES
-                (101, 'Holdable sword', 14, 1),
-                (102, 'Shield', 10, 1),
-                (103, 'Held focus', 15, 0)
+                (101, 'Holdable sword', 14, 1, 'ItemEditor'),
+                (102, 'Shield', 10, 1, 'ItemEditor'),
+                (103, 'Held focus', 15, 0, 'ItemEditor')
         `);
         await query(pool, `
-            INSERT INTO Items_AuditTrail (ItemId, Name, Slot, Holdable)
-            VALUES (102, 'Shield', 10, 1)
+            INSERT INTO Items_AuditTrail (ItemId, Name, Slot, Holdable, ModifiedBy)
+            VALUES (102, 'Shield', 10, 1, 'ItemEditor')
         `);
 
         await assert.rejects(migrations.up(), /Migration 10 .* failed/);
-        assert.deepEqual(
-            await query(pool, `
-                SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE
+        const slotMaskColumns = await query(pool, `
+                SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, COLUMN_TYPE, IS_NULLABLE
                 FROM information_schema.columns
                 WHERE TABLE_SCHEMA = DATABASE()
                     AND TABLE_NAME IN ('Items', 'Items_AuditTrail')
                     AND COLUMN_NAME = 'SlotMask'
                 ORDER BY TABLE_NAME
-            `),
+            `);
+        assert.deepEqual(
+            slotMaskColumns.map(({TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE}) => ({
+                TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE
+            })),
             [
-                {TABLE_NAME: "Items", COLUMN_NAME: "SlotMask", COLUMN_TYPE: "int unsigned", IS_NULLABLE: "NO"},
-                {TABLE_NAME: "Items_AuditTrail", COLUMN_NAME: "SlotMask", COLUMN_TYPE: "int unsigned", IS_NULLABLE: "NO"}
+                {TABLE_NAME: "Items", COLUMN_NAME: "SlotMask", DATA_TYPE: "int", IS_NULLABLE: "NO"},
+                {TABLE_NAME: "Items_AuditTrail", COLUMN_NAME: "SlotMask", DATA_TYPE: "int", IS_NULLABLE: "NO"}
             ]
         );
+        for (const column of slotMaskColumns)
+            assert.match(column.COLUMN_TYPE, /^int(?:\(\d+\))? unsigned$/);
 
         await query(pool, `
             ALTER TABLE Items ADD COLUMN Deleted TINYINT NOT NULL DEFAULT 0;
             ALTER TABLE Items_AuditTrail ADD COLUMN Deleted TINYINT NOT NULL DEFAULT 0;
+            CREATE TABLE Members (
+                Id INT NOT NULL,
+                Username VARCHAR(64) NOT NULL,
+                PRIMARY KEY (Id)
+            ) ENGINE=InnoDB;
+            CREATE TABLE NotificationQueue (
+                Id INT NOT NULL AUTO_INCREMENT,
+                ActorId INT NOT NULL,
+                ObjectId INT NOT NULL,
+                ObjectType VARCHAR(32) NOT NULL,
+                ObjectPage VARCHAR(32) NOT NULL,
+                ObjectName VARCHAR(255) NOT NULL,
+                Verb VARCHAR(32) NOT NULL,
+                CreatedOn DATETIME NOT NULL,
+                PRIMARY KEY (Id)
+            ) ENGINE=InnoDB;
+            INSERT INTO Members (Id, Username) VALUES (17, 'ItemEditor');
         `);
         await migrations.up();
 
@@ -263,6 +289,20 @@ test("slot mask migration backfills legacy items and resumes after its additive 
         assert.deepEqual(
             await query(pool, "SELECT ItemId, SlotMask FROM Items_AuditTrail WHERE ItemId = 101"),
             [{ItemId: 101, SlotMask: 49152}]
+        );
+        assert.deepEqual(
+            await query(pool, `
+                SELECT ActorId, ObjectId, ObjectType, ObjectPage, ObjectName, Verb
+                FROM NotificationQueue
+            `),
+            [{
+                ActorId: 17,
+                ObjectId: 101,
+                ObjectType: "item",
+                ObjectPage: "items",
+                ObjectName: "Holdable sword",
+                Verb: "updated"
+            }]
         );
     }
     finally {

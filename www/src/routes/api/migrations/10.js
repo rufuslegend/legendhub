@@ -3,6 +3,12 @@
 const SLOT_MASK_TYPE = "int unsigned";
 const VALID_SLOT_MASK = (2 ** 22) - 1;
 const OTHER_SLOT_MASK = 2 ** 21;
+const NOTIFICATION_STATEMENT_MARKERS = [
+    "INSERT INTO NotificationQueue",
+    "SELECT M.Id, OLD.Id, 'item', 'items', OLD.Name, 'updated', NOW()",
+    "FROM Members M",
+    "WHERE Username = NEW.ModifiedBy"
+];
 
 exports.mode = "non-transactional";
 
@@ -34,7 +40,7 @@ exports.up = async function({query}) {
         await makeSlotMaskRequired(query, "Items_AuditTrail");
 
     const trigger = await readAuditTrigger(query);
-    if (!trigger || !trigger.ACTION_STATEMENT.includes("OLD.`SlotMask`"))
+    if (!triggerHasExpectedBehavior(trigger))
         await replaceAuditTrigger(query);
 };
 
@@ -49,7 +55,7 @@ exports.verify = async function({query}) {
     }
 
     const trigger = await readAuditTrigger(query);
-    return Boolean(trigger && trigger.ACTION_STATEMENT.includes("OLD.`SlotMask`"));
+    return triggerHasExpectedBehavior(trigger);
 };
 
 function readSlotMaskColumn(query, tableName) {
@@ -66,7 +72,16 @@ function readSlotMaskColumn(query, tableName) {
 }
 
 function columnIsRequiredSlotMask(column) {
-    return Boolean(column) && column.COLUMN_TYPE === SLOT_MASK_TYPE && column.IS_NULLABLE === "NO";
+    return Boolean(column) &&
+        normalizeIntegerDisplayWidth(column.COLUMN_TYPE) === SLOT_MASK_TYPE &&
+        column.IS_NULLABLE === "NO";
+}
+
+function normalizeIntegerDisplayWidth(type) {
+    return type.replace(
+        /^(tinyint|smallint|mediumint|int|bigint)\(\d+\)( unsigned)?$/,
+        "$1$2"
+    );
 }
 
 function backfillSlotMasks(query, tableName) {
@@ -125,6 +140,12 @@ function readAuditTrigger(query) {
     ).then((triggers) => triggers[0]);
 }
 
+function triggerHasExpectedBehavior(trigger) {
+    return Boolean(trigger) &&
+        trigger.ACTION_STATEMENT.includes("OLD.`SlotMask`") &&
+        NOTIFICATION_STATEMENT_MARKERS.every((marker) => trigger.ACTION_STATEMENT.includes(marker));
+}
+
 async function replaceAuditTrigger(query) {
     const itemColumns = await readColumns(query, "Items");
     const auditColumns = await readColumns(query, "Items_AuditTrail");
@@ -140,6 +161,11 @@ async function replaceAuditTrigger(query) {
         BEGIN
             IF (@DISABLE_NOTIFICATIONS IS NULL AND NEW.Deleted = OLD.Deleted) THEN
                 INSERT INTO Items_AuditTrail (${insertNames}) VALUES (${oldValues});
+
+                INSERT INTO NotificationQueue (ActorId, ObjectId, ObjectType, ObjectPage, ObjectName, Verb, CreatedOn)
+                SELECT M.Id, OLD.Id, 'item', 'items', OLD.Name, 'updated', NOW()
+                FROM Members M
+                    WHERE Username = NEW.ModifiedBy;
             END IF;
         END`;
 
