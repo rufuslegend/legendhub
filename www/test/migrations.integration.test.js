@@ -186,6 +186,7 @@ test("slot mask migration backfills legacy items and resumes after its additive 
                     Name VARCHAR(255) NOT NULL,
                     Slot INT NOT NULL,
                     Holdable TINYINT NOT NULL,
+                    Casts VARCHAR(50) NULL,
                     ModifiedBy VARCHAR(64) NOT NULL,
                     PRIMARY KEY (Id)
                 ) ENGINE=InnoDB;
@@ -195,6 +196,7 @@ test("slot mask migration backfills legacy items and resumes after its additive 
                     Name VARCHAR(255) NOT NULL,
                     Slot INT NOT NULL,
                     Holdable TINYINT NOT NULL,
+                    Casts VARCHAR(50) NULL,
                     ModifiedBy VARCHAR(64) NOT NULL,
                     PRIMARY KEY (Id)
                 ) ENGINE=InnoDB;
@@ -264,9 +266,61 @@ test("slot mask migration backfills legacy items and resumes after its additive 
                 CreatedOn DATETIME NOT NULL,
                 PRIMARY KEY (Id)
             ) ENGINE=InnoDB;
+            CREATE TABLE ItemStatInfo (
+                Id INT NOT NULL AUTO_INCREMENT,
+                Display VARCHAR(25) NOT NULL,
+                Short VARCHAR(10) NOT NULL,
+                Var VARCHAR(35) NOT NULL,
+                Type VARCHAR(15) NOT NULL,
+                FilterString VARCHAR(10) NOT NULL,
+                DefaultValue VARCHAR(10) NULL,
+                NetStat DECIMAL(5,2) NULL,
+                ShowColumnDefault TINYINT NOT NULL,
+                Editable TINYINT NOT NULL,
+                CategoryId INT NOT NULL,
+                SortNumber INT NOT NULL,
+                PRIMARY KEY (Id)
+            ) ENGINE=InnoDB;
             INSERT INTO Members (Id, Username) VALUES (17, 'ItemEditor');
         `);
         await migrations.up();
+
+        assert.deepEqual(
+            await query(pool, "SELECT Id FROM Migrations ORDER BY Id"),
+            Array.from({length: 11}, (_, index) => ({Id: index + 1}))
+        );
+        assert.deepEqual(
+            await query(pool, `
+                SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE,
+                    COLUMN_DEFAULT, CHARACTER_SET_NAME, COLLATION_NAME
+                FROM information_schema.columns
+                WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME IN ('Items', 'Items_AuditTrail')
+                    AND COLUMN_NAME IN ('Name', 'Casts', 'Official')
+                ORDER BY TABLE_NAME, COLUMN_NAME
+            `),
+            [
+                {TABLE_NAME: "Items", COLUMN_NAME: "Casts", COLUMN_TYPE: "text", IS_NULLABLE: "YES", COLUMN_DEFAULT: null, CHARACTER_SET_NAME: "utf8mb4", COLLATION_NAME: "utf8mb4_unicode_ci"},
+                {TABLE_NAME: "Items", COLUMN_NAME: "Name", COLUMN_TYPE: "varchar(255)", IS_NULLABLE: "NO", COLUMN_DEFAULT: null, CHARACTER_SET_NAME: "utf8mb4", COLLATION_NAME: "utf8mb4_unicode_ci"},
+                {TABLE_NAME: "Items", COLUMN_NAME: "Official", COLUMN_TYPE: "tinyint(4)", IS_NULLABLE: "NO", COLUMN_DEFAULT: "0", CHARACTER_SET_NAME: null, COLLATION_NAME: null},
+                {TABLE_NAME: "Items_AuditTrail", COLUMN_NAME: "Casts", COLUMN_TYPE: "text", IS_NULLABLE: "YES", COLUMN_DEFAULT: null, CHARACTER_SET_NAME: "utf8mb4", COLLATION_NAME: "utf8mb4_unicode_ci"},
+                {TABLE_NAME: "Items_AuditTrail", COLUMN_NAME: "Name", COLUMN_TYPE: "varchar(255)", IS_NULLABLE: "NO", COLUMN_DEFAULT: null, CHARACTER_SET_NAME: "utf8mb4", COLLATION_NAME: "utf8mb4_unicode_ci"},
+                {TABLE_NAME: "Items_AuditTrail", COLUMN_NAME: "Official", COLUMN_TYPE: "tinyint(4)", IS_NULLABLE: "NO", COLUMN_DEFAULT: "0", CHARACTER_SET_NAME: null, COLLATION_NAME: null}
+            ]
+        );
+        assert.deepEqual(
+            await query(pool, `
+                SELECT TABLE_NAME FROM information_schema.tables
+                WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME IN ('OfficialItemVariants', 'EquipmentSubmissions')
+                ORDER BY TABLE_NAME
+            `),
+            [{TABLE_NAME: "EquipmentSubmissions"}, {TABLE_NAME: "OfficialItemVariants"}]
+        );
+        assert.deepEqual(
+            await query(pool, "SELECT Var, Editable, FilterString FROM ItemStatInfo WHERE Var = 'official'"),
+            [{Var: "official", Editable: 0, FilterString: "= 1"}]
+        );
 
         assert.deepEqual(
             await query(pool, "SELECT Id, SlotMask FROM Items ORDER BY Id"),
@@ -287,8 +341,8 @@ test("slot mask migration backfills legacy items and resumes after its additive 
 
         await query(pool, "UPDATE Items SET Name = 'Holdable sword updated' WHERE Id = 101");
         assert.deepEqual(
-            await query(pool, "SELECT ItemId, SlotMask FROM Items_AuditTrail WHERE ItemId = 101"),
-            [{ItemId: 101, SlotMask: 49152}]
+            await query(pool, "SELECT ItemId, SlotMask, Official FROM Items_AuditTrail WHERE ItemId = 101"),
+            [{ItemId: 101, SlotMask: 49152, Official: 0}]
         );
         assert.deepEqual(
             await query(pool, `

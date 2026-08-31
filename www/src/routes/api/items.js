@@ -1071,6 +1071,7 @@ let qFields = {
 };
 
 let insertItemArgs = getItemFields(false, false);
+delete insertItemArgs.official;
 insertItemArgs.slot = { type: graphql.GraphQLInt };
 insertItemArgs.slots = {
     type: new graphql.GraphQLList(new graphql.GraphQLNonNull(graphql.GraphQLInt))
@@ -1078,6 +1079,7 @@ insertItemArgs.slots = {
 insertItemArgs.authToken = { type: new graphql.GraphQLNonNull(graphql.GraphQLString) };
 
 let updateItemArgs = getItemFields(false, false, true);
+delete updateItemArgs.official;
 updateItemArgs.slots = {
     type: new graphql.GraphQLList(new graphql.GraphQLNonNull(graphql.GraphQLInt))
 };

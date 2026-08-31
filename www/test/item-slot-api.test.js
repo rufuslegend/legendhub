@@ -13,7 +13,8 @@ const itemColumns = [
     {COLUMN_NAME: "Name", DATA_TYPE: "varchar", IS_NULLABLE: "NO"},
     {COLUMN_NAME: "Slot", DATA_TYPE: "int", IS_NULLABLE: "NO"},
     {COLUMN_NAME: "SlotMask", DATA_TYPE: "int", IS_NULLABLE: "NO"},
-    {COLUMN_NAME: "Holdable", DATA_TYPE: "tinyint", IS_NULLABLE: "NO"}
+    {COLUMN_NAME: "Holdable", DATA_TYPE: "tinyint", IS_NULLABLE: "NO"},
+    {COLUMN_NAME: "Official", DATA_TYPE: "tinyint", IS_NULLABLE: "NO"}
 ];
 
 const itemStatInfo = [
@@ -68,12 +69,19 @@ test("Item exposes computed slots without exposing its physical slot mask", func
     const schema = new GraphQLSchema({query: queryType});
 
     assert.deepEqual(
-        validate(schema, parse("query { getItemById(id: 7) { id slot slots } }")),
+        validate(schema, parse("query { getItemById(id: 7) { id slot slots official } }")),
         []
     );
     assert.match(itemApi.fragment, /\bslot\b/);
     assert.match(itemApi.fragment, /\bslots\b/);
     assert.doesNotMatch(itemApi.fragment, /slotMask/i);
+});
+
+test("official status is readable but cannot be supplied to community item mutations", function() {
+    const itemApi = loadItemApi();
+    assert.match(itemApi.fragment, /\bofficial\b/);
+    assert.equal(Object.hasOwn(itemApi.mutationFields.insertItem.args, "official"), false);
+    assert.equal(Object.hasOwn(itemApi.mutationFields.updateItem.args, "official"), false);
 });
 
 function valueForColumn(values, column) {
