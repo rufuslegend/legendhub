@@ -188,6 +188,10 @@ function integer(value) {
     return value == null || value === "" ? null : Number(value);
 }
 
+function canonicalSlots(slots) {
+    return [...new Set((slots || []).map(Number))].sort((left, right) => left - right);
+}
+
 function currentToken(document) {
     const token = parseCookieHeader(document.cookie).loginToken;
     if (token)
@@ -305,7 +309,7 @@ function itemVariables(item, itemStatCategories, document) {
         mobId: integer(item.mobId) ?? 0,
         questId: integer(item.questId) ?? 0,
         notes: item.notes ?? "",
-        slots: item.slots.map(Number)
+        slots: canonicalSlots(item.slots)
     };
     for (const stat of editableItemStats(itemStatCategories))
         variables[stat.var] = itemValue(stat, item[stat.var]);

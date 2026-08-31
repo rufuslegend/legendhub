@@ -254,6 +254,24 @@ test("item add validates against the production required Item mutation arguments
         "loginToken=item-renewed; Path=/; SameSite=Lax; Secure; Expires=Tue, 01 Jan 2030 00:00:00 GMT");
 });
 
+// Catches persisted items arriving in an arbitrary capability order and being
+// sent back in that order, which bypasses the canonical slot-mask contract.
+test("item save canonicalizes unsorted duplicate slot variables", async function() {
+    const {saveItem} = await import("../../client/features/editors/editor-api.js");
+    const saved = await captureRequest({
+        response: {data: {insertItem: {id: 103, tokenRenewal: null}}},
+        run: function() {
+            return saveItem({
+                alignRestriction: 0, isHeroic: false, isLight: false,
+                name: "Unordered focus", slots: [15, 14, 2, 14]
+            }, itemStatCategories, documentWithToken());
+        }
+    });
+
+    const request = JSON.parse(saved.request.options.body);
+    assert.deepEqual(request.variables.slots, [2, 14, 15]);
+});
+
 // Catches edit requests that omit an initialized stat or redirect to a newly inserted ID.
 test("item edit preserves stat payloads and redirects to the existing item", async function() {
     const {saveItem} = await import("../../client/features/editors/editor-api.js");
@@ -326,6 +344,7 @@ test("item editor makes Other exclusive when slot selections change", async func
         assert.deepEqual(toggleSlot([14, 15], 21), [21]);
         assert.deepEqual(toggleSlot([21], 14), [14]);
         assert.deepEqual(toggleSlot([14, 15], 15), [14]);
+        assert.deepEqual(toggleSlot([15, 14, 2], 15), [2, 14]);
     });
 });
 

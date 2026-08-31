@@ -16,9 +16,13 @@ function defaultValue(stat) {
     return stat.defaultValue;
 }
 
+function canonicalSlots(slots) {
+    return [...new Set((slots || []).map(Number))].sort((left, right) => left - right);
+}
+
 function initialItem(item, itemStatCategories) {
     const slots = item.slots || (item.slot == null ? [] : [item.slot]);
-    const initial = {notes: "", ...item, slots: [...slots]};
+    const initial = {notes: "", ...item, slots: canonicalSlots(slots)};
     for (const category of itemStatCategories) {
         for (const stat of category.getItemStatInfo || []) {
             if (stat.editable && !Object.hasOwn(initial, stat.var))
@@ -29,12 +33,13 @@ function initialItem(item, itemStatCategories) {
 }
 
 export function toggleSlot(slots, slot) {
+    const current = canonicalSlots(slots);
     if (slot === 21)
-        return slots.includes(21) ? [] : [21];
-    const next = slots.filter(value => value !== 21);
+        return current.includes(21) ? [] : [21];
+    const next = current.filter(value => value !== 21);
     if (next.includes(slot))
         return next.filter(value => value !== slot);
-    return [...next, slot].sort((left, right) => left - right);
+    return canonicalSlots([...next, slot]);
 }
 
 function hasSlot(item, slot) {
