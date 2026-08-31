@@ -17,9 +17,11 @@ const defaultPreferences = {
 const anonymousPayload = "7*Local Hero~Original~0X0X0X0X0X0X000000___0000000000000000000f____________________________________*";
 const heroMigrationPayload = "7*Hero~Tank~1c0K0K0K0J0J1-10000___00H00N00T00000100.00s00o00o-BHKAA_00t00u00v00w________00p00q01b_________________*Hero~Caster~0U0m0U0U0U0U000000___0000000000000000000f__00g_________________________________*";
 const scoutMigrationPayload = "7*Scout~Original~0X0X0X0X0X0X000000___0000000000000000000f____________________________________*";
+const legacyHeroMigrationPayload = "6*Hero~Tank~1c0K0K0K0J0J1-10000___00H00N00T00000100.00s00o00o-BHKAA_00t00u00v00w_______00p00q01b________________*Hero~Caster~0U0m0U0U0U0U000000___0000000000000000000f__00g_______________________________*";
+const legacyScoutMigrationPayload = "6*Scout~Original~0X0X0X0X0X0X000000___0000000000000000000f__________________________________*";
 const guestMigrationEntry = "Guest~Imported~0X0X0X0X0X0X000000___0000000000000000000f__-BHKAA_______________________________*";
 const rejectedMigrationEntry = "Rejected~Original~0i0X0X0X0X0X000000___0000000000000000000g__________________________________*";
-const migrationPayload = `${heroMigrationPayload}${scoutMigrationPayload.slice(2)}${guestMigrationEntry}${rejectedMigrationEntry}`;
+const migrationPayload = `${legacyHeroMigrationPayload}${legacyScoutMigrationPayload.slice(2)}${guestMigrationEntry}${rejectedMigrationEntry}`;
 const itemFragment = "fragment ItemAll on Item { id name slot strength strengthCap hit dam hp ma mv ac rent weight uniqueWear isLimited twoHanded fauxObject isLight alignRestriction weaponStat }";
 const itemStatInfo = [
     {display: "Name", short: "Name", var: "name", type: "string", showColumnDefault: true},
@@ -578,6 +580,17 @@ test("account Builder sync logout reveals only that device's anonymous data", as
 });
 
 test("account Builder sync explicitly migrates and reports every server outcome", async function({browser}) {
+    const {decodeBuilderEntries} = await import("../shared/builder-codec.mjs");
+    expect(decodeBuilderEntries(migrationPayload).map(entry => [
+        entry.name,
+        entry.variants[0].name
+    ])).toEqual([
+        ["Hero", "Tank"],
+        ["Hero", "Caster"],
+        ["Scout", "Original"],
+        ["Guest", "Imported"],
+        ["Rejected", "Original"]
+    ]);
     backend.profiles = [
         {
             id: "existing-hero",
