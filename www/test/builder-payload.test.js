@@ -12,6 +12,7 @@ const blanks35 = "_".repeat(35);
 const blanks37 = "_".repeat(37);
 const legacyHero = "Hero!Original_30_30_30_30_30_30_-1_-1_-1_101_" +
     Array(34).fill("0").join("_");
+const encodedHeroV6 = `6*Hero~Original~${baseStats}000000___00000000000000000${blanks35}*`;
 const encodedHero = `7*Hero~Original~${baseStats}000000___00000000000000000${blanks37}*`;
 const twoCharacters = `${legacyHero}*${legacyHero.replace("Hero", "Other")}`;
 const multiVariantHero = `7*Hero~Tank~${baseStats}000000___00000000000000000${blanks37}*` +
@@ -20,13 +21,14 @@ const multiVariantHeroV6 = `6*Hero~Tank~${baseStats}000000___00000000000000000${
     `Hero~Tank~${baseStats}000000___00000000000000000${blanks35}*`;
 
 const supportedProfiles = [
-    ["unversioned", legacyHero],
-    ["format 1", `1*${legacyHero}`],
-    ["format 2", `2*Hero~Original~${baseStats}000000__${"_".repeat(29)}`],
-    ["format 3", `3*Hero~Original~${baseStats}000000___${blanks35}`],
-    ["format 4", `4*Hero~Original~${baseStats}000000___${blanks35}`],
-    ["format 5", `5*Hero~Original~${baseStats}000000___000000000${blanks35}`],
-    ["format 6", encodedHero]
+    ["unversioned", null, legacyHero],
+    ["format 1", 1, `1*${legacyHero}`],
+    ["format 2", 2, `2*Hero~Original~${baseStats}000000__${"_".repeat(29)}`],
+    ["format 3", 3, `3*Hero~Original~${baseStats}000000___${blanks35}`],
+    ["format 4", 4, `4*Hero~Original~${baseStats}000000___${blanks35}`],
+    ["format 5", 5, `5*Hero~Original~${baseStats}000000___000000000${blanks35}`],
+    ["format 6", 6, encodedHeroV6],
+    ["format 7", 7, encodedHero]
 ];
 
 // Catches the server retaining a legacy payload instead of storing current canonical text.
@@ -142,11 +144,17 @@ test("server validator applies the literal-space name rule to every variant", as
 test("server validator preserves every supported format through a stable canonical round trip", async function() {
     const codec = await import("../shared/builder-codec.mjs");
 
-    for (const [label, payload] of supportedProfiles) {
+    for (const [label, inputVersion, payload] of supportedProfiles) {
+        assert.equal(codec.readBuilderFormatVersion(payload), inputVersion, label);
         const result = await validateBuilderProfile({name: "Hero", payload});
         const decoded = codec.decodeBuilderLists(result.payload);
 
         assert.equal(result.payloadVersion, 7, label);
+        assert.equal(result.decoded.variants[0].items.length, 37, label);
+        assert.deepEqual(result.decoded.variants[0].items[12],
+            {id: 0, slot: 10, locked: false}, label);
+        assert.deepEqual(result.decoded.variants[0].items[20],
+            {id: 0, slot: 15, locked: false}, label);
         assert.equal(codec.encodeBuilderLists(decoded), result.payload, label);
         assert.deepEqual(
             codec.decodeBuilderLists(codec.encodeBuilderLists(decoded)),
