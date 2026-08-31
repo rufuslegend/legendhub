@@ -4,6 +4,7 @@
 .vs
 .DS_Store
 .worktrees/
+/.mcp.json
 
 # dotenv
 .env

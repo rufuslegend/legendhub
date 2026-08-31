@@ -1711,9 +1711,9 @@ test("Builder item name cells remain clickable across the whole cell", async fun
     await expect(page.getByRole("dialog", {name: "Choose Item"})).toBeVisible();
 });
 
-// Catches picker results requiring a precise click on the item-name text
-// instead of accepting the unused area across the full Name cell.
-test("Builder picker item name cells select across the whole cell", async function({page}) {
+// Catches picker results limiting selection to the item-name cell instead of
+// accepting pointer input from any stat cell across the result row.
+test("Builder picker item rows select from any result cell", async function({page}) {
     await page.goto(`${baseUrl}/builder/`);
     await page.getByLabel("Variant", {exact: true}).selectOption("1");
     const equipmentRow = equipmentTable(page).locator("tbody tr").nth(1);
@@ -1722,11 +1722,11 @@ test("Builder picker item name cells select across the whole cell", async functi
     const dialog = page.getByRole("dialog", {name: "Choose Item"});
     const resultRow = dialog.locator(".builder-picker-results tbody tr")
         .filter({hasText: "Faux moonlight"});
-    const nameCell = resultRow.getByRole("cell").first();
-    const bounds = await nameCell.boundingBox();
+    const statCell = resultRow.getByRole("cell").nth(1);
+    const bounds = await statCell.boundingBox();
     expect(bounds).not.toBeNull();
 
-    await nameCell.click({position: {x: bounds.width - 40, y: bounds.height / 2}});
+    await statCell.click({position: {x: bounds.width / 2, y: bounds.height / 2}});
     await expect(dialog).toHaveCount(0);
     await expect(equipmentRow).toContainText("Faux moonlight");
 });

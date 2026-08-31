@@ -37,6 +37,7 @@ with version 2.6.0.
 - Added an accessible 60-second countdown after successful or rate-limited verification resends, and kept verification/reset result navigation in sync with the current sign-in state.
 - Preserved both versions of a Builder character when devices edit the same profile, saving the attempted edit as a clearly named conflict copy instead of overwriting either version.
 - Restored Builder and item-picker name cells as full-size click targets while keeping item names and separate details links keyboard accessible.
+- Made each unlocked row in the Builder's Choose Item results clickable across every displayed stat.
 - Included Increased Potential ranks in the Builder's visible Strength, Mind, Dexterity, Constitution, Perception, and Spirit cap totals.
 
 ## [3.0.0] - 2026-08-26

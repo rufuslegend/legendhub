@@ -516,15 +516,13 @@ export default function EquipmentPanel({
                           className={
                             current.locked
                               ? "builder-picker-result-disabled"
-                              : undefined
+                              : "clickable"
+                          }
+                          onClick={
+                            current.locked ? undefined : () => onPick(item)
                           }
                         >
-                          <td
-                            className={current.locked ? undefined : "clickable"}
-                            onClick={
-                              current.locked ? undefined : () => onPick(item)
-                            }
-                          >
+                          <td>
                             <button
                               className="btn btn-link p-0 builder-table-action"
                               type="button"
