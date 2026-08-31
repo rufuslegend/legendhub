@@ -55,7 +55,7 @@ One file contains one JSON object and one equipment observation.
   "item": {
     "vnum": 1234,
     "name": "twisted silver ring",
-    "slot": "finger",
+    "slots": ["finger"],
     "alignment": "none",
     "flags": {
       "unique_wear": false,
@@ -144,20 +144,21 @@ Every property shown above is required except `submission.submitted_by.account_i
 - `submission.submitted_by.account_id`, when present, is an opaque, non-empty string of at most 128 characters.
 - `source.server` is a lowercase ASCII slug of at most 32 characters, such as `legend` or `testmud`.
 - `item.vnum` is a non-negative 32-bit integer. It identifies the underlying item definition, so generated variants share a vnum.
-- `item.name` is a non-empty string of at most 60 characters.
+- `item.name` is a non-empty string of at most 255 Unicode code points after color-code removal and normalization. Legend must never truncate a name to satisfy the limit; it rejects an ineligible over-limit submission instead.
+- `item.slots` is a non-empty array containing every location where the underlying item may be worn, not the location where this particular copy was observed. Each entry uses the slot vocabulary below. LegendHUB sorts and removes duplicates during normalization.
 - All flag values are JSON booleans.
 - All stat, requirement, damage, rent, and value fields are 32-bit JSON integers. Zero explicitly means no modifier; Legend must not omit zero-valued fields.
 - `economy.weight` is a non-negative JSON number with at most two decimal places and a maximum value of `999.99`.
 - `casts` is an array of strings. Each entry is non-empty after trimming and at most 50 characters.
 - `raw_text`, when present, is a string of at most 65,535 characters. It is diagnostic evidence and does not affect duplicate detection.
 - JSON `null` is allowed only for `weapon.type` and `weapon.governing_attribute`, where it means the property is not applicable.
-- The entire UTF-8 file must not exceed 256 KiB.
+- The entire file must be valid UTF-8 and must not exceed 256 KiB. Legend strips MUD color codes before emitting names and converts source text to valid Unicode. Undecodable diagnostic text may use the Unicode replacement character, but an undecodable item name is rejected rather than truncated or guessed.
 
 LegendHUB calculates derived values such as net stat. Legend does not send database IDs, an `official` flag, modification audit fields, community notes, mob IDs, or quest IDs.
 
 ## Enum vocabulary
 
-`item.slot` accepts:
+Each `item.slots` entry accepts:
 
 ```text
 light, finger, neck, body, head, face, legs, feet, hands, arms, shield,
@@ -165,6 +166,8 @@ about, waist, wrist, wield, hold, ear, arm, amulet, aux, familiar, other
 ```
 
 The distinct `arms` and `arm` values preserve Legend's two existing wear locations.
+
+An item that can be worn in more than one location lists every applicable value in the same submission. The eventual LegendHUB storage and filters must preserve that complete set rather than collapsing it to the first slot.
 
 `item.alignment` accepts:
 
@@ -193,7 +196,8 @@ Normalization:
 - applies Unicode NFC normalization to text;
 - lowercases enum values;
 - converts negative zero to zero;
-- represents weight to two decimal places; and
+- represents weight to two decimal places;
+- sorts and removes duplicates from `slots`; and
 - trims, removes duplicates from, and lexically sorts `casts`.
 
 Processing rules:
@@ -202,16 +206,30 @@ Processing rules:
 2. A previously accepted submission identity with a different payload hash is rejected as an ID collision.
 3. An existing official source item with the same vnum and item fingerprint is a duplicate observation. The submission is recorded against the existing item row.
 4. The same vnum with any different normalized item field creates a new official variant row.
-5. Name, flags, stats, requirements, weapon values, casts, rent, value, and weight all participate in the item fingerprint.
+5. Name, complete slot set, flags, stats, requirements, weapon values, casts, rent, value, and weight all participate in the item fingerprint.
 6. Matching a community item never converts or overwrites it. LegendHUB creates or reuses a separate official item row.
 
 This intentionally implements the initial rule that any normalized difference is a variant. Fingerprint calculation is isolated so that policy can change without changing the producer document.
+
+## Producer eligibility gate
+
+LegendHUB cannot reliably distinguish permanent item-definition data from temporary player alterations after receiving a normalized observation. Producer-side eligibility is therefore a load-bearing part of version 1: LegendHUB trusts Legend to keep ineligible objects out of the spool.
+
+Legend initially refuses submission of:
+
+- strung or otherwise player-renamed items;
+- rune-created items;
+- items carrying temporary player-created effects;
+- objects without a sane non-negative vnum; and
+- any object covered by later producer eligibility restrictions.
+
+Legend reports an in-game error instead of creating a spool file for an ineligible object. It also emits no file if it cannot obtain enough entropy for a strong unique submission ID.
 
 ## MySQL ownership
 
 The physical names may follow repository conventions, but storage must provide these three logical records:
 
-1. **Item row:** one player-visible `Items` row per distinct official variant, with an official marker available to Item Search and Builder filtering.
+1. **Item row:** one player-visible `Items` row per distinct official variant, with an official marker available to Item Search and Builder filtering. Storage preserves names up to 255 Unicode code points and every listed wear slot; Item Search and Builder consider the item eligible for each of those slots.
 2. **Official source variant:** a one-to-one record containing the item row ID, source server, vnum, item fingerprint, first-seen time, last-seen time, and observation count. `(server, vnum, fingerprint)` is unique.
 3. **Submission:** one record per submission identity containing the payload hash, canonical JSON payload, source timestamp, receiving timestamp, submitter attribution, and resolved item row ID. `(server, submission ID)` is unique.
 
@@ -251,13 +269,14 @@ Implementation is complete when automated tests demonstrate:
 
 - acceptance of a complete version-1 fixture and every allowed enum value;
 - rejection of malformed JSON, oversized files, invalid UTF-8, missing fields, unknown fields, invalid enums, invalid timestamps, and out-of-range values;
+- producer rejection of altered items, invalid vnums, over-limit names, and failed strong-ID generation without creating spool files;
 - idempotent replay of an identical submission;
 - rejection of one submission ID carrying different content;
 - reuse of an existing official item for an identical vnum and fingerprint;
 - creation of a separate official variant for every normalized item difference;
 - creation of a separate official row when only a matching community row exists;
 - exclusion of submission metadata and `raw_text` from variant comparison;
-- deterministic canonicalization regardless of JSON key order, formatting, cast order, enum case, or negative zero;
+- deterministic canonicalization regardless of JSON key order, formatting, slot order, cast order, enum case, or negative zero;
 - transactional rollback without partial rows;
 - recovery before commit and after commit;
 - startup and stale-file recovery from `processing/`;
