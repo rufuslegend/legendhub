@@ -147,6 +147,129 @@ test("non-transactional migrations recover from a partially committed DDL attemp
     }
 });
 
+test("slot mask migration backfills legacy items and resumes after its additive DDL", {
+    skip: !enabled
+}, async function() {
+    const database = process.env.MYSQL_MIGRATION_TEST_DATABASE;
+    if (!database || !database.endsWith("_migration_test"))
+        throw new Error("MYSQL_MIGRATION_TEST_DATABASE must name a dedicated *_migration_test database");
+
+    const pool = mysql.createPool({
+        connectionLimit: 1,
+        host: process.env.MYSQL_HOST,
+        port: process.env.MYSQL_PORT,
+        user: process.env.MYSQL_USER,
+        password: process.env.MYSQL_PASSWORD,
+        database,
+        multipleStatements: true
+    });
+    const migrations = createMigrationRunner({
+        pool,
+        lockTimeoutSeconds: 0,
+        migrationsDirectory: path.join(__dirname, "..", "src", "routes", "api", "migrations"),
+        log: {info: function() {}}
+    });
+
+    try {
+        await query(
+            pool,
+            `
+                DROP TRIGGER IF EXISTS Items_BEFORE_UPDATE;
+                DROP TABLE IF EXISTS Items_AuditTrail;
+                DROP TABLE IF EXISTS Items;
+                DROP TABLE IF EXISTS MigrationRuns;
+                DROP TABLE IF EXISTS Migrations;
+                CREATE TABLE Items (
+                    Id INT NOT NULL,
+                    Name VARCHAR(255) NOT NULL,
+                    Slot INT NOT NULL,
+                    Holdable TINYINT NOT NULL,
+                    PRIMARY KEY (Id)
+                ) ENGINE=InnoDB;
+                CREATE TABLE Items_AuditTrail (
+                    Id INT NOT NULL AUTO_INCREMENT,
+                    ItemId INT NOT NULL,
+                    Name VARCHAR(255) NOT NULL,
+                    Slot INT NOT NULL,
+                    Holdable TINYINT NOT NULL,
+                    PRIMARY KEY (Id)
+                ) ENGINE=InnoDB;
+                CREATE TABLE Migrations (
+                    Id INT NOT NULL,
+                    Name VARCHAR(255) NOT NULL,
+                    RunOn DATE NOT NULL,
+                    PRIMARY KEY (Id)
+                ) ENGINE=InnoDB;
+                INSERT INTO Migrations (Id, Name, RunOn) VALUES
+                    (1, 'legacy', CURDATE()), (2, 'legacy', CURDATE()),
+                    (3, 'legacy', CURDATE()), (4, 'legacy', CURDATE()),
+                    (5, 'legacy', CURDATE()), (6, 'legacy', CURDATE()),
+                    (7, 'legacy', CURDATE()), (8, 'legacy', CURDATE()),
+                    (9, 'legacy', CURDATE());
+            `
+        );
+        await query(pool, `
+            INSERT INTO Items (Id, Name, Slot, Holdable)
+            VALUES
+                (101, 'Holdable sword', 14, 1),
+                (102, 'Shield', 10, 1),
+                (103, 'Held focus', 15, 0)
+        `);
+        await query(pool, `
+            INSERT INTO Items_AuditTrail (ItemId, Name, Slot, Holdable)
+            VALUES (102, 'Shield', 10, 1)
+        `);
+
+        await assert.rejects(migrations.up(), /Migration 10 .* failed/);
+        assert.deepEqual(
+            await query(pool, `
+                SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE
+                FROM information_schema.columns
+                WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME IN ('Items', 'Items_AuditTrail')
+                    AND COLUMN_NAME = 'SlotMask'
+                ORDER BY TABLE_NAME
+            `),
+            [
+                {TABLE_NAME: "Items", COLUMN_NAME: "SlotMask", COLUMN_TYPE: "int unsigned", IS_NULLABLE: "NO"},
+                {TABLE_NAME: "Items_AuditTrail", COLUMN_NAME: "SlotMask", COLUMN_TYPE: "int unsigned", IS_NULLABLE: "NO"}
+            ]
+        );
+
+        await query(pool, `
+            ALTER TABLE Items ADD COLUMN Deleted TINYINT NOT NULL DEFAULT 0;
+            ALTER TABLE Items_AuditTrail ADD COLUMN Deleted TINYINT NOT NULL DEFAULT 0;
+        `);
+        await migrations.up();
+
+        assert.deepEqual(
+            await query(pool, "SELECT Id, SlotMask FROM Items ORDER BY Id"),
+            [
+                {Id: 101, SlotMask: 49152},
+                {Id: 102, SlotMask: 1024},
+                {Id: 103, SlotMask: 32768}
+            ]
+        );
+        assert.deepEqual(
+            await query(pool, "SELECT Id FROM Items ORDER BY Id"),
+            [{Id: 101}, {Id: 102}, {Id: 103}]
+        );
+        assert.deepEqual(
+            await query(pool, "SELECT ItemId, SlotMask FROM Items_AuditTrail WHERE ItemId = 102"),
+            [{ItemId: 102, SlotMask: 1024}]
+        );
+
+        await query(pool, "UPDATE Items SET Name = 'Holdable sword updated' WHERE Id = 101");
+        assert.deepEqual(
+            await query(pool, "SELECT ItemId, SlotMask FROM Items_AuditTrail WHERE ItemId = 101"),
+            [{ItemId: 101, SlotMask: 49152}]
+        );
+    }
+    finally {
+        await end(pool);
+    }
+});
+
 test("email migration reaches its verified schema state and can recover on a second run", {
     skip: !enabled
 }, async function() {
