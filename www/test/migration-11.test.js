@@ -41,7 +41,7 @@ test("migration 11 adds official storage, widens legacy text, and rebuilds audit
     assert.match(sql, /ALTER TABLE Items_AuditTrail ADD COLUMN Official TINYINT NOT NULL DEFAULT 0/);
     assert.match(sql, /ALTER TABLE Items MODIFY COLUMN Name VARCHAR\(255\) CHARACTER SET utf8mb4/);
     assert.match(sql, /ALTER TABLE Items_AuditTrail MODIFY COLUMN Name VARCHAR\(255\) CHARACTER SET utf8mb4/);
-    assert.match(sql, /ALTER TABLE Items MODIFY COLUMN Casts TEXT CHARACTER SET utf8mb4/);
+    assert.match(sql, /ALTER TABLE Items MODIFY COLUMN Casts MEDIUMTEXT CHARACTER SET utf8mb4/);
     assert.match(sql, /CREATE TABLE OfficialItemVariants/);
     assert.match(sql, /UNIQUE KEY UX_OfficialItemVariants_Identity \(Server, Vnum, ItemFingerprint\)/);
     assert.match(sql, /CREATE TABLE EquipmentSubmissions/);

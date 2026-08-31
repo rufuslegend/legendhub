@@ -905,6 +905,7 @@ function getItemFields(withId, withDeleted, optional) {
                 break;
             case "varchar":
             case "text":
+            case "mediumtext":
                 t = graphql.GraphQLString;
                 break;
             case "datetime":

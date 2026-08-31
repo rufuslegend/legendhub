@@ -300,10 +300,10 @@ test("slot mask migration backfills legacy items and resumes after its additive 
                 ORDER BY TABLE_NAME, COLUMN_NAME
             `),
             [
-                {TABLE_NAME: "Items", COLUMN_NAME: "Casts", COLUMN_TYPE: "text", IS_NULLABLE: "YES", COLUMN_DEFAULT: null, CHARACTER_SET_NAME: "utf8mb4", COLLATION_NAME: "utf8mb4_unicode_ci"},
+                {TABLE_NAME: "Items", COLUMN_NAME: "Casts", COLUMN_TYPE: "mediumtext", IS_NULLABLE: "YES", COLUMN_DEFAULT: null, CHARACTER_SET_NAME: "utf8mb4", COLLATION_NAME: "utf8mb4_unicode_ci"},
                 {TABLE_NAME: "Items", COLUMN_NAME: "Name", COLUMN_TYPE: "varchar(255)", IS_NULLABLE: "NO", COLUMN_DEFAULT: null, CHARACTER_SET_NAME: "utf8mb4", COLLATION_NAME: "utf8mb4_unicode_ci"},
                 {TABLE_NAME: "Items", COLUMN_NAME: "Official", COLUMN_TYPE: "tinyint(4)", IS_NULLABLE: "NO", COLUMN_DEFAULT: "0", CHARACTER_SET_NAME: null, COLLATION_NAME: null},
-                {TABLE_NAME: "Items_AuditTrail", COLUMN_NAME: "Casts", COLUMN_TYPE: "text", IS_NULLABLE: "YES", COLUMN_DEFAULT: null, CHARACTER_SET_NAME: "utf8mb4", COLLATION_NAME: "utf8mb4_unicode_ci"},
+                {TABLE_NAME: "Items_AuditTrail", COLUMN_NAME: "Casts", COLUMN_TYPE: "mediumtext", IS_NULLABLE: "YES", COLUMN_DEFAULT: null, CHARACTER_SET_NAME: "utf8mb4", COLLATION_NAME: "utf8mb4_unicode_ci"},
                 {TABLE_NAME: "Items_AuditTrail", COLUMN_NAME: "Name", COLUMN_TYPE: "varchar(255)", IS_NULLABLE: "NO", COLUMN_DEFAULT: null, CHARACTER_SET_NAME: "utf8mb4", COLLATION_NAME: "utf8mb4_unicode_ci"},
                 {TABLE_NAME: "Items_AuditTrail", COLUMN_NAME: "Official", COLUMN_TYPE: "tinyint(4)", IS_NULLABLE: "NO", COLUMN_DEFAULT: "0", CHARACTER_SET_NAME: null, COLLATION_NAME: null}
             ]

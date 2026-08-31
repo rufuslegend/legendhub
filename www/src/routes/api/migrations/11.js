@@ -32,18 +32,18 @@ const ITEM_COLUMNS = [
     {
         table: "Items", name: "Casts",
         expected: {
-            type: "text", nullable: "YES", characterSet: "utf8mb4",
+            type: "mediumtext", nullable: "YES", characterSet: "utf8mb4",
             collation: "utf8mb4_unicode_ci"
         },
-        modify: "ALTER TABLE Items MODIFY COLUMN Casts TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL"
+        modify: "ALTER TABLE Items MODIFY COLUMN Casts MEDIUMTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL"
     },
     {
         table: "Items_AuditTrail", name: "Casts",
         expected: {
-            type: "text", nullable: "YES", characterSet: "utf8mb4",
+            type: "mediumtext", nullable: "YES", characterSet: "utf8mb4",
             collation: "utf8mb4_unicode_ci"
         },
-        modify: "ALTER TABLE Items_AuditTrail MODIFY COLUMN Casts TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL"
+        modify: "ALTER TABLE Items_AuditTrail MODIFY COLUMN Casts MEDIUMTEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL"
     }
 ];
 

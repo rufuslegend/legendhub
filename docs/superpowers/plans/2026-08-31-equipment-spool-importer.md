@@ -127,7 +127,7 @@ git commit -m "feat: validate equipment spool observations"
 
 - [ ] **Step 1: Write failing migration-shape tests**
 
-Assert that migration 11 is non-transactional, widens both item name columns to `VARCHAR(255)`, widens both casts columns to `TEXT`, adds the official columns idempotently, creates both provenance tables with binary 32-byte hashes and unique identity keys, adds filter metadata with `Editable = 0`, and rebuilds `Items_BEFORE_UPDATE` so `OLD.Official` is audited.
+Assert that migration 11 is non-transactional, converts both item name columns to utf8mb4 `VARCHAR(255)`, widens both casts columns to utf8mb4 `MEDIUMTEXT`, adds the official columns idempotently, creates both provenance tables with binary 32-byte hashes and unique identity keys, adds filter metadata with `Editable = 0`, and rebuilds `Items_BEFORE_UPDATE` so `OLD.Official` is audited.
 
 - [ ] **Step 2: Run the migration unit test and confirm the missing module failure**
 
@@ -142,10 +142,10 @@ Create these logical definitions using MySQL 5.7-compatible DDL:
 ```sql
 ALTER TABLE Items ADD COLUMN Official TINYINT NOT NULL DEFAULT 0;
 ALTER TABLE Items_AuditTrail ADD COLUMN Official TINYINT NOT NULL DEFAULT 0;
-ALTER TABLE Items MODIFY COLUMN Name VARCHAR(255) NOT NULL;
-ALTER TABLE Items_AuditTrail MODIFY COLUMN Name VARCHAR(255) NOT NULL;
-ALTER TABLE Items MODIFY COLUMN Casts TEXT NULL;
-ALTER TABLE Items_AuditTrail MODIFY COLUMN Casts TEXT NULL;
+ALTER TABLE Items MODIFY COLUMN Name VARCHAR(255) CHARACTER SET utf8mb4 NOT NULL;
+ALTER TABLE Items_AuditTrail MODIFY COLUMN Name VARCHAR(255) CHARACTER SET utf8mb4 NOT NULL;
+ALTER TABLE Items MODIFY COLUMN Casts MEDIUMTEXT CHARACTER SET utf8mb4 NULL;
+ALTER TABLE Items_AuditTrail MODIFY COLUMN Casts MEDIUMTEXT CHARACTER SET utf8mb4 NULL;
 
 CREATE TABLE OfficialItemVariants (
     Id BIGINT NOT NULL AUTO_INCREMENT,
