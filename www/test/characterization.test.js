@@ -357,7 +357,7 @@ test("official item history explains temporary protection and hides mutation con
         getMob: null, getQuest: null, id: 83, mind: 0,
         modifiedBy: "Legend:testmud", name: "Official shield", notes: "",
         official: true, perception: 0, rent: 0, slot: 10, slots: [10],
-        spirit: 0, strength: 0
+        spirit: 0, strength: 0, submittedBy: "Rufus"
     };
     const shared = {
         cookies: {}, displayDateTime: function() { return ""; }, normalizeTheme,
@@ -383,6 +383,7 @@ test("official item history explains temporary protection and hides mutation con
 
     assert.match(html, /Official item/);
     assert.match(html, /Editing is unavailable for now\./);
+    assert.match(html, /Submitted by Rufus via LegendMUD Import/);
     assert.doesNotMatch(html, /\/items\/edit\.html/);
     assert.doesNotMatch(html, /data-target="#deleteModal"/);
     assert.doesNotMatch(html, /action="\/items\/revert\.html"/);

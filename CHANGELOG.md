@@ -15,6 +15,7 @@ with version 2.6.0.
 - Added cross-device Builder and site preferences for account storage, including themes, paging, visible columns, and the last selected character and variant.
 - Added account controls to download a fresh export of every synced Builder character or permanently delete all synced Builder data after a separate confirmation.
 - Added official Legend-submitted equipment to Item Search and Builder filters. Distinct observed versions of the same item remain available as separate variants.
+- Official item pages now credit the character who submitted the equipment through the LegendMUD import.
 
 ### Changed
 

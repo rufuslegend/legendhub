@@ -96,6 +96,52 @@ test("official status is readable but cannot be supplied to community item mutat
     assert.equal(Object.hasOwn(itemApi.mutationFields.updateItem.args, "official"), false);
 });
 
+// Catches official item attribution disappearing, selecting a later duplicate
+// submission, or becoming dependent on nondeterministic database row order.
+test("official items expose the earliest submitting character", async function() {
+    const statements = [];
+    const itemApi = loadItemApi({
+        query(sql, values, callback) {
+            statements.push({sql, values});
+            if (sql.includes("FROM EquipmentSubmissions")) {
+                callback(null, [{SubmittedByCharacter: "Rufus"}]);
+                return;
+            }
+            assert.fail(`Unexpected SQL: ${sql}`);
+        }
+    });
+    const item = new itemApi.classes.Item({
+        Id: 83, Name: "Official shield", Slot: 10,
+        SlotMask: 1024, Holdable: 1, Official: 1
+    });
+
+    assert.equal(itemApi.types.itemType.getFields().submittedBy?.type,
+        graphql.GraphQLString);
+    assert.equal(await item.submittedBy(), "Rufus");
+    assert.deepEqual(statements[0].values, [83]);
+    assert.match(statements[0].sql,
+        /ORDER BY ReceivedOn ASC, Id ASC\s+LIMIT 1/);
+});
+
+// Catches community item pages consulting importer provenance or accidentally
+// displaying a submission credit that belongs only to game-owned records.
+test("community items have no importer attribution", async function() {
+    let queryCount = 0;
+    const itemApi = loadItemApi({
+        query(_sql, _values, callback) {
+            queryCount += 1;
+            callback(null, [{SubmittedByCharacter: "Wrong credit"}]);
+        }
+    });
+    const item = new itemApi.classes.Item({
+        Id: 84, Name: "Community shield", Slot: 10,
+        SlotMask: 1024, Holdable: 1, Official: 0
+    });
+
+    assert.equal(await item.submittedBy(), null);
+    assert.equal(queryCount, 0);
+});
+
 function valueForColumn(values, column) {
     for (let index = 0; index < values.length - 1; index += 2) {
         if (values[index] === column)

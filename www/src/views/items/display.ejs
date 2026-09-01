@@ -57,6 +57,9 @@ AC: <%-vm.item.ac%>" />
                 <p class="alert alert-info mb-3" role="status">
                     <strong>Official item.</strong> Managed from Legend game data.
                     Editing is unavailable for now.
+                    <% if (vm.item.submittedBy) { %>
+                    <br>Submitted by <%=vm.item.submittedBy%> via LegendMUD Import
+                    <% } %>
                 </p>
             </div>
         </div>

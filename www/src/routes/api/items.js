@@ -151,6 +151,30 @@ class Item {
         return maskToSlots(this.slotMask);
     }
 
+    submittedBy() {
+        if (!this.official || !this.id)
+            return null;
+
+        let id = this.id;
+        return new Promise(function(resolve, reject) {
+            mysql.query(`
+                SELECT SubmittedByCharacter
+                FROM EquipmentSubmissions
+                WHERE ItemId = ?
+                ORDER BY ReceivedOn ASC, Id ASC
+                LIMIT 1`,
+                [id],
+                function(error, results) {
+                    if (error) {
+                        reject(new graphql.GraphQLError(error.sqlMessage));
+                        return;
+                    }
+
+                    resolve(results.length > 0 ? results[0].SubmittedByCharacter : null);
+                });
+        });
+    }
+
     getMob() {
         if (!this.mobId)
             return null;
@@ -976,6 +1000,7 @@ let itemType = new graphql.GraphQLObjectType({
                 new graphql.GraphQLList(new graphql.GraphQLNonNull(graphql.GraphQLInt))
             )
         };
+        f.submittedBy = { type: graphql.GraphQLString };
 
         f.getMob = { type: mobSchema.types.mobType },
         f.getQuest = { type: questSchema.types.questType },

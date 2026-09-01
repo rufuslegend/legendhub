@@ -125,6 +125,7 @@ router.get(["/details.html"], async function(req, res, next) {
     query ItemDetails($id: Int!) {
         getItemById(id: $id) {
             ... ItemAll
+            submittedBy
             getMob {
                 id
                 name
@@ -194,6 +195,7 @@ router.get(["/history.html"], async function(req, res, next) {
         getItemHistoryById(id: $id) {
             item {
                 ... ItemAll
+                submittedBy
                 getMob {
                     id
                     name
