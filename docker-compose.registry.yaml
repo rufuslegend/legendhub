@@ -6,6 +6,9 @@ services:
         image: tmckimmey/legendhub-www:${LEGENDHUB_IMAGE_TAG:?set LEGENDHUB_IMAGE_TAG}
         build: !reset null
         volumes: !reset []
+    equipment-importer:
+        image: tmckimmey/legendhub-www:${LEGENDHUB_IMAGE_TAG:?set LEGENDHUB_IMAGE_TAG}
+        build: !reset null
     python:
         image: tmckimmey/legendhub-python:${LEGENDHUB_IMAGE_TAG:?set LEGENDHUB_IMAGE_TAG}
         build: !reset null

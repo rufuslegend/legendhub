@@ -94,6 +94,7 @@ test("renders a persistent production-shaped local HTTPS stack", () => {
             "-p$${MYSQL_ROOT_PASSWORD} --silent",
     ]);
     assert.equal(JSON.stringify(config).includes("/tmp/"), false);
+    assert.equal("equipment-importer" in services, false);
 });
 
 test("prepares private persistent state and renders through the local wrapper", (t) => {

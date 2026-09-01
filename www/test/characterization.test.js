@@ -346,6 +346,49 @@ test("authorized content pages render named delete buttons with valid closing ta
     }
 });
 
+// Catches the item viewer advertising mutation paths for game-owned data. The
+// API remains the security boundary; this keeps the visible contract honest.
+test("official item history explains temporary protection and hides mutation controls", async function() {
+    const ejs = require("ejs");
+    const {normalizeTheme} = require("../src/view-helpers");
+    const item = {
+        ac: 0, alignRestriction: 0, constitution: 0, dexterity: 0,
+        getHistories: [{id: 91, item: {modifiedBy: "Legend:testmud"}}],
+        getMob: null, getQuest: null, id: 83, mind: 0,
+        modifiedBy: "Legend:testmud", name: "Official shield", notes: "",
+        official: true, perception: 0, rent: 0, slot: 10, slots: [10],
+        spirit: 0, strength: 0, submittedBy: "Rufus"
+    };
+    const shared = {
+        cookies: {}, displayDateTime: function() { return ""; }, normalizeTheme,
+        permissions: {hasPermission: function() { return true; }}, title: "Details",
+        url: {path: "/items/history.html", pathname: "/items/history.html"},
+        user: {
+            emailVerified: true, moreNotifications: false,
+            notifications: [], username: "Trusted someday"
+        },
+        version: "test"
+    };
+
+    const html = await ejs.renderFile(path.join(__dirname, "../src/views/items/display.ejs"), {
+        ...shared,
+        locals: shared,
+        vm: {
+            historyId: 91, item, itemNotesHtml: "", statCategories: [],
+            constants: {selectOptions: {
+                alignRestriction: ["No restriction"], slot: Array(11).fill("Shield")
+            }}
+        }
+    });
+
+    assert.match(html, /Official item/);
+    assert.match(html, /Editing is unavailable for now\./);
+    assert.match(html, /Submitted by Rufus via LegendMUD Import/);
+    assert.doesNotMatch(html, /\/items\/edit\.html/);
+    assert.doesNotMatch(html, /data-target="#deleteModal"/);
+    assert.doesNotMatch(html, /action="\/items\/revert\.html"/);
+});
+
 // Catches item details and audited history rendering only the compatible
 // primary slot instead of the complete eligibility list supplied by GraphQL.
 test("item details and history display every slot capability", async function() {

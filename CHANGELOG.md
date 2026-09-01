@@ -14,10 +14,14 @@ with version 2.6.0.
 - Added account-backed Builder storage for players with a verified email address. Characters autosave separately, follow the player between work, home, and other browsers, and share a 10 MB account limit.
 - Added cross-device Builder and site preferences for account storage, including themes, paging, visible columns, and the last selected character and variant.
 - Added account controls to download a fresh export of every synced Builder character or permanently delete all synced Builder data after a separate confirmation.
+- Added official Legend-submitted equipment to Item Search and Builder filters. Distinct observed versions of the same item remain available as separate variants.
+- Official item pages now credit the character who submitted the equipment through the LegendMUD import.
 
 ### Changed
 
 - Builder's Choose Item search now combines item names with stat comparisons using `and`, `or`, commas, and parentheses, including `=`, `>`, `<`, `>=`, and `<=`.
+- Official Legend-submitted items are protected from player editing, deletion, and history reverts for now.
+
 - Items can now list every place they may be worn, so Item Search and Builder find the same item in each valid slot without requiring duplicate entries.
 - Builder now models Legend characters' three hands with one Shield row, one Wield row, and three Hold rows, including the two-hand cost of two-handed equipment.
 - Made Dark the default theme for visitors and players without a saved theme; every Glass theme remains available in the theme menu.

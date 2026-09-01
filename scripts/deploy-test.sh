@@ -49,7 +49,10 @@ deploy_remote() {
   local full_sha
   local checked_out_sha
   local tracked_content_sync
-  local content_sync_containers
+  local tracked_equipment_importer
+  local content_sync_containers=""
+  local equipment_importer_containers=""
+  local -a pull_services
 
   validate_release_sha "$release_sha"
   cd "$deploy_root"
@@ -90,41 +93,78 @@ deploy_remote() {
       exit 1
       ;;
   esac
+  if ! tracked_equipment_importer="$(git ls-tree --name-only "$full_sha" -- \
+      docker-compose.equipment-importer.yaml)"; then
+    printf 'Could not inspect target equipment importer Compose tree.\n' >&2
+    exit 1
+  fi
+  case "$tracked_equipment_importer" in
+    docker-compose.equipment-importer.yaml) ;;
+    '') ;;
+    *)
+      printf 'Target Compose tree returned an unexpected equipment importer overlay path.\n' >&2
+      exit 1
+      ;;
+  esac
 
   export LEGENDHUB_IMAGE_TAG="$release_sha"
   compose=(
     docker compose
     -f docker-compose.yaml
     -f docker-compose.test.yaml
-    -f docker-compose.registry.yaml
   )
 
   if [[ "$tracked_content_sync" == docker-compose.content-sync.yaml ]]; then
     require_file docker-compose.content-sync.yaml
     compose+=(-f docker-compose.content-sync.yaml)
-    "${compose[@]}" config --quiet
-    "${compose[@]}" pull www python mysql-backup content-sync
-    "${compose[@]}" up -d --no-build
-    return
   fi
+  if [[ "$tracked_equipment_importer" == docker-compose.equipment-importer.yaml ]]; then
+    require_file docker-compose.equipment-importer.yaml
+    compose+=(-f docker-compose.equipment-importer.yaml)
+  fi
+  compose+=(-f docker-compose.registry.yaml)
 
   "${compose[@]}" config --quiet
-  content_sync_containers="$(docker ps --all --quiet --no-trunc \
-    --filter label=com.docker.compose.project=legendhub-test \
-    --filter label=com.docker.compose.service=content-sync)"
-  if [[ "$content_sync_containers" == *$'\n'* ]]; then
-    printf 'Legacy rollback expected at most one legacy content-sync container.\n' >&2
-    exit 1
-  fi
-  if [[ -n "$content_sync_containers" &&
-        ! "$content_sync_containers" =~ ^[abcdef0123456789]{64}$ ]]; then
-    printf 'Legacy rollback found an invalid content-sync container identity.\n' >&2
-    exit 1
+  if [[ -z "$tracked_content_sync" ]]; then
+    content_sync_containers="$(docker ps --all --quiet --no-trunc \
+      --filter label=com.docker.compose.project=legendhub-test \
+      --filter label=com.docker.compose.service=content-sync)"
+    if [[ "$content_sync_containers" == *$'\n'* ]]; then
+      printf 'Legacy rollback expected at most one legacy content-sync container.\n' >&2
+      exit 1
+    fi
+    if [[ -n "$content_sync_containers" &&
+          ! "$content_sync_containers" =~ ^[abcdef0123456789]{64}$ ]]; then
+      printf 'Legacy rollback found an invalid content-sync container identity.\n' >&2
+      exit 1
+    fi
   fi
 
-  "${compose[@]}" pull www python mysql-backup
+  if [[ -z "$tracked_equipment_importer" ]]; then
+    equipment_importer_containers="$(docker ps --all --quiet --no-trunc \
+      --filter label=com.docker.compose.project=legendhub-test \
+      --filter label=com.docker.compose.service=equipment-importer)"
+    if [[ "$equipment_importer_containers" == *$'\n'* ]]; then
+      printf 'Legacy rollback expected at most one legacy equipment importer container.\n' >&2
+      exit 1
+    fi
+    if [[ -n "$equipment_importer_containers" &&
+          ! "$equipment_importer_containers" =~ ^[abcdef0123456789]{64}$ ]]; then
+      printf 'Legacy rollback found an invalid equipment importer container identity.\n' >&2
+      exit 1
+    fi
+  fi
+
+  pull_services=(www python mysql-backup)
+  if [[ -n "$tracked_content_sync" ]]; then
+    pull_services+=(content-sync)
+  fi
+  "${compose[@]}" pull "${pull_services[@]}"
   if [[ -n "$content_sync_containers" ]]; then
     docker rm --force -- "$content_sync_containers" >/dev/null
+  fi
+  if [[ -n "$equipment_importer_containers" ]]; then
+    docker rm --force -- "$equipment_importer_containers" >/dev/null
   fi
   "${compose[@]}" up -d --no-build
 }
