@@ -224,7 +224,7 @@ AC: <%-vm.item.ac%>" />
                     </div>
                 </div>
                 <br>
-                <% if (vm.item.notes) { %>
+                <% if (vm.item.notes && !vm.preview) { %>
                 <div class="card">
                     <div class="card-header">Notes</div>
                     <div class="card-body"><%-vm.itemNotesHtml%></div>

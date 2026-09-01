@@ -426,7 +426,8 @@ test("item preview renders the item display without site or editing chrome", asy
         ac: 0, alignRestriction: 0, constitution: 0, dexterity: 0,
         getHistories: [{id: 70, item: {modifiedBy: "Tester", modifiedOn: new Date()}}],
         getMob: null, getQuest: null, id: 8, mind: 0, modifiedBy: "Tester",
-        modifiedOn: new Date(), name: "Preview blade", netStat: 0, notes: "",
+        modifiedOn: new Date(), name: "Preview blade", netStat: 0,
+        notes: "Secret acquisition instructions",
         perception: 0, rent: 0, slot: 14, slots: [14], spirit: 0,
         strength: 5, uniqueWear: false, value: 0, weight: 2
     };
@@ -439,7 +440,8 @@ test("item preview renders the item display without site or editing chrome", asy
         ...shared,
         locals: shared,
         vm: {
-            item, itemNotesHtml: "", preview: true, statCategories: [],
+            item, itemNotesHtml: "<p>Secret acquisition instructions</p>", preview: true,
+            statCategories: [],
             constants: {selectOptions: {
                 alignRestriction: ["No restriction"], slot: Array(14).fill("").concat("Wield")
             }}
@@ -449,6 +451,7 @@ test("item preview renders the item display without site or editing chrome", asy
     assert.match(html, /<body[^>]*class="item-preview-document"/);
     assert.match(html, /<h1[^>]*>Preview blade<\/h1>/);
     assert.match(html, /<dt class="col-8">Slot<\/dt>\s*<dd class="col-4">Wield<\/dd>/);
+    assert.doesNotMatch(html, />Notes<\/div>|Secret acquisition instructions/);
     assert.doesNotMatch(html, /<nav\b|<footer\b|data-target="#deleteModal"|\/items\/edit\.html|\/items\/history\.html/);
 });
 

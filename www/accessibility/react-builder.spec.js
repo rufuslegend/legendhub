@@ -303,6 +303,11 @@ test("item links show a dismissible detail preview after two seconds", async fun
         "src", "/items/details.html?id=101&preview=true");
     await expect(preview.locator("iframe").contentFrame().getByRole(
         "heading", {name: "Brass lantern", exact: true})).toBeVisible();
+    await expect(preview.getByRole("button", {name: "Close item preview"})).toHaveCount(0);
+    const previewBounds = await preview.boundingBox();
+    expect(previewBounds.width).toBeLessThanOrEqual(480);
+    expect(previewBounds.height).toBeLessThanOrEqual(380);
+    await expect(preview.locator("iframe").contentFrame().getByText("Notes", {exact: true})).toHaveCount(0);
 
     await preview.hover();
     await page.waitForTimeout(200);
@@ -339,12 +344,6 @@ test("Builder equipment and picker choices share item previews", async function(
         modalLabel: element.closest('[role="dialog"][aria-modal="true"]')?.getAttribute("aria-label"),
         parentLabel: element.parentElement?.getAttribute("aria-label")
     }))).toEqual({modalLabel: "Choose Item", parentLabel: "Choose Item"});
-    await preview.getByRole("button", {name: "Close item preview"}).focus();
-    expect(await page.evaluate(() => ({
-        ariaLabel: document.activeElement?.getAttribute("aria-label"),
-        id: document.activeElement?.id,
-        tagName: document.activeElement?.tagName
-    }))).toEqual({ariaLabel: "Close item preview", id: "", tagName: "BUTTON"});
     await page.keyboard.press("Escape");
     await expect(chooser).toBeVisible();
 });

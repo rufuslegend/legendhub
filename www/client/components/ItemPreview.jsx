@@ -125,17 +125,6 @@ export default function ItemPreview({children, item}) {
             }}
             role="dialog"
         >
-            <div className="item-preview-popup-header">
-                <strong>{item.name}</strong>
-                <button
-                    aria-label="Close item preview"
-                    className="close"
-                    onClick={() => controller.dismiss()}
-                    type="button"
-                >
-                    <span aria-hidden="true">&times;</span>
-                </button>
-            </div>
             <iframe
                 src={`/items/details.html?id=${item.id}&preview=true`}
                 title={`Item details for ${item.name}`}
