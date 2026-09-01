@@ -102,3 +102,29 @@ test("item preview dismissal cancels pending work and closes immediately", async
     controller.dispose();
     assert.deepEqual(events, ["close", "open", "close"]);
 });
+
+// Catches pointer-anchored previews reverting to screen centering or spilling
+// beyond the viewport instead of flipping beside the pointer.
+test("item preview placement stays beside the pointer and flips at viewport edges", async function() {
+    const loaded = await loadPreviewModule();
+    const module = loaded.module;
+    await loaded.close();
+    assert.equal(typeof module.placeItemPreview, "function");
+
+    assert.deepEqual(module.placeItemPreview({
+        height: 300,
+        pointerX: 300,
+        pointerY: 200,
+        viewportHeight: 800,
+        viewportWidth: 1000,
+        width: 400
+    }), {left: 312, top: 212});
+    assert.deepEqual(module.placeItemPreview({
+        height: 300,
+        pointerX: 950,
+        pointerY: 750,
+        viewportHeight: 800,
+        viewportWidth: 1000,
+        width: 400
+    }), {left: 538, top: 438});
+});

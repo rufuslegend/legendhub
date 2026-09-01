@@ -1,6 +1,30 @@
 import React, {useEffect, useRef, useState} from "react";
 import {createPortal} from "react-dom";
 
+const PREVIEW_MARGIN = 8;
+const PREVIEW_OFFSET = 12;
+const PREVIEW_WIDTH = 736;
+
+export function placeItemPreview({
+    height,
+    margin = PREVIEW_MARGIN,
+    offset = PREVIEW_OFFSET,
+    pointerX,
+    pointerY,
+    viewportHeight,
+    viewportWidth,
+    width
+}) {
+    const right = pointerX + offset;
+    const below = pointerY + offset;
+    return {
+        left: right + width <= viewportWidth - margin ? right :
+            Math.max(margin, pointerX - offset - width),
+        top: below + height <= viewportHeight - margin ? below :
+            Math.max(margin, pointerY - offset - height)
+    };
+}
+
 export function createItemPreviewController({
     cancel = globalThis.clearTimeout,
     closeDelay = 100,
@@ -66,13 +90,18 @@ export function createItemPreviewController({
 }
 
 export default function ItemPreview({children, item}) {
+    const [layout, setLayout] = useState(null);
     const [open, setOpen] = useState(false);
+    const anchorRef = useRef({x: PREVIEW_MARGIN, y: PREVIEW_MARGIN});
     const controllerRef = useRef(null);
     const portalTargetRef = useRef(null);
     if (controllerRef.current === null) {
         controllerRef.current = createItemPreviewController({
             onClose: () => setOpen(false),
-            onOpen: () => setOpen(true)
+            onOpen: () => {
+                setLayout(null);
+                setOpen(true);
+            }
         });
     }
     const controller = controllerRef.current;
@@ -83,6 +112,7 @@ export default function ItemPreview({children, item}) {
 
     useEffect(function() {
         controller.dismiss();
+        setLayout(null);
     }, [controller, item?.id]);
 
     useEffect(function() {
@@ -105,10 +135,28 @@ export default function ItemPreview({children, item}) {
     function enterFromTrigger(event, source) {
         portalTargetRef.current = event.currentTarget.closest(
             '[role="dialog"][aria-modal="true"]') || document.body;
+        if (source === "trigger-pointer") {
+            anchorRef.current = {x: event.clientX, y: event.clientY};
+        }
+        else {
+            const bounds = event.currentTarget.getBoundingClientRect();
+            anchorRef.current = {x: bounds.right, y: bounds.bottom};
+        }
         controller.enter(source);
     }
     const portalTarget = typeof document === "undefined" ? null :
         portalTargetRef.current || document.body;
+    const width = typeof globalThis.innerWidth === "number" ?
+        Math.min(PREVIEW_WIDTH, globalThis.innerWidth - PREVIEW_MARGIN * 2) :
+        PREVIEW_WIDTH;
+    const position = layout ? placeItemPreview({
+        height: layout.height,
+        pointerX: anchorRef.current.x,
+        pointerY: anchorRef.current.y,
+        viewportHeight: globalThis.innerHeight,
+        viewportWidth: globalThis.innerWidth,
+        width
+    }) : {left: PREVIEW_MARGIN, top: PREVIEW_MARGIN};
     const preview = open && portalTarget ? createPortal(
         <div
             aria-label={`Item preview: ${item.name}`}
@@ -124,8 +172,24 @@ export default function ItemPreview({children, item}) {
                     controller.leave("popup-pointer");
             }}
             role="dialog"
+            style={{
+                height: layout?.height || 1,
+                left: position.left,
+                top: position.top,
+                visibility: layout ? "visible" : "hidden",
+                width
+            }}
         >
             <iframe
+                onLoad={event => {
+                    const frameDocument = event.currentTarget.contentDocument;
+                    const contentHeight = Math.max(
+                        frameDocument.documentElement.scrollHeight,
+                        frameDocument.body?.scrollHeight || 0
+                    );
+                    setLayout({height: Math.ceil(contentHeight) + 2});
+                }}
+                scrolling="no"
                 src={`/items/details.html?id=${item.id}&preview=true`}
                 title={`Item details for ${item.name}`}
             />

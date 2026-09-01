@@ -295,7 +295,12 @@ test("item links show a dismissible detail preview after two seconds", async fun
     await page.waitForTimeout(1700);
     await expect(preview).toHaveCount(0);
 
-    await itemLink.hover();
+    const itemLinkBounds = await itemLink.boundingBox();
+    const pointer = {
+        x: itemLinkBounds.x + itemLinkBounds.width / 2,
+        y: itemLinkBounds.y + itemLinkBounds.height / 2
+    };
+    await page.mouse.move(pointer.x, pointer.y);
     await page.waitForTimeout(1900);
     await expect(preview).toHaveCount(0);
     await expect(preview).toBeVisible({timeout: 500});
@@ -305,8 +310,16 @@ test("item links show a dismissible detail preview after two seconds", async fun
         "heading", {name: "Brass lantern", exact: true})).toBeVisible();
     await expect(preview.getByRole("button", {name: "Close item preview"})).toHaveCount(0);
     const previewBounds = await preview.boundingBox();
-    expect(previewBounds.width).toBeLessThanOrEqual(480);
-    expect(previewBounds.height).toBeLessThanOrEqual(380);
+    expect(previewBounds.width).toBeGreaterThanOrEqual(640);
+    expect(previewBounds.x >= pointer.x + 8 || previewBounds.x + previewBounds.width <= pointer.x - 8).toBe(true);
+    expect(previewBounds.y >= 8).toBe(true);
+    expect(previewBounds.y + previewBounds.height).toBeLessThanOrEqual(
+        await page.evaluate(() => window.innerHeight - 8));
+    const iframeSize = await preview.locator("iframe").evaluate(frame => ({
+        clientHeight: frame.clientHeight,
+        scrollHeight: frame.contentDocument.documentElement.scrollHeight
+    }));
+    expect(iframeSize.scrollHeight).toBeLessThanOrEqual(iframeSize.clientHeight + 1);
     await expect(preview.locator("iframe").contentFrame().getByText("Notes", {exact: true})).toHaveCount(0);
 
     await preview.hover();
