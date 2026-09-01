@@ -142,8 +142,10 @@ const TRIGGER_MARKERS = [
 exports.mode = "non-transactional";
 
 exports.up = async function({query}) {
-    for (const definition of ITEM_COLUMNS)
-        await ensureItemColumn(query, definition);
+    await withLegacyZeroDatesAllowed(query, async function() {
+        for (const definition of ITEM_COLUMNS)
+            await ensureItemColumn(query, definition);
+    });
     for (const [name, definition] of Object.entries(TABLES)) {
         if (!await tableExists(query, name))
             await query(`create ${name}`, definition.sql);
@@ -153,6 +155,55 @@ exports.up = async function({query}) {
     if (!triggerIsCurrent(trigger))
         await replaceAuditTrigger(query);
 };
+
+async function withLegacyZeroDatesAllowed(query, action) {
+    const rows = await query(
+        "read session SQL mode",
+        "SELECT @@SESSION.sql_mode AS SqlMode"
+    );
+    if (rows.length !== 1 || typeof rows[0].SqlMode !== "string")
+        throw new Error("Unable to read the session SQL mode for equipment migration.");
+    const original = rows[0].SqlMode;
+    const relaxed = original.split(",").filter(mode =>
+        mode !== "NO_ZERO_DATE" && mode !== "NO_ZERO_IN_DATE").join(",");
+    if (relaxed === original)
+        return action();
+
+    await query(
+        "permit legacy zero dates in session SQL mode",
+        "SET SESSION sql_mode = ?",
+        [relaxed]
+    );
+    let actionError;
+    let result;
+    try {
+        result = await action();
+    }
+    catch (error) {
+        actionError = error;
+    }
+
+    let restoreError;
+    try {
+        await query(
+            "restore session SQL mode",
+            "SET SESSION sql_mode = ?",
+            [original]
+        );
+    }
+    catch (error) {
+        restoreError = error;
+    }
+    if (actionError && restoreError) {
+        throw new AggregateError([actionError, restoreError],
+            "Equipment migration failed and could not restore the session SQL mode.");
+    }
+    if (actionError)
+        throw actionError;
+    if (restoreError)
+        throw restoreError;
+    return result;
+}
 
 exports.verify = async function({query}) {
     for (const definition of ITEM_COLUMNS) {

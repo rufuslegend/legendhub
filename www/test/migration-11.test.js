@@ -7,12 +7,14 @@ const migration = require("../src/routes/api/migrations/11");
 
 function createQuery(responses = {}) {
     const calls = [];
-    const query = async function(operation, sql) {
-        calls.push({operation, sql});
+    const query = async function(operation, sql, values = []) {
+        calls.push({operation, sql, values});
         if (Object.hasOwn(responses, operation))
             return typeof responses[operation] === "function"
-                ? responses[operation](operation, sql)
+                ? responses[operation](operation, sql, values)
                 : responses[operation];
+        if (operation === "read session SQL mode")
+            return [{SqlMode: "STRICT_TRANS_TABLES"}];
         return [];
     };
     return {calls, query};
@@ -71,4 +73,27 @@ test("migration 11 verify rejects malformed provenance tables or stale audit tri
     const staleTrigger = migration.__test.completeInspectionResponses();
     staleTrigger["inspect Items_BEFORE_UPDATE"] = [{ACTION_STATEMENT: "OLD.`Deleted`"}];
     assert.equal(await migration.verify({query: createQuery(staleTrigger).query}), false);
+});
+
+test("migration 11 temporarily permits legacy zero dates and restores the session on failure", async () => {
+    const ddlFailure = new Error("fixture DDL failure");
+    const {calls, query} = createQuery({
+        "read session SQL mode": [{SqlMode:
+            "STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE"}],
+        "modify Items_AuditTrail.Name": () => {
+            throw ddlFailure;
+        }
+    });
+
+    await assert.rejects(migration.up({query}), ddlFailure);
+
+    const sessionChanges = calls.filter(call => call.operation.includes("session SQL mode"));
+    assert.deepEqual(sessionChanges.map(call => call.operation), [
+        "read session SQL mode",
+        "permit legacy zero dates in session SQL mode",
+        "restore session SQL mode"
+    ]);
+    assert.deepEqual(sessionChanges[1].values, ["STRICT_TRANS_TABLES"]);
+    assert.deepEqual(sessionChanges[2].values,
+        ["STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE"]);
 });
