@@ -38,7 +38,7 @@ function eraData() {
     }];
 }
 
-module.exports = async function publicPageData(query) {
+module.exports = async function publicPageData(query, variables = {}) {
     if (query.includes("getNotificationSettings")) {
         return {
             getNotificationSettings: {
@@ -60,6 +60,39 @@ module.exports = async function publicPageData(query) {
             getNotifications: {
                 moreResults: false,
                 results: []
+            }
+        };
+    }
+
+    if (query.includes("getItemById")) {
+        const id = Number(variables.id) || 101;
+        const names = {41: "Brass lantern", 54: "Limited light", 101: "Brass lantern"};
+        return {
+            ...itemMetadata(),
+            getItemById: {
+                ac: 0,
+                alignRestriction: 0,
+                constitution: 0,
+                dexterity: 0,
+                getHistories: [],
+                getMob: null,
+                getQuest: null,
+                id,
+                mind: 0,
+                modifiedBy: "Fixture author",
+                modifiedOn: "2026-09-01T12:00:00.000Z",
+                name: names[id] || `Fixture item ${id}`,
+                netStat: 2,
+                notes: "A dependable light.",
+                perception: 0,
+                rent: 5,
+                slot: 0,
+                slots: [0],
+                spirit: 0,
+                strength: 2,
+                uniqueWear: false,
+                value: 0,
+                weight: 1
             }
         };
     }

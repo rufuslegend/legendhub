@@ -7,6 +7,7 @@ with version 2.6.0.
 
 ### Added
 
+- Added two-second item previews when hovering or focusing gear names in Item Search and Builder, while preserving the existing item links and new-tab actions.
 - Added verified email addresses to accounts. New accounts now require an email address and receive a verification link before email-only features become available.
 - Added a themed, dismissible email-verification modal after each login for existing accounts without a verified address; all features available before 3.1 continue to work without one.
 - Added a plain-language Privacy Policy covering account information, Builder storage, cookies, service providers, retention, and deletion requests.

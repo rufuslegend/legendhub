@@ -2,6 +2,7 @@ import {useCallback, useEffect, useReducer, useRef, useState} from "react";
 import ColumnsDialog from "../../components/ColumnsDialog.jsx";
 import FiltersDialog from "../../components/FiltersDialog.jsx";
 import Pagination from "../../components/Pagination.jsx";
+import ItemPreview from "../../components/ItemPreview.jsx";
 import {getPageAccountPreferencesStore} from "../../lib/account-preferences-store.js";
 import {parseCookieHeader} from "../../lib/cookies.js";
 import {loadItems} from "./item-search-api.js";
@@ -20,6 +21,14 @@ function resultValue(item, stat, constants) {
     if (stat.type === "select")
         return <span style={stat.var === "alignRestriction" ? {whiteSpace: "pre"} : undefined}>{constants.selectShortOptions[stat.var]?.[item[stat.var]] || ""}</span>;
     return <span>{item[stat.var]}</span>;
+}
+
+function ItemResultName({item}) {
+    const href = `/items/details.html?id=${item.id}`;
+    return <ItemPreview item={item}>
+        <a href={href}>{item.name}</a>
+        <a className="float-right" href={href} target="_blank" rel="noreferrer" aria-label={`Open details for ${item.name} in a new tab`}><i className="fas fa-external-link-alt fa-lg" aria-hidden="true" /></a>
+    </ItemPreview>;
 }
 
 export default function ItemSearch(props) {
@@ -84,7 +93,7 @@ export default function ItemSearch(props) {
         </div><br />
         {state.status === "error" && <p role="alert" className="text-danger">{state.error}</p>}
         <Pagination criteria={state.criteria} moreResults={state.moreResults} resultLength={state.results.length} onNavigate={runSearch} />
-        <div className="row"><div className="col-12"><div className="card"><div className="card-header"><strong className="float-left">{state.criteria.search == null && Object.keys(state.criteria.filters).length === 0 ? "Recently Modified" : "Search Results"}</strong><span className="float-right clickable"><a href={addHref} aria-label="Add item"><i className="fas fa-plus" aria-hidden="true" /></a></span></div><div className="table-responsive"><table className="table table-sm table-md table-hover table-striped table-bordered mb-0"><thead className="thead-dark"><tr>{state.metadata.statInfo.filter(visible).map(stat => <th key={stat.short} className="text-center" title={stat.display} noWrap=""><button type="button" className="item-sort-button" aria-label={`Sort by ${stat.display}`} onClick={() => runSearch({...state.criteria, sortBy: stat.var, sortAsc: state.criteria.sortBy === stat.var ? !state.criteria.sortAsc : false, page: 1})}>{stat.short}&nbsp;{state.criteria.sortBy === stat.var ? <i className={`fas fa-sort-${state.criteria.sortAsc ? "up" : "down"}`} aria-hidden="true" /> : !state.criteria.sortBy && <i className="fas fa-sort" aria-hidden="true" />}</button></th>)}</tr></thead><tbody>{state.results.map(item => <tr key={item.id} onClick={event => { if (!event.target.closest("a, button")) window.location.href = `/items/details.html?id=${item.id}`; }} style={{cursor: "pointer"}}>{state.metadata.statInfo.filter(visible).map(stat => <td key={stat.short} className={stat.var === "name" ? "text-primary font-weight-bold text-nowrap" : stat.var === "alignRestriction" ? "text-center text-monospace" : "text-center"}>{stat.var === "name" ? <a href={`/items/details.html?id=${item.id}`}>{item.name}</a> : resultValue(item, stat, state.metadata.constants)}{stat.var === "name" && <a className="float-right" href={`/items/details.html?id=${item.id}`} target="_blank" rel="noreferrer" aria-label={`Open details for ${item.name} in a new tab`}><i className="fas fa-external-link-alt fa-lg" aria-hidden="true" /></a>}</td>)}</tr>)}</tbody></table></div></div></div></div><br />
+        <div className="row"><div className="col-12"><div className="card"><div className="card-header"><strong className="float-left">{state.criteria.search == null && Object.keys(state.criteria.filters).length === 0 ? "Recently Modified" : "Search Results"}</strong><span className="float-right clickable"><a href={addHref} aria-label="Add item"><i className="fas fa-plus" aria-hidden="true" /></a></span></div><div className="table-responsive"><table className="table table-sm table-md table-hover table-striped table-bordered mb-0"><thead className="thead-dark"><tr>{state.metadata.statInfo.filter(visible).map(stat => <th key={stat.short} className="text-center" title={stat.display} noWrap=""><button type="button" className="item-sort-button" aria-label={`Sort by ${stat.display}`} onClick={() => runSearch({...state.criteria, sortBy: stat.var, sortAsc: state.criteria.sortBy === stat.var ? !state.criteria.sortAsc : false, page: 1})}>{stat.short}&nbsp;{state.criteria.sortBy === stat.var ? <i className={`fas fa-sort-${state.criteria.sortAsc ? "up" : "down"}`} aria-hidden="true" /> : !state.criteria.sortBy && <i className="fas fa-sort" aria-hidden="true" />}</button></th>)}</tr></thead><tbody>{state.results.map(item => <tr key={item.id} onClick={event => { if (!event.target.closest("a, button")) window.location.href = `/items/details.html?id=${item.id}`; }} style={{cursor: "pointer"}}>{state.metadata.statInfo.filter(visible).map(stat => <td key={stat.short} className={stat.var === "name" ? "text-primary font-weight-bold text-nowrap" : stat.var === "alignRestriction" ? "text-center text-monospace" : "text-center"}>{stat.var === "name" ? <ItemResultName item={item} /> : resultValue(item, stat, state.metadata.constants)}</td>)}</tr>)}</tbody></table></div></div></div></div><br />
         <Pagination criteria={state.criteria} moreResults={state.moreResults} resultLength={state.results.length} onNavigate={runSearch} /><br /><br />
         </div></div></div></div>
         <ColumnsDialog categories={state.metadata.categories} open={columnsOpen} onClose={closeColumns} onToggle={short => { const columns = state.selectedColumns.includes(short) ? state.selectedColumns.filter(value => value !== short) : [...state.selectedColumns, short]; persistColumns(columns); dispatch({type: "column/toggle", short}); }} onReset={() => { const columns = state.metadata.statInfo.filter(stat => stat.showColumnDefault).map(stat => stat.short); persistColumns(columns); dispatch({type: "column/reset"}); }} selectedColumns={state.selectedColumns} triggerRef={columnsTriggerRef} />

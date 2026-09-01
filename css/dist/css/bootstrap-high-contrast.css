@@ -8986,6 +8986,47 @@ body > [data-react-root] {
   box-shadow: none;
 }
 
+.item-preview-popup {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 1060;
+  display: flex;
+  flex-direction: column;
+  width: min(48rem, 100vw - 2rem);
+  height: min(38rem, 100vh - 2rem);
+  color: #fff;
+  background: #000;
+  border: 1px solid #8a8a8a;
+  border-radius: 0.25rem;
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.175);
+  transform: translate(-50%, -50%);
+}
+.item-preview-popup .item-preview-popup-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #8a8a8a;
+}
+.item-preview-popup iframe {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  background: #000;
+  border: 0;
+}
+
+.item-preview-document {
+  min-height: 100vh;
+  padding: 1rem 0;
+}
+.item-preview-document > .container {
+  width: 100%;
+  max-width: none;
+}
+
 .builder-lock-action {
   min-width: 1rem;
   min-height: 1rem;

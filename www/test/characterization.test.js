@@ -417,6 +417,41 @@ test("item details use slot membership for Hold weapon fields", async function()
     assert.doesNotMatch(html, />Weapon Type<\/dt>/);
 });
 
+// Catches hover previews embedding the full site chrome and editing controls
+// instead of the existing item display in a compact, read-only document.
+test("item preview renders the item display without site or editing chrome", async function() {
+    const ejs = require("ejs");
+    const {normalizeTheme} = require("../src/view-helpers");
+    const item = {
+        ac: 0, alignRestriction: 0, constitution: 0, dexterity: 0,
+        getHistories: [{id: 70, item: {modifiedBy: "Tester", modifiedOn: new Date()}}],
+        getMob: null, getQuest: null, id: 8, mind: 0, modifiedBy: "Tester",
+        modifiedOn: new Date(), name: "Preview blade", netStat: 0, notes: "",
+        perception: 0, rent: 0, slot: 14, slots: [14], spirit: 0,
+        strength: 5, uniqueWear: false, value: 0, weight: 2
+    };
+    const shared = {
+        cookies: {}, displayDateTime: function() { return ""; }, normalizeTheme,
+        permissions: {hasPermission: function() { return true; }}, title: "Preview blade",
+        url: {path: "/items/details.html"}, user: {username: "Tester"}, version: "test"
+    };
+    const html = await ejs.renderFile(path.join(__dirname, "../src/views/items/display.ejs"), {
+        ...shared,
+        locals: shared,
+        vm: {
+            item, itemNotesHtml: "", preview: true, statCategories: [],
+            constants: {selectOptions: {
+                alignRestriction: ["No restriction"], slot: Array(14).fill("").concat("Wield")
+            }}
+        }
+    });
+
+    assert.match(html, /<body[^>]*class="item-preview-document"/);
+    assert.match(html, /<h1[^>]*>Preview blade<\/h1>/);
+    assert.match(html, /<dt class="col-8">Slot<\/dt>\s*<dd class="col-4">Wield<\/dd>/);
+    assert.doesNotMatch(html, /<nav\b|<footer\b|data-target="#deleteModal"|\/items\/edit\.html|\/items\/history\.html/);
+});
+
 test("API error types retain their public status codes", function() {
     const {
         NotFoundError,

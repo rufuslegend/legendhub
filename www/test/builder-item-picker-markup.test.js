@@ -80,6 +80,19 @@ test("locked Builder item picker renders the approved comparison workflow", asyn
     assert.equal((rendered.match(/class="builder-picker-result-disabled"/g) || []).length, 2);
 });
 
+// Catches any of the Builder's three item-name surfaces bypassing the shared
+// preview trigger: equipped gear, the current comparison, or picker results.
+test("Builder marks every real item name as a hover-preview trigger", async function() {
+    const rendered = await renderLockedPicker();
+
+    assert.equal((rendered.match(/data-item-preview-id="54"/g) || []).length, 2,
+        "equipped and current-item names must both preview");
+    assert.equal((rendered.match(/data-item-preview-id="41"/g) || []).length, 1,
+        "picker result names must preview");
+    assert.equal((rendered.match(/data-item-preview-id="0"/g) || []).length, 0,
+        "empty item rows must not preview");
+});
+
 // Catches the Hold picker inferring one role from a multi-role candidate instead
 // of trusting the role selected by the row that opened the picker.
 test("Hold picker keeps multi-role candidates without a hand-role filter", async function() {

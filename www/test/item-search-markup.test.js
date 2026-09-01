@@ -8,7 +8,7 @@ const {renderToStaticMarkup} = require("react-dom/server");
 
 const root = path.resolve(__dirname, "..");
 
-async function renderItemSearch(results) {
+async function renderItemSearch(results, selectedColumns = ["Slot"]) {
     const {createServer} = await import("vite");
     const vite = await createServer({
         appType: "custom",
@@ -24,8 +24,11 @@ async function renderItemSearch(results) {
         return renderToStaticMarkup(React.createElement(ItemSearch, {
             constants: {selectShortOptions: {slot: slots}},
             results,
-            selectedColumns: ["Slot"],
-            statInfo: [{display: "Slot", short: "Slot", showColumnDefault: true, type: "select", var: "slot"}]
+            selectedColumns,
+            statInfo: [
+                {display: "Name", short: "Name", showColumnDefault: true, type: "string", var: "name"},
+                {display: "Slot", short: "Slot", showColumnDefault: true, type: "select", var: "slot"}
+            ]
         }));
     }
     finally {
@@ -42,6 +45,17 @@ test("Item Search renders every slot capability in the Slot column", async funct
 
     assert.match(markup, /<th[^>]*>.*Slot/);
     assert.match(markup, /<td[^>]*><span>Neck, Hold<\/span><\/td>/);
+});
+
+// Catches item names in the main search remaining ordinary links that cannot
+// participate in the shared delayed-preview behavior.
+test("Item Search marks item names as hover-preview triggers", async function() {
+    const markup = await renderItemSearch([
+        {id: 17, name: "Neck-held focus", slot: 2, slots: [2, 15]}
+    ], ["Name"]);
+
+    assert.match(markup,
+        /class="item-preview-trigger"[^>]*data-item-preview-id="17"[^>]*>.*href="\/items\/details\.html\?id=17"[^>]*>Neck-held focus<\/a>/);
 });
 
 // Catches paging/search refreshes retaining only a scalar slot after the

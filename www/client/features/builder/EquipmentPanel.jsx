@@ -5,6 +5,7 @@ import {
   SLOT_LABELS,
 } from "./item-constants.js";
 import { useEffect, useRef } from "react";
+import ItemPreview from "../../components/ItemPreview.jsx";
 import {
   canEquipHandCandidate,
   canOpenEquipmentRow,
@@ -116,6 +117,15 @@ function DetailsLink({ item }) {
       <i className="fas fa-external-link-alt fa-lg" aria-hidden="true" />
     </a>
   ) : null;
+}
+
+function ItemNameWithDetails({children, item}) {
+  return (
+    <ItemPreview item={item}>
+      {children}
+      <DetailsLink item={item} />
+    </ItemPreview>
+  );
 }
 
 function EquipmentHeaderRow({ stats, className = "" }) {
@@ -273,19 +283,20 @@ export default function EquipmentPanel({
                     className={`${canOpen ? "clickable " : ""}py-1 py-lg-0`}
                     onClick={canOpen ? () => onOpen(index) : undefined}
                   >
-                    <button
-                      type="button"
-                      className="btn btn-link p-0 text-reset font-weight-bold builder-table-action"
-                      disabled={!canOpen}
-                      aria-describedby={!canOpen ? handStatusId : undefined}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (canOpen) onOpen(index);
-                      }}
-                    >
-                      {item.name || "-"}
-                    </button>
-                    <DetailsLink item={item} />
+                    <ItemNameWithDetails item={item}>
+                      <button
+                        type="button"
+                        className="btn btn-link p-0 text-reset font-weight-bold builder-table-action"
+                        disabled={!canOpen}
+                        aria-describedby={!canOpen ? handStatusId : undefined}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (canOpen) onOpen(index);
+                        }}
+                      >
+                        {item.name || "-"}
+                      </button>
+                    </ItemNameWithDetails>
                     {!canOpen && (
                       <span id={handStatusId} className="sr-only">
                         All three hands are already in use.
@@ -388,8 +399,9 @@ export default function EquipmentPanel({
                         </button>
                       </td>
                       <th scope="row">
-                        {current.name}
-                        <DetailsLink item={current} />
+                        <ItemNameWithDetails item={current}>
+                          {current.name}
+                        </ItemNameWithDetails>
                       </th>
                       {stats.map((stat) => (
                         <td key={stat.var}>{displayValue(current, stat)}</td>
@@ -540,19 +552,20 @@ export default function EquipmentPanel({
                             onClick={disabled ? undefined : () => onPick(item)}
                           >
                             <td>
-                              <button
-                                className="btn btn-link p-0 builder-table-action"
-                                type="button"
-                                disabled={disabled}
-                                aria-describedby={describedBy}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  if (!disabled) onPick(item);
-                                }}
-                              >
-                                {item.name}
-                              </button>
-                              <DetailsLink item={item} />
+                              <ItemNameWithDetails item={item}>
+                                <button
+                                  className="btn btn-link p-0 builder-table-action"
+                                  type="button"
+                                  disabled={disabled}
+                                  aria-describedby={describedBy}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    if (!disabled) onPick(item);
+                                  }}
+                                >
+                                  {item.name}
+                                </button>
+                              </ItemNameWithDetails>
                             </td>
                             {stats.map((stat) => (
                               <td key={stat.var}>{displayValue(item, stat)}</td>

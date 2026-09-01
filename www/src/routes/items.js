@@ -117,7 +117,8 @@ router.get(["/", "/index.html"], async function(req, res, next) {
 
 router.get(["/details.html"], async function(req, res, next) {
     const id = integerParam(req.query.id);
-    if (res.locals.user)
+    const preview = booleanParam(req.query.preview);
+    if (!preview && res.locals.user)
         res.locals.user.notifications = await apiUtils.handleNotifications(req.cookies.loginToken, res.locals.user.notifications, 'item', id);
 
     let getItemQuery = `${itemApi.fragment}
@@ -170,6 +171,7 @@ router.get(["/details.html"], async function(req, res, next) {
     let vm = {
         item,
         itemNotesHtml: renderMarkdown(item.notes),
+        preview,
         statCategories,
         constants: itemApi.constants,
     }

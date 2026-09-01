@@ -181,8 +181,8 @@ test.beforeAll(async function() {
     const apiUtils = require("../src/routes/api/utils");
     const originalPostAsync = apiUtils.postAsync;
     apiUtils.postAsync = function(query, _ip, variables) {
-        if (query.includes("getItems("))
-            return publicPageData(query);
+        if (query.includes("getItems(") || query.includes("getItemById"))
+            return publicPageData(query, variables);
         if (query.includes("getItemStatCategories"))
             return Promise.resolve({getItemStatCategories: itemStatCategories, getItemStatInfo: itemStatInfo});
         if (query.includes("AccountPreferenceBootstrap")) {
@@ -274,6 +274,79 @@ test("Item Search applies and saves account columns without changing its cookie"
     });
     expect(preferenceRequests[1].variables.storageGeneration).toBe(2);
     expect((await context.cookies(baseUrl)).find(cookie => cookie.name === "sc2")?.value).toBe("Name-");
+});
+
+// Catches item links opening previews immediately, failing to cancel an
+// abandoned hover, losing keyboard access, or changing their existing links.
+test("item links show a dismissible detail preview after two seconds", async function({page}) {
+    await page.goto(`${baseUrl}/items/`);
+    const itemLink = page.getByRole("link", {name: "Brass lantern", exact: true});
+    const externalLink = page.getByRole("link", {
+        name: "Open details for Brass lantern in a new tab"
+    });
+    const preview = page.getByRole("dialog", {name: "Item preview: Brass lantern"});
+
+    await expect(itemLink).toHaveAttribute("href", "/items/details.html?id=101");
+    await expect(externalLink).toHaveAttribute("target", "_blank");
+
+    await itemLink.hover();
+    await page.waitForTimeout(500);
+    await page.mouse.move(1, 1);
+    await page.waitForTimeout(1700);
+    await expect(preview).toHaveCount(0);
+
+    await itemLink.hover();
+    await page.waitForTimeout(1900);
+    await expect(preview).toHaveCount(0);
+    await expect(preview).toBeVisible({timeout: 500});
+    await expect(preview.locator("iframe")).toHaveAttribute(
+        "src", "/items/details.html?id=101&preview=true");
+    await expect(preview.locator("iframe").contentFrame().getByRole(
+        "heading", {name: "Brass lantern", exact: true})).toBeVisible();
+
+    await preview.hover();
+    await page.waitForTimeout(200);
+    await expect(preview).toBeVisible();
+    await page.mouse.move(1, 1);
+    await expect(preview).toHaveCount(0);
+
+    await itemLink.focus();
+    await expect(preview).toBeVisible({timeout: 2500});
+    await page.keyboard.press("Escape");
+    await expect(preview).toHaveCount(0);
+});
+
+// Catches the shared preview working in Item Search but not on equipped gear
+// or item choices inside the Builder's modal table.
+test("Builder equipment and picker choices share item previews", async function({page}) {
+    await page.goto(`${baseUrl}/builder/`);
+    const equipped = equipmentTable(page).locator("tbody tr").nth(1)
+        .getByRole("button", {name: "Limited light", exact: true});
+    await equipped.hover();
+    let preview = page.getByRole("dialog", {name: "Item preview: Limited light"});
+    await expect(preview).toBeVisible({timeout: 2500});
+    await page.keyboard.press("Escape");
+
+    await equipped.click();
+    const chooser = page.getByRole("dialog", {name: "Choose Item"});
+    const choice = chooser.locator('[data-item-preview-id="41"]');
+    await choice.hover();
+    preview = page.getByRole("dialog", {name: "Item preview: Brass lantern"});
+    await expect(preview).toBeVisible({timeout: 2500});
+    await expect(preview.locator("iframe").contentFrame().getByRole(
+        "heading", {name: "Brass lantern", exact: true})).toBeVisible();
+    expect(await preview.evaluate(element => ({
+        modalLabel: element.closest('[role="dialog"][aria-modal="true"]')?.getAttribute("aria-label"),
+        parentLabel: element.parentElement?.getAttribute("aria-label")
+    }))).toEqual({modalLabel: "Choose Item", parentLabel: "Choose Item"});
+    await preview.getByRole("button", {name: "Close item preview"}).focus();
+    expect(await page.evaluate(() => ({
+        ariaLabel: document.activeElement?.getAttribute("aria-label"),
+        id: document.activeElement?.id,
+        tagName: document.activeElement?.tagName
+    }))).toEqual({ariaLabel: "Close item preview", id: "", tagName: "BUTTON"});
+    await page.keyboard.press("Escape");
+    await expect(chooser).toBeVisible();
 });
 
 // Catches a non-network preference rejection retrying automatically, exposing

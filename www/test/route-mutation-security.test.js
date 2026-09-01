@@ -208,6 +208,37 @@ test("authenticated detail routes use one numeric id for notifications and conte
     }
 });
 
+// Catches a passive hover preview marking an item notification as read or
+// rendering the full navigational detail page inside the preview frame.
+test("item preview is read-only and requests the compact detail display", async function() {
+    let notificationCalls = 0;
+    let rendered;
+    const router = loadResourceRoute(resources[0], async function() {
+        return {
+            getItemById: {id: 7, name: "Preview blade", notes: ""},
+            getItemStatCategories: []
+        };
+    }, async function(_token, notifications) {
+        notificationCalls += 1;
+        return notifications;
+    });
+    const handler = routeHandlers(router, "/details.html", "get")[0];
+
+    await handler({
+        cookies: {loginToken: "session-token"},
+        query: {id: "7", preview: "true"}
+    }, {
+        locals: {user: {notifications: [{id: 1}]}},
+        render: function(view, data) { rendered = {data, view}; }
+    }, function(error) {
+        if (error) throw error;
+    });
+
+    assert.equal(notificationCalls, 0);
+    assert.equal(rendered.view, "items/display");
+    assert.equal(rendered.data.vm.preview, true);
+});
+
 test("Items list normalizes malformed and repeated public query parameters", async function() {
     let captured;
     const router = loadResourceRoute(resources[0], async function(query, ip, variables) {

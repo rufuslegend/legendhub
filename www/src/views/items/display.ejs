@@ -40,17 +40,20 @@ AC: <%-vm.item.ac%>" />
     <link href="https://www.legendhub.org/items/details.html?id=<%-vm.item.id%>" rel="canonical">
     <%}%>
 </head>
-<body>
+<body<%-vm.preview ? ' class="item-preview-document"' : ''%>>
+    <%if (!vm.preview) {%>
     <%- include('../shared/header') %>
+    <%}%>
     <div class="container">
         <div class="row">
             <h1 class="col-12 text-center text-md-left text-primary"><%=vm.item.name%></h1>
-            <%if (vm.historyId) {%>
+            <%if (vm.historyId && !vm.preview) {%>
             <h4 class="d-inline col-12 text-center text-md-left">
                 <a class="text-warning" href="/items/details.html?id=<%-vm.item.id%>">view latest version</a>
             </h4>
             <%}%>
         </div>
+        <%if (!vm.preview) {%>
         <div class="row justify-content-center justify-content-md-start">
             <div class="card" style="border:0;background:none">
                 <div class="card-header p-0" style="border:0;background:none">
@@ -77,6 +80,7 @@ AC: <%-vm.item.ac%>" />
             </div>
         </div>
         <br>
+        <%}%>
         <% if (vm.item.getMob) { %>
         <div class="row">
             <span class="col-12 text-center text-md-left"><strong>Mob:</strong>&nbsp;&nbsp;<a href="/mobs/details.html?id=<%-vm.item.getMob.id%>"><%=vm.item.getMob.name%>
@@ -237,6 +241,7 @@ AC: <%-vm.item.ac%>" />
             </div>
         </div>
     </div>
+    <%if (!vm.preview) {%>
     <div class="modal" id="deleteModal" tabindex="-1" role="dialog">
       <div class="modal-dialog" role="document">
         <div class="modal-content">
@@ -263,5 +268,6 @@ AC: <%-vm.item.ac%>" />
     </div>
     <%- include('../shared/footer') %>
     <%- include('../shared/scripts') %>
+    <%}%>
 </body>
 </html>
