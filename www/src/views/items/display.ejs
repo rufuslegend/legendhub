@@ -107,6 +107,7 @@ AC: <%-vm.item.ac%>" />
         </div>
         <br>
         <% } %>
+        <% const showItemStat = value => !vm.preview || value != 0; %>
         <div class="row">
             <div class="col-12 col-md-10 col-lg-8">
                 <div class="card">
@@ -123,11 +124,14 @@ AC: <%-vm.item.ac%>" />
                                 </div>
                                 <%_ } %>
                             </div>
+                            <% if (showItemStat(vm.item.rent) || (vm.item.rent !== vm.item.value && vm.item.value !== 0)) { %>
                             <div class="col-12 col-sm-6">
+                                <% if (showItemStat(vm.item.rent)) { %>
                                 <div class="row">
                                     <dt class="col-8">Rent</dt>
                                     <dd class="col-4"><%=vm.item.rent%></dd>
                                 </div>
+                                <% } %>
                                 <% if (vm.item.rent !== vm.item.value && vm.item.value !== 0) { _%>
                                 <div class="row">
                                     <dt class="col-8">Sells For</dt>
@@ -135,31 +139,55 @@ AC: <%-vm.item.ac%>" />
                                 </div>
                                 <%_ } %>
                             </div>
+                            <% } %>
                         </div>
                     </div>
                     <div class="card-body">
+                        <% if ([vm.item.strength, vm.item.constitution, vm.item.mind,
+                            vm.item.perception, vm.item.dexterity, vm.item.spirit].some(showItemStat)) { %>
                         <dl class="row">
+                            <% if (showItemStat(vm.item.strength)) { %>
                             <dt class="col-sm-4 col-8">Strength</dt>
                             <dd class="col-sm-2 col-4"><%=vm.item.strength%></dd>
+                            <% } %>
+                            <% if (showItemStat(vm.item.constitution)) { %>
                             <dt class="col-sm-4 col-8">Constitution</dt>
                             <dd class="col-sm-2 col-4"><%=vm.item.constitution%></dd>
+                            <% } %>
+                            <% if (showItemStat(vm.item.mind)) { %>
                             <dt class="col-sm-4 col-8">Mind</dt>
                             <dd class="col-sm-2 col-4"><%=vm.item.mind%></dd>
+                            <% } %>
+                            <% if (showItemStat(vm.item.perception)) { %>
                             <dt class="col-sm-4 col-8">Perception</dt>
                             <dd class="col-sm-2 col-4"><%=vm.item.perception%></dd>
+                            <% } %>
+                            <% if (showItemStat(vm.item.dexterity)) { %>
                             <dt class="col-sm-4 col-8">Dexterity</dt>
                             <dd class="col-sm-2 col-4"><%=vm.item.dexterity%></dd>
+                            <% } %>
+                            <% if (showItemStat(vm.item.spirit)) { %>
                             <dt class="col-sm-4 col-8">Spirit</dt>
                             <dd class="col-sm-2 col-4"><%=vm.item.spirit%></dd>
+                            <% } %>
                         </dl>
+                        <% } %>
+                        <% if ([vm.item.ac, vm.item.weight, vm.item.netStat].some(showItemStat)) { %>
                         <dl class="row">
+                            <% if (showItemStat(vm.item.ac)) { %>
                             <dt class="col-sm-4 col-8">AC</dt>
                             <dd class="col-sm-2 col-4"><%=vm.item.ac%></dd>
+                            <% } %>
+                            <% if (showItemStat(vm.item.weight)) { %>
                             <dt class="col-sm-4 col-8">Weight</dt>
                             <dd class="col-sm-2 col-4"><%=vm.item.weight%></dd>
+                            <% } %>
+                            <% if (showItemStat(vm.item.netStat)) { %>
                             <dt class="offset-sm-6 col-sm-4 col-8">Net Stat</dt>
                             <dd class="col-sm-2 col-4"><%=vm.item.netStat%></dd>
+                            <% } %>
                         </dl>
+                        <% } %>
                         <br><br>
                         <%_
                             for (let i = 0; i < vm.statCategories.length; ++i) {

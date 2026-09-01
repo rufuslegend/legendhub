@@ -423,10 +423,10 @@ test("item preview renders the item display without site or editing chrome", asy
     const ejs = require("ejs");
     const {normalizeTheme} = require("../src/view-helpers");
     const item = {
-        ac: 0, alignRestriction: 0, constitution: 0, dexterity: 0,
+        ac: -3, alignRestriction: 0, constitution: 0, dexterity: 2,
         getHistories: [{id: 70, item: {modifiedBy: "Tester", modifiedOn: new Date()}}],
         getMob: null, getQuest: null, id: 8, mind: 0, modifiedBy: "Tester",
-        modifiedOn: new Date(), name: "Preview blade", netStat: 0,
+        modifiedOn: new Date(), name: "Preview blade", netStat: 4.5,
         notes: "Secret acquisition instructions",
         perception: 0, rent: 0, slot: 14, slots: [14], spirit: 0,
         strength: 5, uniqueWear: false, value: 0, weight: 2
@@ -434,7 +434,7 @@ test("item preview renders the item display without site or editing chrome", asy
     const shared = {
         cookies: {}, displayDateTime: function() { return ""; }, normalizeTheme,
         permissions: {hasPermission: function() { return true; }}, title: "Preview blade",
-        url: {path: "/items/details.html"}, user: {username: "Tester"}, version: "test"
+        url: {path: "/items/details.html"}, user: null, version: "test"
     };
     const html = await ejs.renderFile(path.join(__dirname, "../src/views/items/display.ejs"), {
         ...shared,
@@ -451,8 +451,26 @@ test("item preview renders the item display without site or editing chrome", asy
     assert.match(html, /<body[^>]*class="item-preview-document"/);
     assert.match(html, /<h1[^>]*>Preview blade<\/h1>/);
     assert.match(html, /<dt class="col-8">Slot<\/dt>\s*<dd class="col-4">Wield<\/dd>/);
+    assert.doesNotMatch(html, />Rent<\/dt>|>Constitution<\/dt>|>Mind<\/dt>|>Perception<\/dt>|>Spirit<\/dt>/);
+    const orderedStats = [">Strength</dt>", ">Dexterity</dt>", ">AC</dt>", ">Weight</dt>", ">Net Stat</dt>"];
+    for (let index = 1; index < orderedStats.length; ++index)
+        assert.ok(html.indexOf(orderedStats[index - 1]) < html.indexOf(orderedStats[index]));
     assert.doesNotMatch(html, />Notes<\/div>|Secret acquisition instructions/);
     assert.doesNotMatch(html, /<nav\b|<footer\b|data-target="#deleteModal"|\/items\/edit\.html|\/items\/history\.html/);
+
+    const fullHtml = await ejs.renderFile(path.join(__dirname, "../src/views/items/display.ejs"), {
+        ...shared,
+        locals: shared,
+        vm: {
+            item, itemNotesHtml: "<p>Secret acquisition instructions</p>",
+            historyId: null, preview: false, statCategories: [],
+            constants: {selectOptions: {
+                alignRestriction: ["No restriction"], slot: Array(14).fill("").concat("Wield")
+            }}
+        }
+    });
+    assert.match(fullHtml, />Rent<\/dt>\s*<dd[^>]*>0<\/dd>/);
+    assert.match(fullHtml, />Constitution<\/dt>\s*<dd[^>]*>0<\/dd>/);
 });
 
 test("API error types retain their public status codes", function() {
