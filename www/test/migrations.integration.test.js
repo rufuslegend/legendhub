@@ -11,6 +11,8 @@ function query(pool, sql, values = []) {
         pool.query(sql, values, function(error, results) {
             if (error)
                 reject(error);
+            else if (Array.isArray(results))
+                resolve(results.map(row => row && !Array.isArray(row) ? {...row} : row));
             else
                 resolve(results);
         });
@@ -186,6 +188,7 @@ test("slot mask migration backfills legacy items and resumes after its additive 
                     Name VARCHAR(255) NOT NULL,
                     Slot INT NOT NULL,
                     Holdable TINYINT NOT NULL,
+                    Casts VARCHAR(50) NULL,
                     ModifiedBy VARCHAR(64) NOT NULL,
                     PRIMARY KEY (Id)
                 ) ENGINE=InnoDB;
@@ -195,6 +198,7 @@ test("slot mask migration backfills legacy items and resumes after its additive 
                     Name VARCHAR(255) NOT NULL,
                     Slot INT NOT NULL,
                     Holdable TINYINT NOT NULL,
+                    Casts VARCHAR(50) NULL,
                     ModifiedBy VARCHAR(64) NOT NULL,
                     PRIMARY KEY (Id)
                 ) ENGINE=InnoDB;
@@ -264,9 +268,61 @@ test("slot mask migration backfills legacy items and resumes after its additive 
                 CreatedOn DATETIME NOT NULL,
                 PRIMARY KEY (Id)
             ) ENGINE=InnoDB;
+            CREATE TABLE ItemStatInfo (
+                Id INT NOT NULL AUTO_INCREMENT,
+                Display VARCHAR(25) NOT NULL,
+                Short VARCHAR(10) NOT NULL,
+                Var VARCHAR(35) NOT NULL,
+                Type VARCHAR(15) NOT NULL,
+                FilterString VARCHAR(10) NOT NULL,
+                DefaultValue VARCHAR(10) NULL,
+                NetStat DECIMAL(5,2) NULL,
+                ShowColumnDefault TINYINT NOT NULL,
+                Editable TINYINT NOT NULL,
+                CategoryId INT NOT NULL,
+                SortNumber INT NOT NULL,
+                PRIMARY KEY (Id)
+            ) ENGINE=InnoDB;
             INSERT INTO Members (Id, Username) VALUES (17, 'ItemEditor');
         `);
         await migrations.up();
+
+        assert.deepEqual(
+            await query(pool, "SELECT Id FROM Migrations ORDER BY Id"),
+            Array.from({length: 11}, (_, index) => ({Id: index + 1}))
+        );
+        assert.deepEqual(
+            await query(pool, `
+                SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE,
+                    COLUMN_DEFAULT, CHARACTER_SET_NAME, COLLATION_NAME
+                FROM information_schema.columns
+                WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME IN ('Items', 'Items_AuditTrail')
+                    AND COLUMN_NAME IN ('Name', 'Casts', 'Official')
+                ORDER BY TABLE_NAME, COLUMN_NAME
+            `),
+            [
+                {TABLE_NAME: "Items", COLUMN_NAME: "Casts", COLUMN_TYPE: "mediumtext", IS_NULLABLE: "YES", COLUMN_DEFAULT: null, CHARACTER_SET_NAME: "utf8mb4", COLLATION_NAME: "utf8mb4_unicode_ci"},
+                {TABLE_NAME: "Items", COLUMN_NAME: "Name", COLUMN_TYPE: "varchar(255)", IS_NULLABLE: "NO", COLUMN_DEFAULT: null, CHARACTER_SET_NAME: "utf8mb4", COLLATION_NAME: "utf8mb4_unicode_ci"},
+                {TABLE_NAME: "Items", COLUMN_NAME: "Official", COLUMN_TYPE: "tinyint(4)", IS_NULLABLE: "NO", COLUMN_DEFAULT: "0", CHARACTER_SET_NAME: null, COLLATION_NAME: null},
+                {TABLE_NAME: "Items_AuditTrail", COLUMN_NAME: "Casts", COLUMN_TYPE: "mediumtext", IS_NULLABLE: "YES", COLUMN_DEFAULT: null, CHARACTER_SET_NAME: "utf8mb4", COLLATION_NAME: "utf8mb4_unicode_ci"},
+                {TABLE_NAME: "Items_AuditTrail", COLUMN_NAME: "Name", COLUMN_TYPE: "varchar(255)", IS_NULLABLE: "NO", COLUMN_DEFAULT: null, CHARACTER_SET_NAME: "utf8mb4", COLLATION_NAME: "utf8mb4_unicode_ci"},
+                {TABLE_NAME: "Items_AuditTrail", COLUMN_NAME: "Official", COLUMN_TYPE: "tinyint(4)", IS_NULLABLE: "NO", COLUMN_DEFAULT: "0", CHARACTER_SET_NAME: null, COLLATION_NAME: null}
+            ]
+        );
+        assert.deepEqual(
+            await query(pool, `
+                SELECT TABLE_NAME FROM information_schema.tables
+                WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME IN ('OfficialItemVariants', 'EquipmentSubmissions')
+                ORDER BY TABLE_NAME
+            `),
+            [{TABLE_NAME: "EquipmentSubmissions"}, {TABLE_NAME: "OfficialItemVariants"}]
+        );
+        assert.deepEqual(
+            await query(pool, "SELECT Var, Editable, FilterString FROM ItemStatInfo WHERE Var = 'official'"),
+            [{Var: "official", Editable: 0, FilterString: "= 1"}]
+        );
 
         assert.deepEqual(
             await query(pool, "SELECT Id, SlotMask FROM Items ORDER BY Id"),
@@ -287,8 +343,8 @@ test("slot mask migration backfills legacy items and resumes after its additive 
 
         await query(pool, "UPDATE Items SET Name = 'Holdable sword updated' WHERE Id = 101");
         assert.deepEqual(
-            await query(pool, "SELECT ItemId, SlotMask FROM Items_AuditTrail WHERE ItemId = 101"),
-            [{ItemId: 101, SlotMask: 49152}]
+            await query(pool, "SELECT ItemId, SlotMask, Official FROM Items_AuditTrail WHERE ItemId = 101"),
+            [{ItemId: 101, SlotMask: 49152, Official: 0}]
         );
         assert.deepEqual(
             await query(pool, `
@@ -304,6 +360,23 @@ test("slot mask migration backfills legacy items and resumes after its additive 
                 Verb: "updated"
             }]
         );
+
+        await query(pool, `
+            DELETE FROM MigrationRuns WHERE MigrationId = 11;
+            DELETE FROM Migrations WHERE Id = 11;
+            DROP TABLE EquipmentSubmissions;
+        `);
+        await migrations.up();
+        assert.deepEqual(
+            await query(pool, `
+                SELECT TABLE_NAME FROM information_schema.tables
+                WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME = 'EquipmentSubmissions'
+            `),
+            [{TABLE_NAME: "EquipmentSubmissions"}]
+        );
+        assert.deepEqual(await query(pool, "SELECT Id FROM Migrations WHERE Id = 11"),
+            [{Id: 11}]);
     }
     finally {
         await end(pool);
@@ -434,10 +507,10 @@ test("email migration reaches its verified schema state and can recover on a sec
             "the migrated schema retains the v3.0 registration insert contract"
         );
 
-        await query(
-            pool,
-            "DELETE FROM MigrationRuns WHERE MigrationId = 8; DELETE FROM Migrations WHERE Id = 8"
-        );
+        await query(pool, `
+            DELETE FROM MigrationRuns WHERE MigrationId >= 8;
+            DELETE FROM Migrations WHERE Id >= 8;
+        `);
         await migrations.up();
         assert.deepEqual(await query(pool, "SELECT Id FROM Migrations WHERE Id = 8"), [{Id: 8}]);
     }
@@ -574,12 +647,12 @@ test("Builder storage migration verifies its additive schema and is retry-safe",
             ),
             [
                 {TABLE_NAME: "AccountPreferences", COLUMN_NAME: "DocumentVersion", COLUMN_TYPE: "int(11)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: "1", EXTRA: ""},
-                {TABLE_NAME: "AccountPreferences", COLUMN_NAME: "Payload", COLUMN_TYPE: "json", IS_NULLABLE: "NO", CHARACTER_SET_NAME: "utf8mb4", COLUMN_DEFAULT: null, EXTRA: ""},
+                {TABLE_NAME: "AccountPreferences", COLUMN_NAME: "Payload", COLUMN_TYPE: "json", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: null, EXTRA: ""},
                 {TABLE_NAME: "AccountPreferences", COLUMN_NAME: "Revision", COLUMN_TYPE: "bigint(20)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: "1", EXTRA: ""},
                 {TABLE_NAME: "AccountPreferences", COLUMN_NAME: "StorageGeneration", COLUMN_TYPE: "bigint(20)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: "1", EXTRA: ""},
                 {TABLE_NAME: "BuilderImportReceipts", COLUMN_NAME: "Id", COLUMN_TYPE: "bigint(20)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: null, EXTRA: "auto_increment"},
                 {TABLE_NAME: "BuilderImportReceipts", COLUMN_NAME: "IdempotencyKey", COLUMN_TYPE: "char(64)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: "ascii", COLUMN_DEFAULT: null, EXTRA: ""},
-                {TABLE_NAME: "BuilderImportReceipts", COLUMN_NAME: "ResultPayload", COLUMN_TYPE: "json", IS_NULLABLE: "NO", CHARACTER_SET_NAME: "utf8mb4", COLUMN_DEFAULT: null, EXTRA: ""},
+                {TABLE_NAME: "BuilderImportReceipts", COLUMN_NAME: "ResultPayload", COLUMN_TYPE: "json", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: null, EXTRA: ""},
                 {TABLE_NAME: "BuilderProfiles", COLUMN_NAME: "ActiveNameHash", COLUMN_TYPE: "binary(32)", IS_NULLABLE: "YES", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: null, EXTRA: ""},
                 {TABLE_NAME: "BuilderProfiles", COLUMN_NAME: "DeletedOn", COLUMN_TYPE: "datetime", IS_NULLABLE: "YES", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: null, EXTRA: ""},
                 {TABLE_NAME: "BuilderProfiles", COLUMN_NAME: "Id", COLUMN_TYPE: "bigint(20)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: null, EXTRA: "auto_increment"},
@@ -630,10 +703,10 @@ test("Builder storage migration verifies its additive schema and is retry-safe",
             ]
         );
 
-        await query(
-            pool,
-            "DELETE FROM MigrationRuns WHERE MigrationId = 9; DELETE FROM Migrations WHERE Id = 9"
-        );
+        await query(pool, `
+            DELETE FROM MigrationRuns WHERE MigrationId >= 9;
+            DELETE FROM Migrations WHERE Id >= 9;
+        `);
         await migrations.up();
         assert.deepEqual(await query(pool, "SELECT Id FROM Migrations WHERE Id = 9"), [{Id: 9}]);
     }

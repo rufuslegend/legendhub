@@ -8,6 +8,7 @@ const test = require("node:test");
 const root = path.resolve(__dirname, "../..");
 const baseEnvironment = {
     ...process.env,
+    EQUIPMENT_SPOOL_HOST_PATH: "/example/legendhub-spool",
     EXTERNAL_PORT: "127.0.0.1:7001",
     GITHUB_REPOSITORY: "rufuslegend/legendhub",
     GITHUB_TOKEN: "",
@@ -39,6 +40,7 @@ function render(extraEnvironment = {}) {
     return spawnSync("docker", [
         "compose",
         "-f", "docker-compose.yaml",
+        "-f", "docker-compose.equipment-importer.yaml",
         "-f", "docker-compose.registry.yaml",
         "config",
         "--format", "json",
@@ -87,4 +89,5 @@ test("uses immutable registry images without builds or the web source mount", ()
         (volume) => volume.target === "/app/src"), false);
     assert.equal(services.mysql.image, "mysql:5");
     assert.equal(services.mysql.platform, "linux/amd64");
+    assert.equal("equipment-importer" in services, false);
 });

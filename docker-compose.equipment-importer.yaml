@@ -1,0 +1,24 @@
+services:
+    equipment-importer:
+        profiles: [equipment-importer]
+        build:
+            context: .
+            dockerfile: www/Dockerfile
+        entrypoint: ["node", "src/equipment-importer.js"]
+        depends_on:
+            mysql:
+                condition: service_healthy
+        environment:
+            MYSQL_HOST: mysql
+            MYSQL_PORT: ${MYSQL_PORT}
+            MYSQL_USER: ${MYSQL_USER}
+            MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+            MYSQL_DATABASE: ${MYSQL_DATABASE}
+            EQUIPMENT_SPOOL_ROOT: /var/spool/legendhub
+            EQUIPMENT_IMPORT_POLL_MS: ${EQUIPMENT_IMPORT_POLL_MS:-5000}
+        volumes:
+            - type: bind
+              source: ${EQUIPMENT_SPOOL_HOST_PATH:?set EQUIPMENT_SPOOL_HOST_PATH}
+              target: /var/spool/legendhub
+        networks: [legendhub]
+        restart: unless-stopped

@@ -69,8 +69,9 @@ compose=(
   docker compose
   -f docker-compose.yaml
   -f docker-compose.test.yaml
-  -f docker-compose.registry.yaml
   -f docker-compose.content-sync.yaml
+  -f docker-compose.equipment-importer.yaml
+  -f docker-compose.registry.yaml
 )
 "${compose[@]}" config --quiet
 ```
@@ -90,15 +91,15 @@ release_sha='REPLACE-WITH-12-CHARACTER-IMMUTABLE-SHA'
 ./scripts/deploy-test.sh "$release_sha"
 ```
 
-For a current tree, the wrapper requires all four overlays, pulls the three
+For a current tree, the wrapper requires all five overlays, pulls the three
 application services plus `content-sync`, and lets the ignored
 `COMPOSE_PROFILES` value decide whether sync starts. For a rollback target
 whose Git tree genuinely predates `docker-compose.content-sync.yaml`, it uses
-the three legacy overlays and removes only the exactly labeled stale
-`content-sync` container before starting the legacy services. It does not
-remove the sync state volume or database data. A current tree with a missing
-tracked overlay fails closed. Do not work around either result by omitting an
-overlay or by running `down --volumes`.
+the overlays present in that target and removes only exactly labeled stale
+optional-service containers before starting the legacy services. It does not
+remove the sync state volume, spool, or database data. A current tree with a
+missing tracked overlay fails closed. Do not work around either result by
+omitting an overlay or by running `down --volumes`.
 
 ## One-time key and host-key provisioning
 

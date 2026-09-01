@@ -175,6 +175,66 @@ test("content detail, history, and edit routes pass numeric ids as GraphQL varia
     }
 });
 
+// Catches the item viewer dropping importer attribution by omitting the
+// provenance field from either its current-item or history query.
+test("item detail and history routes request submission attribution", async function() {
+    for (const path of ["/details.html", "/history.html"]) {
+        const sentinel = new Error("stop after query capture");
+        let capturedQuery;
+        const router = loadResourceRoute(resources[0], async function(query) {
+            capturedQuery = query;
+            throw sentinel;
+        });
+        const handler = routeHandlers(router, path, "get")[0];
+        let forwardedError;
+
+        await handler({
+            cookies: {}, ip: "192.0.2.21", query: {id: "83"}
+        }, {
+            locals: {url: {path: `/items${path}`}, user: null}
+        }, function(error) {
+            forwardedError = error;
+        });
+
+        assert.equal(forwardedError, sentinel);
+        assert.match(capturedQuery, /\bsubmittedBy\b/);
+    }
+});
+
+// Catches direct navigation bypassing the viewer controls and exposing the
+// editor for game-owned data.
+test("official item edit routes fail closed before rendering the editor", async function() {
+    const router = loadResourceRoute(resources[0], async function() {
+        return {
+            getItemById: {id: 83, name: "Official shield", official: true},
+            getItemStatCategories: []
+        };
+    });
+    const handler = routeHandlers(router, "/edit.html", "get")[0];
+    let forwardedError;
+    let rendered = false;
+
+    await handler({
+        cookies: {},
+        ip: "192.0.2.21",
+        query: {id: "83"}
+    }, {
+        locals: {
+            url: {path: "/items/edit.html"},
+            user: {notifications: []}
+        },
+        redirect: function() {
+            assert.fail("authenticated edit route must not redirect");
+        },
+        render: function() { rendered = true; }
+    }, function(error) {
+        forwardedError = error;
+    });
+
+    assert.equal(forwardedError?.status, 403);
+    assert.equal(rendered, false);
+});
+
 test("authenticated detail routes use one numeric id for notifications and content lookup", async function() {
     for (const resource of resources) {
         const sentinel = new Error("stop after query capture");

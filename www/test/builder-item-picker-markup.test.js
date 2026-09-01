@@ -8,7 +8,7 @@ const {renderToStaticMarkup} = require("react-dom/server");
 
 const root = path.resolve(__dirname, "..");
 
-async function renderLockedPicker() {
+async function renderLockedPicker(searchString = "") {
     const {createServer} = await import("vite");
     const vite = await createServer({
         appType: "custom",
@@ -37,7 +37,7 @@ async function renderLockedPicker() {
             isRuneCrafting: false,
             itemsBySlot,
             itemsPerPage: 20,
-            searchString: "",
+            searchString,
             selectedList: {items: [currentItem]},
             sortDir: "-",
             sortStat: "",
@@ -91,6 +91,19 @@ test("Builder marks every real item name as a hover-preview trigger", async func
         "picker result names must preview");
     assert.equal((rendered.match(/data-item-preview-id="0"/g) || []).length, 0,
         "empty item rows must not preview");
+});
+
+// Catches the query grammar becoming invisible again or malformed input being
+// announced without an accessible relationship to the search field.
+test("Builder item picker explains boolean search and exposes query errors", async function() {
+    const rendered = await renderLockedPicker("strength >> 5");
+
+    assert.match(rendered,
+        /id="itemChoiceSearch"[^>]*aria-invalid="true"[^>]*aria-describedby="builder-picker-query-help builder-picker-query-error"/);
+    assert.match(rendered,
+        /id="builder-picker-query-help"[^>]*>Try: sword, \(strength &gt; 15 and mind &lt; 10\) or \(dexterity &gt; 10 and spirit &lt; 5\)<\/small>/);
+    assert.match(rendered,
+        /id="builder-picker-query-error"[^>]*role="alert"[^>]*>Search query: Expected a number/);
 });
 
 // Catches the Hold picker inferring one role from a multi-role candidate instead

@@ -13,7 +13,8 @@ const itemColumns = [
     {COLUMN_NAME: "Name", DATA_TYPE: "varchar", IS_NULLABLE: "NO"},
     {COLUMN_NAME: "Slot", DATA_TYPE: "int", IS_NULLABLE: "NO"},
     {COLUMN_NAME: "SlotMask", DATA_TYPE: "int", IS_NULLABLE: "NO"},
-    {COLUMN_NAME: "Holdable", DATA_TYPE: "tinyint", IS_NULLABLE: "NO"}
+    {COLUMN_NAME: "Holdable", DATA_TYPE: "tinyint", IS_NULLABLE: "NO"},
+    {COLUMN_NAME: "Official", DATA_TYPE: "tinyint", IS_NULLABLE: "NO"}
 ];
 
 const itemStatInfo = [
@@ -36,6 +37,18 @@ function loadItemApi(mysql = {query() {}}, authResponse = {}, columns = itemColu
                     authToken: async function() {
                         return {
                             expires: "2030-01-01T00:00:00.000Z",
+                            token: "renewed-token",
+                            username: "Slot Editor",
+                            ...authResponse
+                        };
+                    },
+                    authMutation: async function() {
+                        return {
+                            expires: "2030-01-01T00:00:00.000Z",
+                            ip: "192.0.2.7",
+                            permissions: {
+                                hasPermission: function() { return true; }
+                            },
                             token: "renewed-token",
                             username: "Slot Editor",
                             ...authResponse
@@ -68,12 +81,65 @@ test("Item exposes computed slots without exposing its physical slot mask", func
     const schema = new GraphQLSchema({query: queryType});
 
     assert.deepEqual(
-        validate(schema, parse("query { getItemById(id: 7) { id slot slots } }")),
+        validate(schema, parse("query { getItemById(id: 7) { id slot slots official } }")),
         []
     );
     assert.match(itemApi.fragment, /\bslot\b/);
     assert.match(itemApi.fragment, /\bslots\b/);
     assert.doesNotMatch(itemApi.fragment, /slotMask/i);
+});
+
+test("official status is readable but cannot be supplied to community item mutations", function() {
+    const itemApi = loadItemApi();
+    assert.match(itemApi.fragment, /\bofficial\b/);
+    assert.equal(Object.hasOwn(itemApi.mutationFields.insertItem.args, "official"), false);
+    assert.equal(Object.hasOwn(itemApi.mutationFields.updateItem.args, "official"), false);
+});
+
+// Catches official item attribution disappearing, selecting a later duplicate
+// submission, or becoming dependent on nondeterministic database row order.
+test("official items expose the earliest submitting character", async function() {
+    const statements = [];
+    const itemApi = loadItemApi({
+        query(sql, values, callback) {
+            statements.push({sql, values});
+            if (sql.includes("FROM EquipmentSubmissions")) {
+                callback(null, [{SubmittedByCharacter: "Rufus"}]);
+                return;
+            }
+            assert.fail(`Unexpected SQL: ${sql}`);
+        }
+    });
+    const item = new itemApi.classes.Item({
+        Id: 83, Name: "Official shield", Slot: 10,
+        SlotMask: 1024, Holdable: 1, Official: 1
+    });
+
+    assert.equal(itemApi.types.itemType.getFields().submittedBy?.type,
+        graphql.GraphQLString);
+    assert.equal(await item.submittedBy(), "Rufus");
+    assert.deepEqual(statements[0].values, [83]);
+    assert.match(statements[0].sql,
+        /ORDER BY ReceivedOn ASC, Id ASC\s+LIMIT 1/);
+});
+
+// Catches community item pages consulting importer provenance or accidentally
+// displaying a submission credit that belongs only to game-owned records.
+test("community items have no importer attribution", async function() {
+    let queryCount = 0;
+    const itemApi = loadItemApi({
+        query(_sql, _values, callback) {
+            queryCount += 1;
+            callback(null, [{SubmittedByCharacter: "Wrong credit"}]);
+        }
+    });
+    const item = new itemApi.classes.Item({
+        Id: 84, Name: "Community shield", Slot: 10,
+        SlotMask: 1024, Holdable: 1, Official: 0
+    });
+
+    assert.equal(await item.submittedBy(), null);
+    assert.equal(queryCount, 0);
 });
 
 function valueForColumn(values, column) {
@@ -203,6 +269,27 @@ test("item update preserves the current slot mask when slots are omitted", async
     assert.equal(valueForColumn(update.values, "SlotMask"), 49152);
 });
 
+// Catches authenticated editors changing a game-owned row while leaving its
+// source fingerprint pointing at data that no longer matches the item.
+test("official item updates are forbidden before any write", async function() {
+    const {api, statements} = createUpdateApi(
+        {Id: 83, Slot: 10, SlotMask: 1024, Holdable: true, Official: 1}
+    );
+
+    await assert.rejects(
+        api.mutationFields.updateItem.resolve(
+            null,
+            {authToken: "update-token", id: 83, name: "Player rewrite"},
+            {}
+        ),
+        error => error.extensions?.code === 403
+    );
+    assert.equal(
+        statements.some(statement => statement.sql.startsWith("UPDATE Items SET")),
+        false
+    );
+});
+
 // Catches legacy scalar updates adding capabilities that were not explicitly
 // stored in the current authoritative mask.
 test("legacy scalar update rejects a primary absent from the current mask", async function() {
@@ -290,4 +377,131 @@ test("Item serializes mediumtext columns as strings", function() {
     const castsType = api.types.itemType.getFields().casts.type;
 
     assert.equal(castsType.serialize("heal"), "heal");
+});
+
+// Catches history restore bypassing the same protection as the normal editor.
+test("official item history cannot be reverted", async function() {
+    const statements = [];
+    const api = loadItemApi({
+        query(sql, values, callback) {
+            if (typeof values === "function") {
+                callback = values;
+                values = [];
+            }
+            statements.push({sql, values});
+            if (sql.startsWith("SELECT Var"))
+                return callback(null, itemStatInfo);
+            if (sql.includes("FROM Items_AuditTrail WHERE Id = ?")) {
+                return callback(null, [{
+                    Id: 901, ItemId: 83, Name: "Official history", Slot: 10,
+                    SlotMask: 1024, Holdable: true, Official: 1
+                }]);
+            }
+            if (sql.startsWith("UPDATE Items SET"))
+                return callback(null, {affectedRows: 1});
+            assert.fail(`Unexpected SQL: ${sql}`);
+        }
+    });
+
+    await assert.rejects(
+        api.mutationFields.revertItem.resolve(
+            null,
+            {authToken: "revert-token", historyId: 901},
+            {}
+        ),
+        error => error.extensions?.code === 403
+    );
+    assert.equal(
+        statements.some(statement => statement.sql.startsWith("UPDATE Items SET")),
+        false
+    );
+});
+
+// Catches delete permission being treated as permission to remove game-owned
+// data. A future trusted-editor policy can replace this unconditional rule.
+test("official items cannot be deleted even with item delete permission", async function() {
+    const statements = [];
+    const api = loadItemApi({
+        query(sql, values, callback) {
+            if (typeof values === "function") {
+                callback = values;
+                values = [];
+            }
+            statements.push({sql, values});
+            if (sql.includes("FROM Items WHERE Id = ?"))
+                return callback(null, [{Official: 1}]);
+            if (sql.startsWith("UPDATE Items SET Deleted"))
+                return callback(null, {affectedRows: 1});
+            assert.fail(`Unexpected SQL: ${sql}`);
+        }
+    });
+
+    await assert.rejects(
+        api.mutationFields.deleteItem.resolve(
+            null,
+            {authToken: "delete-token", id: 83},
+            {}
+        ),
+        error => error.extensions?.code === 403
+    );
+    assert.equal(
+        statements.some(statement => statement.sql.startsWith("UPDATE Items SET Deleted")),
+        false
+    );
+});
+
+// Catches the protection being checked in one query but omitted from the
+// actual write, which could turn a later trusted-editor race into a deletion.
+test("community item deletion keeps the official guard on the write", async function() {
+    const statements = [];
+    const api = loadItemApi({
+        query(sql, values, callback) {
+            if (typeof values === "function") {
+                callback = values;
+                values = [];
+            }
+            statements.push({sql, values});
+            if (sql.includes("FROM Items WHERE Id = ?"))
+                return callback(null, [{Official: 0}]);
+            if (sql.startsWith("UPDATE Items SET Deleted"))
+                return callback(null, {affectedRows: 1});
+            assert.fail(`Unexpected SQL: ${sql}`);
+        }
+    });
+
+    await api.mutationFields.deleteItem.resolve(
+        null,
+        {authToken: "delete-token", id: 84},
+        {}
+    );
+
+    const update = statements.find(statement =>
+        statement.sql.startsWith("UPDATE Items SET Deleted"));
+    assert.match(update.sql, /WHERE Id = \? AND Official = 0/);
+    assert.deepEqual(update.values, [84]);
+});
+
+// Catches a row becoming protected between the read and guarded write while a
+// future trusted-editor mechanism is operating.
+test("item deletion fails closed when the guarded write changes no row", async function() {
+    const api = loadItemApi({
+        query(sql, values, callback) {
+            if (typeof values === "function")
+                callback = values;
+            if (sql.includes("FROM Items WHERE Id = ?"))
+                return callback(null, [{Official: 0}]);
+            if (sql.startsWith("UPDATE Items SET Deleted"))
+                return callback(null, {affectedRows: 0});
+            assert.fail(`Unexpected SQL: ${sql}`);
+        }
+    });
+
+    await assert.rejects(
+        api.mutationFields.deleteItem.resolve(
+            null,
+            {authToken: "delete-token", id: 85},
+            {}
+        ),
+        error => error.extensions?.code === 403
+    );
 });

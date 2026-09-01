@@ -149,6 +149,8 @@ test("backup keeps account storage private and excludes it from public content",
         "BuilderProfiles",
         "AccountPreferences",
         "BuilderImportReceipts",
+        "EquipmentSubmissions",
+        "OfficialItemVariants",
     ];
     const intentionalExclusions = [
         "AuthTokens",
@@ -172,17 +174,23 @@ test("backup keeps account storage private and excludes it from public content",
             `'${fakeDumpBody.replaceAll("'", "'\\''")}' > \"$fake_bin/mysqldump\"`,
         "chmod +x \"$fake_bin/mysqldump\"",
         "PATH=\"$fake_bin:$PATH\" /usr/local/bin/backup-mysql",
-        "sed -n '1p;3p' /tmp/mysqldump-arguments",
+        "sed -n '1p;2p;3p' /tmp/mysqldump-arguments",
     ].join("; ");
     const result = docker(["run", "--rm", ...environmentArguments(),
         image, "bash", "-c", command]);
     assert.equal(result.status, 0, result.stderr);
 
     const lines = result.stdout.trim().split("\n");
-    const privateArguments = lines.at(-2);
+    const privateArguments = lines.at(-3);
+    const publicSchemaArguments = lines.at(-2);
     const publicDataArguments = lines.at(-1);
     assert.match(privateArguments, /(?:^| )-B legendhub(?: |$)/);
     assert.doesNotMatch(privateArguments, /--ignore-table=/);
+    const schemaExclusions = [...publicSchemaArguments.matchAll(
+        /--ignore-table=legendhub\.([A-Za-z0-9_]+)/g,
+    )].map(match => match[1]);
+    assert.deepEqual(schemaExclusions,
+        ["EquipmentSubmissions", "OfficialItemVariants"]);
     const exclusions = [...publicDataArguments.matchAll(
         /--ignore-table=legendhub\.([A-Za-z0-9_]+)/g,
     )].map(match => match[1]);
