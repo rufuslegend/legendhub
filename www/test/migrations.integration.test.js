@@ -11,6 +11,8 @@ function query(pool, sql, values = []) {
         pool.query(sql, values, function(error, results) {
             if (error)
                 reject(error);
+            else if (Array.isArray(results))
+                resolve(results.map(row => row && !Array.isArray(row) ? {...row} : row));
             else
                 resolve(results);
         });
@@ -358,6 +360,23 @@ test("slot mask migration backfills legacy items and resumes after its additive 
                 Verb: "updated"
             }]
         );
+
+        await query(pool, `
+            DELETE FROM MigrationRuns WHERE MigrationId = 11;
+            DELETE FROM Migrations WHERE Id = 11;
+            DROP TABLE EquipmentSubmissions;
+        `);
+        await migrations.up();
+        assert.deepEqual(
+            await query(pool, `
+                SELECT TABLE_NAME FROM information_schema.tables
+                WHERE TABLE_SCHEMA = DATABASE()
+                    AND TABLE_NAME = 'EquipmentSubmissions'
+            `),
+            [{TABLE_NAME: "EquipmentSubmissions"}]
+        );
+        assert.deepEqual(await query(pool, "SELECT Id FROM Migrations WHERE Id = 11"),
+            [{Id: 11}]);
     }
     finally {
         await end(pool);
@@ -488,10 +507,10 @@ test("email migration reaches its verified schema state and can recover on a sec
             "the migrated schema retains the v3.0 registration insert contract"
         );
 
-        await query(
-            pool,
-            "DELETE FROM MigrationRuns WHERE MigrationId = 8; DELETE FROM Migrations WHERE Id = 8"
-        );
+        await query(pool, `
+            DELETE FROM MigrationRuns WHERE MigrationId >= 8;
+            DELETE FROM Migrations WHERE Id >= 8;
+        `);
         await migrations.up();
         assert.deepEqual(await query(pool, "SELECT Id FROM Migrations WHERE Id = 8"), [{Id: 8}]);
     }
@@ -628,12 +647,12 @@ test("Builder storage migration verifies its additive schema and is retry-safe",
             ),
             [
                 {TABLE_NAME: "AccountPreferences", COLUMN_NAME: "DocumentVersion", COLUMN_TYPE: "int(11)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: "1", EXTRA: ""},
-                {TABLE_NAME: "AccountPreferences", COLUMN_NAME: "Payload", COLUMN_TYPE: "json", IS_NULLABLE: "NO", CHARACTER_SET_NAME: "utf8mb4", COLUMN_DEFAULT: null, EXTRA: ""},
+                {TABLE_NAME: "AccountPreferences", COLUMN_NAME: "Payload", COLUMN_TYPE: "json", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: null, EXTRA: ""},
                 {TABLE_NAME: "AccountPreferences", COLUMN_NAME: "Revision", COLUMN_TYPE: "bigint(20)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: "1", EXTRA: ""},
                 {TABLE_NAME: "AccountPreferences", COLUMN_NAME: "StorageGeneration", COLUMN_TYPE: "bigint(20)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: "1", EXTRA: ""},
                 {TABLE_NAME: "BuilderImportReceipts", COLUMN_NAME: "Id", COLUMN_TYPE: "bigint(20)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: null, EXTRA: "auto_increment"},
                 {TABLE_NAME: "BuilderImportReceipts", COLUMN_NAME: "IdempotencyKey", COLUMN_TYPE: "char(64)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: "ascii", COLUMN_DEFAULT: null, EXTRA: ""},
-                {TABLE_NAME: "BuilderImportReceipts", COLUMN_NAME: "ResultPayload", COLUMN_TYPE: "json", IS_NULLABLE: "NO", CHARACTER_SET_NAME: "utf8mb4", COLUMN_DEFAULT: null, EXTRA: ""},
+                {TABLE_NAME: "BuilderImportReceipts", COLUMN_NAME: "ResultPayload", COLUMN_TYPE: "json", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: null, EXTRA: ""},
                 {TABLE_NAME: "BuilderProfiles", COLUMN_NAME: "ActiveNameHash", COLUMN_TYPE: "binary(32)", IS_NULLABLE: "YES", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: null, EXTRA: ""},
                 {TABLE_NAME: "BuilderProfiles", COLUMN_NAME: "DeletedOn", COLUMN_TYPE: "datetime", IS_NULLABLE: "YES", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: null, EXTRA: ""},
                 {TABLE_NAME: "BuilderProfiles", COLUMN_NAME: "Id", COLUMN_TYPE: "bigint(20)", IS_NULLABLE: "NO", CHARACTER_SET_NAME: null, COLUMN_DEFAULT: null, EXTRA: "auto_increment"},
@@ -684,10 +703,10 @@ test("Builder storage migration verifies its additive schema and is retry-safe",
             ]
         );
 
-        await query(
-            pool,
-            "DELETE FROM MigrationRuns WHERE MigrationId = 9; DELETE FROM Migrations WHERE Id = 9"
-        );
+        await query(pool, `
+            DELETE FROM MigrationRuns WHERE MigrationId >= 9;
+            DELETE FROM Migrations WHERE Id >= 9;
+        `);
         await migrations.up();
         assert.deepEqual(await query(pool, "SELECT Id FROM Migrations WHERE Id = 9"), [{Id: 9}]);
     }

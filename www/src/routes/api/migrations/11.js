@@ -126,7 +126,7 @@ const OFFICIAL_METADATA = {
     Type: "bool",
     FilterString: "= 1",
     DefaultValue: "false",
-    NetStat: "0.00",
+    NetStat: "0",
     ShowColumnDefault: "0",
     Editable: "0",
     CategoryId: "1",
