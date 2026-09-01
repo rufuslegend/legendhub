@@ -50,6 +50,23 @@ test("renders legacy emoji shortcodes without changing code or unknown names", f
         "code <code>:smile:</code> emoticon :)</p>\n");
 });
 
+// Catches legacy wiki emphasis being shown as literal markup or approved tags
+// retaining attributes that could become executable browser behavior.
+test("renders approved legacy inline HTML without attributes", function() {
+    const html = renderMarkdown(
+        "A species of <i>white sage</i>.\n\n" +
+        "<b><u>Seeds</b></u>\n\n" +
+        "<strong class=\"loud\" onclick=\"alert(1)\">Location:</strong>" +
+        "<br data-gap=\"1\">Here"
+    );
+
+    assert.equal(html,
+        "<p>A species of <i>white sage</i>.</p>\n" +
+        "<p><b><u>Seeds</b></u></p>\n" +
+        "<p><strong>Location:</strong><br>Here</p>\n");
+    assert.doesNotMatch(html, /class=|onclick=|data-gap=/i);
+});
+
 // Catches a renderer mutation that permits unsafe Markdown link protocols.
 test("does not render unsafe Markdown links", function() {
     const html = renderMarkdown("[dangerous link](javascript:alert(1))");
@@ -79,9 +96,12 @@ test("does not create elements with inline event handlers", function() {
 // Catches a renderer mutation that allows dangerous raw HTML elements through unchanged.
 test("escapes dangerous raw HTML", function() {
     const html = renderMarkdown("<img src=x onerror=alert(1)>");
+    const structuralHtml = renderMarkdown("<div>structural content</div>");
 
     assert.equal(html, "<p>&lt;img src=x onerror=alert(1)&gt;</p>\n");
     assert.doesNotMatch(html, /<img\b/i);
+    assert.equal(structuralHtml,
+        "<p>&lt;div&gt;structural content&lt;/div&gt;</p>\n");
 });
 
 function loadAppWithoutDatabaseMetadataQuery() {

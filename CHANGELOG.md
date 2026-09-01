@@ -34,6 +34,7 @@ with version 2.6.0.
 
 ### Fixed
 
+- Rendered legacy bold, italic, underline, and line-break markup in wiki content while continuing to block unsafe or structural HTML.
 - Restored the Builder's default Strength, Mind, Dexterity, Constitution, Perception, Spirit, Armor Class, Alignment, and Rent columns for fresh account storage.
 - Made the local Builder data copy notice readable in every theme, summarized large profile sets in scrollable dialogs, transitioned supported Builder preferences automatically, let players dismiss the notice without refreshing, and stopped preference changes from prompting players to copy the same profiles again.
 - Kept the email reminder from blocking the email-verification page.
