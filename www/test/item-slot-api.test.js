@@ -42,6 +42,18 @@ function loadItemApi(mysql = {query() {}}, authResponse = {}) {
                             ...authResponse
                         };
                     },
+                    authMutation: async function() {
+                        return {
+                            expires: "2030-01-01T00:00:00.000Z",
+                            ip: "192.0.2.7",
+                            permissions: {
+                                hasPermission: function() { return true; }
+                            },
+                            token: "renewed-token",
+                            username: "Slot Editor",
+                            ...authResponse
+                        };
+                    },
                     getIPFromRequest: function() { return "192.0.2.7"; }
                 }
             };
@@ -211,6 +223,27 @@ test("item update preserves the current slot mask when slots are omitted", async
     assert.equal(valueForColumn(update.values, "SlotMask"), 49152);
 });
 
+// Catches authenticated editors changing a game-owned row while leaving its
+// source fingerprint pointing at data that no longer matches the item.
+test("official item updates are forbidden before any write", async function() {
+    const {api, statements} = createUpdateApi(
+        {Id: 83, Slot: 10, SlotMask: 1024, Holdable: true, Official: 1}
+    );
+
+    await assert.rejects(
+        api.mutationFields.updateItem.resolve(
+            null,
+            {authToken: "update-token", id: 83, name: "Player rewrite"},
+            {}
+        ),
+        error => error.extensions?.code === 403
+    );
+    assert.equal(
+        statements.some(statement => statement.sql.startsWith("UPDATE Items SET")),
+        false
+    );
+});
+
 // Catches legacy scalar updates adding capabilities that were not explicitly
 // stored in the current authoritative mask.
 test("legacy scalar update rejects a primary absent from the current mask", async function() {
@@ -284,4 +317,131 @@ test("item revert restores the historical primary and mask exactly", async funct
     const update = statements.find(statement => statement.sql.startsWith("UPDATE Items SET"));
     assert.equal(valueForColumn(update.values, "Slot"), 14);
     assert.equal(valueForColumn(update.values, "SlotMask"), 16384);
+});
+
+// Catches history restore bypassing the same protection as the normal editor.
+test("official item history cannot be reverted", async function() {
+    const statements = [];
+    const api = loadItemApi({
+        query(sql, values, callback) {
+            if (typeof values === "function") {
+                callback = values;
+                values = [];
+            }
+            statements.push({sql, values});
+            if (sql.startsWith("SELECT Var"))
+                return callback(null, itemStatInfo);
+            if (sql.includes("FROM Items_AuditTrail WHERE Id = ?")) {
+                return callback(null, [{
+                    Id: 901, ItemId: 83, Name: "Official history", Slot: 10,
+                    SlotMask: 1024, Holdable: true, Official: 1
+                }]);
+            }
+            if (sql.startsWith("UPDATE Items SET"))
+                return callback(null, {affectedRows: 1});
+            assert.fail(`Unexpected SQL: ${sql}`);
+        }
+    });
+
+    await assert.rejects(
+        api.mutationFields.revertItem.resolve(
+            null,
+            {authToken: "revert-token", historyId: 901},
+            {}
+        ),
+        error => error.extensions?.code === 403
+    );
+    assert.equal(
+        statements.some(statement => statement.sql.startsWith("UPDATE Items SET")),
+        false
+    );
+});
+
+// Catches delete permission being treated as permission to remove game-owned
+// data. A future trusted-editor policy can replace this unconditional rule.
+test("official items cannot be deleted even with item delete permission", async function() {
+    const statements = [];
+    const api = loadItemApi({
+        query(sql, values, callback) {
+            if (typeof values === "function") {
+                callback = values;
+                values = [];
+            }
+            statements.push({sql, values});
+            if (sql.includes("FROM Items WHERE Id = ?"))
+                return callback(null, [{Official: 1}]);
+            if (sql.startsWith("UPDATE Items SET Deleted"))
+                return callback(null, {affectedRows: 1});
+            assert.fail(`Unexpected SQL: ${sql}`);
+        }
+    });
+
+    await assert.rejects(
+        api.mutationFields.deleteItem.resolve(
+            null,
+            {authToken: "delete-token", id: 83},
+            {}
+        ),
+        error => error.extensions?.code === 403
+    );
+    assert.equal(
+        statements.some(statement => statement.sql.startsWith("UPDATE Items SET Deleted")),
+        false
+    );
+});
+
+// Catches the protection being checked in one query but omitted from the
+// actual write, which could turn a later trusted-editor race into a deletion.
+test("community item deletion keeps the official guard on the write", async function() {
+    const statements = [];
+    const api = loadItemApi({
+        query(sql, values, callback) {
+            if (typeof values === "function") {
+                callback = values;
+                values = [];
+            }
+            statements.push({sql, values});
+            if (sql.includes("FROM Items WHERE Id = ?"))
+                return callback(null, [{Official: 0}]);
+            if (sql.startsWith("UPDATE Items SET Deleted"))
+                return callback(null, {affectedRows: 1});
+            assert.fail(`Unexpected SQL: ${sql}`);
+        }
+    });
+
+    await api.mutationFields.deleteItem.resolve(
+        null,
+        {authToken: "delete-token", id: 84},
+        {}
+    );
+
+    const update = statements.find(statement =>
+        statement.sql.startsWith("UPDATE Items SET Deleted"));
+    assert.match(update.sql, /WHERE Id = \? AND Official = 0/);
+    assert.deepEqual(update.values, [84]);
+});
+
+// Catches a row becoming protected between the read and guarded write while a
+// future trusted-editor mechanism is operating.
+test("item deletion fails closed when the guarded write changes no row", async function() {
+    const api = loadItemApi({
+        query(sql, values, callback) {
+            if (typeof values === "function")
+                callback = values;
+            if (sql.includes("FROM Items WHERE Id = ?"))
+                return callback(null, [{Official: 0}]);
+            if (sql.startsWith("UPDATE Items SET Deleted"))
+                return callback(null, {affectedRows: 0});
+            assert.fail(`Unexpected SQL: ${sql}`);
+        }
+    });
+
+    await assert.rejects(
+        api.mutationFields.deleteItem.resolve(
+            null,
+            {authToken: "delete-token", id: 85},
+            {}
+        ),
+        error => error.extensions?.code === 403
+    );
 });

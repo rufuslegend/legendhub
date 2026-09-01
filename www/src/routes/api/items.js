@@ -15,6 +15,7 @@ let {
 
 const syncQuery = syncRpc(__dirname + "/sync-rpcs/mysql-query.js");
 const itemColumnsResults = syncQuery("SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'legendhub' AND TABLE_NAME = 'Items'");
+const OFFICIAL_ITEM_MUTATION_MESSAGE = "Official items cannot be edited for now.";
 let itemColumns = [];
 for (let i = 0; i < itemColumnsResults.length; ++i) {
     itemColumns.push({
@@ -670,6 +671,12 @@ let updateItem = function(args) {
                                         return;
                                     }
 
+                                    if (itemResults[0].Official) {
+                                        reject(new apiUtils.ForbiddenError(
+                                            OFFICIAL_ITEM_MUTATION_MESSAGE));
+                                        return;
+                                    }
+
                                     let slotWrite;
                                     try {
                                         slotWrite = resolveSlotWrite({
@@ -800,6 +807,12 @@ let revertItem = function(req, authToken, historyId) {
                                     return;
                                 }
 
+                                if (historyResults[0].Official) {
+                                    reject(new apiUtils.ForbiddenError(
+                                        OFFICIAL_ITEM_MUTATION_MESSAGE));
+                                    return;
+                                }
+
                                 let itemId = historyResults[0].ItemId;
                                 let sql = ["UPDATE Items SET"];
                                 let placeholderValues = [];
@@ -862,14 +875,38 @@ let deleteItem = function(req, authToken, id) {
             function(response) {
                 if (response.permissions.hasPermission("Item", 0, 0, 0, 1))
                 {
-                    mysql.query("UPDATE Items SET Deleted = 1 WHERE Id = ?",
+                    mysql.query("SELECT Official FROM Items WHERE Id = ?",
                         [id],
                         function(error, results, fields) {
-                            if (error)
+                            if (error) {
                                 return reject(new graphql.GraphQLError(error.sqlMessage));
+                            }
+                            if (results.length === 0)
+                                return reject(new apiUtils.NotFoundError("Could not find item."));
+                            if (results[0].Official) {
+                                return reject(new apiUtils.ForbiddenError(
+                                    OFFICIAL_ITEM_MUTATION_MESSAGE));
+                            }
 
-                            apiUtils.trackPageUpdate(response.ip);
-                            return resolve({token: response.token, expires: response.expires});
+                            mysql.query(
+                                "UPDATE Items SET Deleted = 1 WHERE Id = ? AND Official = 0",
+                                [id],
+                                function(updateError, updateResults) {
+                                    if (updateError) {
+                                        return reject(new graphql.GraphQLError(
+                                            updateError.sqlMessage));
+                                    }
+                                    if (updateResults.affectedRows !== 1) {
+                                        return reject(new apiUtils.ForbiddenError(
+                                            OFFICIAL_ITEM_MUTATION_MESSAGE));
+                                    }
+
+                                    apiUtils.trackPageUpdate(response.ip);
+                                    return resolve({
+                                        token: response.token,
+                                        expires: response.expires
+                                    });
+                                });
                         });
                 }
                 else {

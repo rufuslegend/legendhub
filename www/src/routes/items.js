@@ -414,6 +414,11 @@ router.get(["/edit.html"], async function(req, res, next) {
 
     let item = data.getItemById;
     let itemStatCategories = data.getItemStatCategories;
+    if (item.official) {
+        const error = new Error("Official items cannot be edited for now.");
+        error.status = 403;
+        return next(error);
+    }
     let title = `Edit ${item.name}`;
     let vm = {
         item,
