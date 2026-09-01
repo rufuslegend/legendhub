@@ -17,6 +17,7 @@ with version 2.6.0.
 
 ### Changed
 
+- Builder's Choose Item search now combines item names with stat comparisons using `and`, `or`, commas, and parentheses, including `=`, `>`, `<`, `>=`, and `<=`.
 - Items can now list every place they may be worn, so Item Search and Builder find the same item in each valid slot without requiring duplicate entries.
 - Builder now models Legend characters' three hands with one Shield row, one Wield row, and three Hold rows, including the two-hand cost of two-handed equipment.
 - Made Dark the default theme for visitors and players without a saved theme; every Glass theme remains available in the theme menu.

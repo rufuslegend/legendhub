@@ -11,7 +11,10 @@ import {
   getItemRestrictionText,
 } from "./builder-derivations.js";
 import { BuilderModal } from "./ImportExportDialog.jsx";
-import { selectFilteredItems } from "./builder-reducer.js";
+import {
+  selectFilteredItems,
+  selectItemSearchError,
+} from "./builder-reducer.js";
 
 function visibleStats(state) {
   return state.statInfo.filter(
@@ -193,6 +196,7 @@ export default function EquipmentPanel({
     state.sortStat,
     state.sortDir,
   );
+  const queryError = selectItemSearchError(state);
   const totalPages = Math.max(
     1,
     Math.ceil(filtered.length / state.itemsPerPage),
@@ -336,10 +340,32 @@ export default function EquipmentPanel({
               className="form-control"
               placeholder="Search…"
               value={state.searchString}
+              aria-invalid={Boolean(queryError)}
+              aria-describedby={
+                queryError
+                  ? "builder-picker-query-help builder-picker-query-error"
+                  : "builder-picker-query-help"
+              }
               onChange={(event) =>
                 onAction({ type: "search/text", value: event.target.value })
               }
             />
+            <small
+              id="builder-picker-query-help"
+              className="form-text text-muted"
+            >
+              Try: sword, (strength &gt; 15 and mind &lt; 10) or (dexterity
+              &gt; 10 and spirit &lt; 5)
+            </small>
+            {queryError && (
+              <p
+                id="builder-picker-query-error"
+                className="text-danger mt-2 mb-0"
+                role="alert"
+              >
+                Search query: {queryError}
+              </p>
+            )}
             <div className="card my-3">
               <h3 className="h5 m-3">Current Item and Stats</h3>
               <div className="table-responsive">

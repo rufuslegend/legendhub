@@ -1,4 +1,5 @@
 import gameStats from "../../../src/public/js/services/game-stats.js";
+import {parseBuilderItemQuery} from "./builder-item-query.js";
 import {
     EMPTY_RUNE_CHARMS,
     ITEMS_PER_PAGE_OPTIONS,
@@ -634,37 +635,18 @@ function compareItems(property) {
     };
 }
 
-function comparisonFiltersItem(expression, item, statInfo) {
-    const match = expression.match(/<|>|=/);
-    if (!match)
-        return false;
-    const operator = match[0];
-    const index = expression.indexOf(operator);
-    const requestedStat = expression.slice(0, index);
-    const metadata = statInfo.find(stat => stat.short.toLowerCase() === requestedStat.toLowerCase());
-    const stat = metadata ? metadata.var : requestedStat;
-    const value = Number(expression.slice(index + 1));
-    if (operator === "=")
-        return item[stat] != value;
-    if (operator === "<")
-        return !(item[stat] < value);
-    return !(item[stat] > value);
-}
-
 export function selectFilteredItems(state) {
     if (!state.currentItem)
         return undefined;
     const items = state.itemsBySlot[state.currentItem.slot];
     if (!items)
         return items;
-    const comparisons = /[<>=]/.test(state.searchString) ? state.searchString.split(",") : null;
-    const filtered = items.filter(function(item) {
-        const filteredBySearch = comparisons
-            ? comparisons.some(expression => comparisonFiltersItem(expression, item, state.statInfo))
-            : Boolean(state.searchString && !item.name.toLowerCase().includes(state.searchString.toLowerCase()));
-        return !filteredBySearch;
-    });
-    return filtered;
+    const {matches} = parseBuilderItemQuery(state.searchString, state.statInfo);
+    return items.filter(matches);
+}
+
+export function selectItemSearchError(state) {
+    return parseBuilderItemQuery(state.searchString, state.statInfo).error;
 }
 
 export function selectPagedItems(state, page = state.currentPage) {

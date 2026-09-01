@@ -753,6 +753,61 @@ test("builder reducer and selectors own item search transitions", async function
     assert.equal(state.searchString, "str>3");
 });
 
+// Catches the Choose Item query dropping its name clause, boolean grouping, or
+// the lower-precedence OR branch from the player-visible result set.
+test("builder item search combines a name with grouped boolean stat comparisons", async function() {
+    const {createInitialBuilderState, selectFilteredItems} = await loadReducer();
+    const items = [
+        {id: 1, name: "Ruby sword", slot: 15, strength: 16, mind: 9, dexterity: 0, spirit: 9},
+        {id: 2, name: "Silver sword", slot: 15, strength: 2, mind: 20, dexterity: 11, spirit: 4},
+        {id: 3, name: "Iron sword", slot: 15, strength: 16, mind: 12, dexterity: 11, spirit: 8},
+        {id: 4, name: "Ruby axe", slot: 15, strength: 20, mind: 2, dexterity: 0, spirit: 9},
+        {id: 5, name: "Spirit sword", slot: 15, strength: 2, mind: 2, dexterity: 11, spirit: 5}
+    ];
+    const state = {
+        ...createInitialBuilderState(),
+        currentItem: items[0],
+        itemsBySlot: Array.from({length: 22}, (_, slot) => slot === 15 ? items : []),
+        searchString: "sword, (strength > 15 and mind < 10) or (dexterity > 10 and spirit < 5)",
+        statInfo: [
+            {display: "Strength", short: "Str", var: "strength"},
+            {display: "Mind", short: "Min", var: "mind"},
+            {display: "Dexterity", short: "Dex", var: "dexterity"},
+            {display: "Spirit", short: "Spi", var: "spirit"}
+        ]
+    };
+
+    assert.deepEqual(selectFilteredItems(state).map(item => item.id), [1, 2]);
+});
+
+// Catches the Builder selector bypassing safe query parsing, which would make
+// a partially typed expression crash the Choose Item dialog.
+test("builder item search keeps choices visible while exposing query errors", async function() {
+    const {
+        createInitialBuilderState,
+        selectFilteredItems,
+        selectItemSearchError
+    } = await loadReducer();
+    const items = [
+        {id: 1, name: "Ruby sword", slot: 15, strength: 16},
+        {id: 2, name: "Silver sword", slot: 15, strength: 2}
+    ];
+    const state = {
+        ...createInitialBuilderState(),
+        currentItem: items[0],
+        itemsBySlot: Array.from({length: 22}, (_, slot) => slot === 15 ? items : []),
+        searchString: "strength >> 5",
+        statInfo: [{display: "Strength", short: "Str", var: "strength"}]
+    };
+    let filtered;
+
+    assert.doesNotThrow(function() {
+        filtered = selectFilteredItems(state);
+    });
+    assert.deepEqual(filtered.map(item => item.id), [1, 2]);
+    assert.match(selectItemSearchError(state), /Expected a number/);
+});
+
 // Catches runecrafting that updates only the charm string or only the displayed item stats.
 test("builder reducer applies a runecraft selection atomically", async function() {
     const {builderReducer, createDefaultVariant, createInitialBuilderState, selectRuneCharms} = await loadReducer();
