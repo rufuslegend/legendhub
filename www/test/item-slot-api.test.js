@@ -21,7 +21,7 @@ const itemStatInfo = [
     {Var: "holdable", DefaultValue: "0", Type: "bool", NetStat: 0}
 ];
 
-function loadItemApi(mysql = {query() {}}, authResponse = {}) {
+function loadItemApi(mysql = {query() {}}, authResponse = {}, columns = itemColumns) {
     const originalLoad = Module._load;
     Module._load = function(request, parent, isMain) {
         if (parent?.filename === itemApiPath && request === "./mysql-connection")
@@ -46,7 +46,7 @@ function loadItemApi(mysql = {query() {}}, authResponse = {}) {
             };
         }
         if (request === "sync-rpc")
-            return function() { return function() { return itemColumns; }; };
+            return function() { return function() { return columns; }; };
         return originalLoad.call(this, request, parent, isMain);
     };
     try {
@@ -276,4 +276,18 @@ test("item revert restores the historical primary and mask exactly", async funct
     const update = statements.find(statement => statement.sql.startsWith("UPDATE Items SET"));
     assert.equal(valueForColumn(update.values, "Slot"), 14);
     assert.equal(valueForColumn(update.values, "SlotMask"), 16384);
+});
+
+// Catches migrated MEDIUMTEXT item fields inheriting the preceding Boolean
+// GraphQL type and making item-list serialization fail for string values.
+test("Item serializes mediumtext columns as strings", function() {
+    const columns = [
+        {COLUMN_NAME: "Id", DATA_TYPE: "int", IS_NULLABLE: "NO"},
+        {COLUMN_NAME: "Bonded", DATA_TYPE: "tinyint", IS_NULLABLE: "YES"},
+        {COLUMN_NAME: "Casts", DATA_TYPE: "mediumtext", IS_NULLABLE: "YES"}
+    ];
+    const api = loadItemApi(undefined, {}, columns);
+    const castsType = api.types.itemType.getFields().casts.type;
+
+    assert.equal(castsType.serialize("heal"), "heal");
 });
