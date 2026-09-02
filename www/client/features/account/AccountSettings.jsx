@@ -1,4 +1,4 @@
-import {useEffect, useReducer, useRef} from "react";
+import {useEffect, useReducer, useRef, useState} from "react";
 import {
     EDITABLE_NOTIFICATION_FIELDS,
     requestEmailChange,
@@ -8,6 +8,7 @@ import {
 } from "./account-api.js";
 import {accountReducer, createInitialAccountState} from "./account-reducer.js";
 import BuilderStorageManager from "./BuilderStorageManager.jsx";
+import {getPageAccountPreferencesStore} from "../../lib/account-preferences-store.js";
 
 const notificationLabels = {
     itemAdded: "Item Added",
@@ -411,6 +412,83 @@ function NotificationEditor({editor, dispatch}) {
     );
 }
 
+function PreferencesEditor({store}) {
+    const [preferences, setPreferences] = useState(() => store?.get?.() || null);
+
+    useEffect(function() {
+        if (!store)
+            return undefined;
+        setPreferences(store.get());
+        return store.subscribe(setPreferences);
+    }, [store]);
+
+    const enabled = preferences?.enabled === true;
+    const document = preferences?.document || {
+        itemPreviews: true,
+        hideEquipmentZeros: false
+    };
+    function change(field, event) {
+        store?.patch?.({[field]: event.target.value === "true"});
+    }
+
+    return (
+        <section className="row py-3 border-bottom border-primary" aria-labelledby="preferences-heading">
+            <div className="col-12 col-lg-4">
+                <h2 className="h4" id="preferences-heading">Preferences</h2>
+            </div>
+            <div className="col-12 col-lg-8">
+                <div className="row">
+                    <div className="col-12 col-md-6 mb-3">
+                        <div className="input-group">
+                            <div className="input-group-prepend">
+                                <label className="input-group-text" htmlFor="itemPreviewsInput">
+                                    Pop-up stat windows
+                                </label>
+                            </div>
+                            <select
+                                className="custom-select"
+                                id="itemPreviewsInput"
+                                value={String(document.itemPreviews)}
+                                disabled={!enabled}
+                                onChange={(event) => change("itemPreviews", event)}
+                            >
+                                <option value="false">Off</option>
+                                <option value="true">On</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div className="col-12 col-md-6 mb-3">
+                        <div className="input-group">
+                            <div className="input-group-prepend">
+                                <label className="input-group-text" htmlFor="hideEquipmentZerosInput">
+                                    Hide zeros in equipment tables
+                                </label>
+                            </div>
+                            <select
+                                className="custom-select"
+                                id="hideEquipmentZerosInput"
+                                value={String(document.hideEquipmentZeros)}
+                                disabled={!enabled}
+                                onChange={(event) => change("hideEquipmentZeros", event)}
+                            >
+                                <option value="false">Off</option>
+                                <option value="true">On</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                {!enabled && (
+                    <p className="text-muted mb-0">
+                        {preferences?.account === true
+                            ? "Account preferences are temporarily unavailable."
+                            : "Verify your email address to save account preferences."}
+                    </p>
+                )}
+            </div>
+        </section>
+    );
+}
+
 function PasswordEditor({editor, dispatch}) {
     const editing = editor.status !== "viewing";
     const saving = editor.status === "saving";
@@ -564,6 +642,7 @@ export default function AccountSettings({
     emailStatus,
     builderStorage
 }) {
+    const preferenceStoreRef = useRef(getPageAccountPreferencesStore());
     const [state, dispatch] = useReducer(
         accountReducer,
         {notificationSettings, emailStatus, builderStorage},
@@ -583,6 +662,7 @@ export default function AccountSettings({
             </div>
             <EmailEditor editor={state.emailEditor} dispatch={dispatch} />
             <BuilderStorageManager storage={state.builderStorage} dispatch={dispatch} />
+            <PreferencesEditor store={preferenceStoreRef.current} />
             <NotificationEditor editor={state.notificationEditor} dispatch={dispatch} />
             <PasswordEditor editor={state.passwordEditor} dispatch={dispatch} />
         </main>

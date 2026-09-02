@@ -1,3 +1,5 @@
+import {equipmentDisplayPreferences} from "../../lib/equipment-display-preferences.js";
+
 function parseFilters(filterString) {
     if (!filterString)
         return {};
@@ -69,6 +71,7 @@ export function createInitialItemSearchState(props) {
             statInfo: props.statInfo || []
         },
         moreResults: Boolean(props.moreResults),
+        equipmentPreferences: equipmentDisplayPreferences(props.accountPreferences),
         requestId: 0,
         results: props.results || [],
         selectedColumns: [...(accountColumns || props.selectedColumns || defaultColumns(props.statInfo || []))],

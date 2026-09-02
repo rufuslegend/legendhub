@@ -13,7 +13,10 @@ function hasClass(attributes, className) {
     return classes.includes(className);
 }
 
-async function renderItemSearch(results, selectedColumns = ["Slot"]) {
+async function renderItemSearch(results, selectedColumns = ["Slot"], {
+    preferences = null,
+    statInfo = null
+} = {}) {
     const {createServer} = await import("vite");
     const vite = await createServer({
         appType: "custom",
@@ -21,6 +24,29 @@ async function renderItemSearch(results, selectedColumns = ["Slot"]) {
         server: {hmr: false, middlewareMode: true, ws: false}
     });
     try {
+        const storeModule = await vite.ssrLoadModule(
+            "/client/lib/account-preferences-store.js");
+        storeModule.setPageAccountPreferencesStore(preferences
+            ? storeModule.createAccountPreferencesStore({
+                initialState: {
+                    enabled: true,
+                    payload: {
+                        version: 1,
+                        theme: "dark",
+                        itemsPerPage: 20,
+                        itemPreviews: true,
+                        hideEquipmentZeros: false,
+                        itemColumns: selectedColumns,
+                        builderColumns: {},
+                        selectedProfileId: null,
+                        selectedVariant: null,
+                        ...preferences
+                    },
+                    revision: 1,
+                    storageGeneration: 1
+                }
+            })
+            : null);
         const {default: ItemSearch} = await vite.ssrLoadModule(
             "/client/features/items/ItemSearch.jsx");
         const slots = Array(16).fill("");
@@ -30,7 +56,7 @@ async function renderItemSearch(results, selectedColumns = ["Slot"]) {
             constants: {selectShortOptions: {slot: slots}},
             results,
             selectedColumns,
-            statInfo: [
+            statInfo: statInfo || [
                 {display: "Name", short: "Name", showColumnDefault: true, type: "string", var: "name"},
                 {display: "Slot", short: "Slot", showColumnDefault: true, type: "select", var: "slot"}
             ]
@@ -50,6 +76,33 @@ test("Item Search renders every slot capability in the Slot column", async funct
 
     assert.match(markup, /<th[^>]*>.*Slot/);
     assert.match(markup, /<td[^>]*><span>Neck, Hold<\/span><\/td>/);
+});
+
+// Catches the account switches affecting non-equipment content, removing the
+// ordinary details link, hiding Rent, or leaving zero-valued stats visible.
+test("Item Search honors equipment preview and zero-display preferences", async function() {
+    const markup = await renderItemSearch([{
+        id: 17,
+        name: "Plain sword",
+        strength: 0,
+        weight: "0.00",
+        rent: 0,
+        unique: 0
+    }], ["Name", "Str", "Weight", "Rent", "Unique"], {
+        preferences: {itemPreviews: false, hideEquipmentZeros: true},
+        statInfo: [
+            {display: "Name", short: "Name", showColumnDefault: true, type: "string", var: "name"},
+            {display: "Strength", short: "Str", showColumnDefault: true, type: "int", var: "strength"},
+            {display: "Weight", short: "Weight", showColumnDefault: true, type: "decimal", var: "weight"},
+            {display: "Rent", short: "Rent", showColumnDefault: true, type: "int", var: "rent"},
+            {display: "Unique", short: "Unique", showColumnDefault: true, type: "bool", var: "unique"}
+        ]
+    });
+
+    assert.doesNotMatch(markup, /item-preview-trigger/);
+    assert.match(markup, /href="\/items\/details\.html\?id=17"[^>]*>Plain sword<\/a>/);
+    assert.match(markup, /<td class="text-center"><span><\/span><\/td><td class="text-center"><span><\/span><\/td><td class="text-center"><span>0<\/span><\/td>/);
+    assert.match(markup, /aria-label="no"/);
 });
 
 // Catches the Item Search Slot header or values falling back to ordinary table

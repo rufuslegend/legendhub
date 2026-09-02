@@ -6,6 +6,7 @@ import {
 } from "./item-constants.js";
 import { useEffect, useRef } from "react";
 import ItemPreview from "../../components/ItemPreview.jsx";
+import { equipmentTableValue } from "../../lib/equipment-display-preferences.js";
 import { glassTableBandClass } from "../../lib/glass-table-bands.js";
 import {
   canEquipHandCandidate,
@@ -37,7 +38,7 @@ function sortItems(items, stat, direction) {
   });
 }
 
-function displayValue(item, stat) {
+function displayValue(item, stat, hideZeros = false) {
   if (stat.type === "bool")
     return (
       <i
@@ -62,7 +63,7 @@ function displayValue(item, stat) {
           ""}
       </span>
     );
-  return <span>{item[stat.var] ?? ""}</span>;
+  return <span>{equipmentTableValue(item[stat.var], stat, hideZeros)}</span>;
 }
 
 function statRestrictionText(restrictions = []) {
@@ -123,9 +124,9 @@ function DetailsLink({ item }) {
   ) : null;
 }
 
-function ItemNameWithDetails({children, item}) {
+function ItemNameWithDetails({children, item, previewsEnabled = true}) {
   return (
-    <ItemPreview item={item}>
+    <ItemPreview enabled={previewsEnabled} item={item}>
       {children}
       <DetailsLink item={item} />
     </ItemPreview>
@@ -153,6 +154,7 @@ function EquipmentTotalRow({
   totals,
   statRestrictions,
   onToggleLocks,
+  hideZeros = false,
 }) {
   return (
     <tr className="bg-secondary text-white text-center">
@@ -180,7 +182,7 @@ function EquipmentTotalRow({
             className={`${warnings.length ? "bg-danger " : ""}text-nowrap`}
             warning={warning}
           >
-            {totals[stat.var] ?? ""}
+            {equipmentTableValue(totals[stat.var], stat, hideZeros)}
           </WarningCell>
         );
       })}
@@ -189,6 +191,7 @@ function EquipmentTotalRow({
 }
 
 export default function EquipmentPanel({
+  equipmentPreferences = { itemPreviews: true, hideEquipmentZeros: false },
   state,
   totals,
   restrictions,
@@ -248,6 +251,7 @@ export default function EquipmentPanel({
               totals={totals}
               statRestrictions={statRestrictions}
               onToggleLocks={onToggleLocks}
+              hideZeros={equipmentPreferences.hideEquipmentZeros}
             />
             {state.selectedList.items.map((item, index) => {
               const warning = getItemRestrictionText(
@@ -288,7 +292,10 @@ export default function EquipmentPanel({
                     className={`${canOpen ? "clickable " : ""}py-1 py-lg-0`}
                     onClick={canOpen ? () => onOpen(index) : undefined}
                   >
-                    <ItemNameWithDetails item={item}>
+                    <ItemNameWithDetails
+                      item={item}
+                      previewsEnabled={equipmentPreferences.itemPreviews}
+                    >
                       <button
                         type="button"
                         className="btn btn-link p-0 text-reset font-weight-bold builder-table-action"
@@ -318,7 +325,7 @@ export default function EquipmentPanel({
                         aria-describedby={!canOpen ? handStatusId : undefined}
                         onClick={canOpen ? () => onOpen(index) : undefined}
                       >
-                        {displayValue(item, stat)}
+                        {displayValue(item, stat, equipmentPreferences.hideEquipmentZeros)}
                       </button>
                     </td>
                   ))}
@@ -334,6 +341,7 @@ export default function EquipmentPanel({
               totals={totals}
               statRestrictions={statRestrictions}
               onToggleLocks={onToggleLocks}
+              hideZeros={equipmentPreferences.hideEquipmentZeros}
             />
           </tfoot>
         </table>
@@ -401,7 +409,11 @@ export default function EquipmentPanel({
                       </th>
                       {stats.map((stat) => (
                         <td key={stat.var} className="text-nowrap">
-                          {totals[stat.var] ?? ""}
+                          {equipmentTableValue(
+                            totals[stat.var],
+                            stat,
+                            equipmentPreferences.hideEquipmentZeros,
+                          )}
                         </td>
                       ))}
                     </tr>
@@ -426,12 +438,21 @@ export default function EquipmentPanel({
                         </button>
                       </td>
                       <th scope="row">
-                        <ItemNameWithDetails item={current}>
+                        <ItemNameWithDetails
+                          item={current}
+                          previewsEnabled={equipmentPreferences.itemPreviews}
+                        >
                           {current.name}
                         </ItemNameWithDetails>
                       </th>
                       {stats.map((stat) => (
-                        <td key={stat.var}>{displayValue(current, stat)}</td>
+                        <td key={stat.var}>
+                          {displayValue(
+                            current,
+                            stat,
+                            equipmentPreferences.hideEquipmentZeros,
+                          )}
+                        </td>
                       ))}
                     </tr>
                   </tbody>
@@ -582,7 +603,10 @@ export default function EquipmentPanel({
                             onClick={disabled ? undefined : () => onPick(item)}
                           >
                             <td>
-                              <ItemNameWithDetails item={item}>
+                              <ItemNameWithDetails
+                                item={item}
+                                previewsEnabled={equipmentPreferences.itemPreviews}
+                              >
                                 <button
                                   className="btn btn-link p-0 builder-table-action"
                                   type="button"
@@ -598,7 +622,13 @@ export default function EquipmentPanel({
                               </ItemNameWithDetails>
                             </td>
                             {stats.map((stat) => (
-                              <td key={stat.var}>{displayValue(item, stat)}</td>
+                              <td key={stat.var}>
+                                {displayValue(
+                                  item,
+                                  stat,
+                                  equipmentPreferences.hideEquipmentZeros,
+                                )}
+                              </td>
                             ))}
                           </tr>
                         );

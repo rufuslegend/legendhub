@@ -46,6 +46,8 @@ export const DEFAULT_ACCOUNT_PREFERENCES = Object.freeze({
     version: 1,
     theme: "glass-blue",
     itemsPerPage: 20,
+    itemPreviews: true,
+    hideEquipmentZeros: false,
     itemColumns: Object.freeze([]),
     builderColumns: Object.freeze({}),
     selectedProfileId: null,
@@ -104,6 +106,16 @@ function selectedVariant(value, profileId, tolerant) {
         return value;
     if (tolerant)
         return null;
+    throw invalidPreferences();
+}
+
+function booleanPreference(value, fallback, tolerant) {
+    if (value === undefined)
+        return fallback;
+    if (typeof value === "boolean")
+        return value;
+    if (tolerant)
+        return fallback;
     throw invalidPreferences();
 }
 
@@ -170,6 +182,16 @@ export function canonicalizeAccountPreferences(value, {tolerant = false} = {}) {
         version: 1,
         theme,
         itemsPerPage,
+        itemPreviews: booleanPreference(
+            input.itemPreviews,
+            DEFAULT_ACCOUNT_PREFERENCES.itemPreviews,
+            tolerant
+        ),
+        hideEquipmentZeros: booleanPreference(
+            input.hideEquipmentZeros,
+            DEFAULT_ACCOUNT_PREFERENCES.hideEquipmentZeros,
+            tolerant
+        ),
         itemColumns: input.itemColumns === undefined
             ? []
             : canonicalPreferenceColumns(input.itemColumns, {tolerant}),
@@ -224,8 +246,8 @@ function canonicalPatch(document, patch) {
         return document;
     const allowed = {};
     for (const key of [
-        "theme", "itemsPerPage", "itemColumns", "builderColumns",
-        "selectedProfileId", "selectedVariant"
+        "theme", "itemsPerPage", "itemPreviews", "hideEquipmentZeros",
+        "itemColumns", "builderColumns", "selectedProfileId", "selectedVariant"
     ]) {
         if (Object.hasOwn(patch, key))
             allowed[key] = patch[key];

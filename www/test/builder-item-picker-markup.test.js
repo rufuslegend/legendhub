@@ -15,7 +15,13 @@ function hasClass(attributes, className) {
 
 async function renderLockedPicker(searchString = "", {
     candidateCount = 2,
-    selectedCount = 1
+    selectedCount = 1,
+    equipmentPreferences = {itemPreviews: true, hideEquipmentZeros: false},
+    statInfo = [
+        {display: "Name", short: "Name", showColumn: true, type: "string", var: "name"},
+        {display: "Strength", short: "Str", showColumn: true, type: "int", var: "strength"}
+    ],
+    totals = {strength: 100}
 } = {}) {
     const {createServer} = await import("vite");
     const vite = await createServer({
@@ -31,20 +37,23 @@ async function renderLockedPicker(searchString = "", {
             locked: true,
             name: "Limited light",
             slot: 0,
-            strength: 0
+            strength: 0,
+            weight: "0.00",
+            rent: 0,
+            unique: 0
         };
         const candidates = [
-            {id: 0, name: "-", slot: 0, strength: 0},
-            {id: 41, name: "Brass lantern", slot: 0, strength: 2}
+            {id: 0, name: "-", slot: 0, strength: 0, weight: "0.00", rent: 0, unique: 0},
+            {id: 41, name: "Brass lantern", slot: 0, strength: 2, weight: "1.50", rent: 0, unique: 0}
         ];
         while (candidates.length < candidateCount) {
             const id = 40 + candidates.length;
-            candidates.push({id, name: `Candidate ${candidates.length + 1}`, slot: 0, strength: 1});
+            candidates.push({id, name: `Candidate ${candidates.length + 1}`, slot: 0, strength: 1, rent: 0, unique: 0});
         }
         const selectedItems = [currentItem];
         while (selectedItems.length < selectedCount) {
             const id = 100 + selectedItems.length;
-            selectedItems.push({id, name: `Equipped ${selectedItems.length + 1}`, slot: 0, strength: 1});
+            selectedItems.push({id, name: `Equipped ${selectedItems.length + 1}`, slot: 0, strength: 1, rent: 0, unique: 0});
         }
         const itemsBySlot = [];
         itemsBySlot[0] = candidates;
@@ -59,12 +68,10 @@ async function renderLockedPicker(searchString = "", {
             selectedList: {items: selectedItems},
             sortDir: "-",
             sortStat: "",
-            statInfo: [
-                {display: "Name", short: "Name", showColumn: true, type: "string", var: "name"},
-                {display: "Strength", short: "Str", showColumn: true, type: "int", var: "strength"}
-            ],
+            statInfo,
         };
         return renderToStaticMarkup(React.createElement(EquipmentPanel, {
+            equipmentPreferences,
             onAction() {},
             onClose() {},
             onOpen() {},
@@ -73,13 +80,35 @@ async function renderLockedPicker(searchString = "", {
             restrictions: selectedItems.map(() => []),
             state,
             statRestrictions: {strength: []},
-            totals: {strength: 100}
+            totals
         }));
     }
     finally {
         await vite.close();
     }
 }
+
+// Catches Builder ignoring either account preference, hiding Rent zeroes, or
+// removing ordinary details links along with hover previews.
+test("Builder honors equipment preview and zero-display preferences", async function() {
+    const rendered = await renderLockedPicker("", {
+        equipmentPreferences: {itemPreviews: false, hideEquipmentZeros: true},
+        statInfo: [
+            {display: "Name", short: "Name", showColumn: true, type: "string", var: "name"},
+            {display: "Strength", short: "Str", showColumn: true, type: "int", var: "strength"},
+            {display: "Weight", short: "Weight", showColumn: true, type: "decimal", var: "weight"},
+            {display: "Rent", short: "Rent", showColumn: true, type: "int", var: "rent"},
+            {display: "Unique", short: "Unique", showColumn: true, type: "bool", var: "unique"}
+        ],
+        totals: {strength: 0, weight: "0.00", rent: 0, unique: ""}
+    });
+
+    assert.doesNotMatch(rendered, /item-preview-trigger/);
+    assert.match(rendered, /href="\/items\/details\.html\?id=54"/);
+    assert.match(rendered, /<span><\/span><\/button><\/td><td class="p-0"><button[^>]*><span><\/span><\/button><\/td><td class="p-0"><button[^>]*><span>0<\/span>/);
+    assert.match(rendered, /aria-label="no"/);
+    assert.doesNotMatch(rendered, />0<\/span><\/button><\/td><td class="p-0"><button[^>]*><span>0<\/span>/);
+});
 
 test("locked Builder item picker renders the approved comparison workflow", async function() {
     const rendered = await renderLockedPicker();

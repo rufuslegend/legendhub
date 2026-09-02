@@ -42,6 +42,8 @@ const CANONICAL_DEFAULT_PREFERENCES = {
     version: 1,
     theme: "dark",
     itemsPerPage: 20,
+    itemPreviews: true,
+    hideEquipmentZeros: false,
     itemColumns: [],
     builderColumns: {},
     selectedProfileId: null,
