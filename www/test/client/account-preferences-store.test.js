@@ -44,6 +44,8 @@ const initialDocument = {
     version: 1,
     theme: "glass-blue",
     itemsPerPage: 20,
+    itemPreviews: true,
+    hideEquipmentZeros: false,
     itemColumns: ["Name"],
     builderColumns: {"profile-a": ["Rent"]},
     selectedProfileId: "profile-a",
@@ -95,6 +97,8 @@ test("preference store merges page patches and saves one canonical document", as
             version: 1,
             theme: "dark",
             itemsPerPage: 50,
+            itemPreviews: true,
+            hideEquipmentZeros: false,
             itemColumns: ["Name"],
             builderColumns: {"profile-a": ["Rent"]},
             selectedProfileId: "profile-a",
@@ -103,6 +107,35 @@ test("preference store merges page patches and saves one canonical document", as
         revision: 1,
         storageGeneration: 3
     });
+});
+
+// Catches older account documents disabling previews or hiding zeroes merely
+// because the two equipment preferences had not been stored yet.
+test("equipment preferences use safe defaults and retain explicit booleans", async function() {
+    const {canonicalizeAccountPreferences} = await loadStore();
+
+    assert.deepEqual(
+        {
+            itemPreviews: canonicalizeAccountPreferences({}).itemPreviews,
+            hideEquipmentZeros: canonicalizeAccountPreferences({}).hideEquipmentZeros
+        },
+        {itemPreviews: true, hideEquipmentZeros: false}
+    );
+    assert.deepEqual(
+        {
+            itemPreviews: canonicalizeAccountPreferences({itemPreviews: false}).itemPreviews,
+            hideEquipmentZeros: canonicalizeAccountPreferences({hideEquipmentZeros: true}).hideEquipmentZeros
+        },
+        {itemPreviews: false, hideEquipmentZeros: true}
+    );
+    assert.throws(
+        () => canonicalizeAccountPreferences({itemPreviews: "false"}),
+        /invalid/i
+    );
+    assert.throws(
+        () => canonicalizeAccountPreferences({hideEquipmentZeros: 1}),
+        /invalid/i
+    );
 });
 
 // Catches an older in-flight completion rolling back a newer local patch or
@@ -312,8 +345,8 @@ test("preference patches discard private and unknown fields", async function() {
     await store.flush();
 
     assert.deepEqual(Object.keys(store.get().document), [
-        "version", "theme", "itemsPerPage", "itemColumns", "builderColumns",
-        "selectedProfileId", "selectedVariant"
+        "version", "theme", "itemsPerPage", "itemPreviews", "hideEquipmentZeros",
+        "itemColumns", "builderColumns", "selectedProfileId", "selectedVariant"
     ]);
     const serialized = JSON.stringify(calls);
     for (const privateValue of [
@@ -551,6 +584,8 @@ test("preference bootstrap fails closed on invalid revision or generation", asyn
             version: 1,
             theme: "glass-blue",
             itemsPerPage: 20,
+            itemPreviews: true,
+            hideEquipmentZeros: false,
             itemColumns: [],
             builderColumns: {},
             selectedProfileId: null,
@@ -596,6 +631,8 @@ test("unavailable verified bootstrap retains safe account defaults until runtime
             version: 1,
             theme: "glass-blue",
             itemsPerPage: 20,
+            itemPreviews: true,
+            hideEquipmentZeros: false,
             itemColumns: [],
             builderColumns: {},
             selectedProfileId: null,
@@ -611,6 +648,8 @@ test("unavailable verified bootstrap retains safe account defaults until runtime
         version: 1,
         theme: "glass-blue",
         itemsPerPage: 20,
+        itemPreviews: true,
+        hideEquipmentZeros: false,
         itemColumns: [],
         builderColumns: {},
         selectedProfileId: null,

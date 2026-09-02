@@ -11,6 +11,8 @@ const accountPreferenceContext = hasAccountPreferencePayload ? {
         version: rawPreferencePayload.version,
         theme: rawPreferencePayload.theme,
         itemsPerPage: rawPreferencePayload.itemsPerPage,
+        itemPreviews: rawPreferencePayload.itemPreviews,
+        hideEquipmentZeros: rawPreferencePayload.hideEquipmentZeros,
         itemColumns: Array.isArray(rawPreferencePayload.itemColumns) ? rawPreferencePayload.itemColumns : [],
         builderColumns: rawPreferencePayload.builderColumns && typeof rawPreferencePayload.builderColumns === "object" && !Array.isArray(rawPreferencePayload.builderColumns) ? rawPreferencePayload.builderColumns : {},
         selectedProfileId: typeof rawPreferencePayload.selectedProfileId === "string" ? rawPreferencePayload.selectedProfileId : null,

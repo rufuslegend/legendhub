@@ -36,6 +36,8 @@ const DEFAULT_PREFERENCES = Object.freeze({
     version: 1,
     theme: "dark",
     itemsPerPage: 20,
+    itemPreviews: true,
+    hideEquipmentZeros: false,
     itemColumns: Object.freeze([]),
     builderColumns: Object.freeze({}),
     selectedProfileId: null,
@@ -101,6 +103,12 @@ function validatePreferences(payload, options = {}) {
         throw invalidPreferences();
     if (input.itemsPerPage !== undefined && !ITEMS_PER_PAGE.has(input.itemsPerPage))
         throw invalidPreferences();
+    if (input.itemPreviews !== undefined && typeof input.itemPreviews !== "boolean")
+        throw invalidPreferences();
+    if (input.hideEquipmentZeros !== undefined &&
+        typeof input.hideEquipmentZeros !== "boolean") {
+        throw invalidPreferences();
+    }
 
     const itemColumns = input.itemColumns === undefined
         ? []
@@ -143,6 +151,12 @@ function validatePreferences(payload, options = {}) {
         version: 1,
         theme: input.theme || DEFAULT_PREFERENCES.theme,
         itemsPerPage: input.itemsPerPage || DEFAULT_PREFERENCES.itemsPerPage,
+        itemPreviews: input.itemPreviews === undefined
+            ? DEFAULT_PREFERENCES.itemPreviews
+            : input.itemPreviews,
+        hideEquipmentZeros: input.hideEquipmentZeros === undefined
+            ? DEFAULT_PREFERENCES.hideEquipmentZeros
+            : input.hideEquipmentZeros,
         itemColumns,
         builderColumns,
         selectedProfileId,

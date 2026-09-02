@@ -282,6 +282,8 @@ test("preference choice defaults to browser for a fresh canonical account and ot
         version: 1,
         theme: "glass-blue",
         itemsPerPage: 20,
+        itemPreviews: true,
+        hideEquipmentZeros: false,
         itemColumns: [],
         builderColumns: {},
         selectedProfileId: null,

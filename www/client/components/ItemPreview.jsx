@@ -89,7 +89,7 @@ export function createItemPreviewController({
     };
 }
 
-export default function ItemPreview({children, item}) {
+export default function ItemPreview({children, enabled = true, item}) {
     const [layout, setLayout] = useState(null);
     const [open, setOpen] = useState(false);
     const anchorRef = useRef({x: PREVIEW_MARGIN, y: PREVIEW_MARGIN});
@@ -113,7 +113,7 @@ export default function ItemPreview({children, item}) {
     useEffect(function() {
         controller.dismiss();
         setLayout(null);
-    }, [controller, item?.id]);
+    }, [controller, enabled, item?.id]);
 
     useEffect(function() {
         if (!open)
@@ -129,7 +129,7 @@ export default function ItemPreview({children, item}) {
         return () => globalThis.removeEventListener("keydown", keydown, true);
     }, [controller, open]);
 
-    if (!(Number(item?.id) > 0))
+    if (!enabled || !(Number(item?.id) > 0))
         return <>{children}</>;
 
     function enterFromTrigger(event, source) {
