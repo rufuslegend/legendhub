@@ -96,6 +96,44 @@ test("official status is readable but cannot be supplied to community item mutat
     assert.equal(Object.hasOwn(itemApi.mutationFields.updateItem.args, "official"), false);
 });
 
+// Catches the public Items resolver passing expression syntax through the
+// legacy Name LIKE parameter instead of applying the compiled stat predicate.
+test("Items resolver applies a parameterized name and stat search before paging", async function() {
+    const statements = [];
+    const metadata = [
+        {Var: "name", Display: "Name", Short: "Name", Type: "string", FilterString: "<> ''"},
+        {Var: "strength", Display: "Strength", Short: "Str", Type: "int", FilterString: "<> 0"}
+    ];
+    const itemApi = loadItemApi({
+        query(sql, values, callback) {
+            if (typeof values === "function") {
+                callback = values;
+                values = [];
+            }
+            statements.push({sql, values});
+            if (sql.includes("FROM ItemStatInfo")) {
+                callback(null, metadata);
+                return;
+            }
+            callback(null, []);
+        }
+    });
+
+    await itemApi.queryFields.getItems.resolve(null, {
+        searchString: "sword, strength >= 5",
+        filterString: null,
+        sortBy: null,
+        sortAsc: true,
+        page: 1,
+        rows: 20
+    });
+
+    assert.equal(statements.length, 2);
+    assert.match(statements[1].sql,
+        /WHERE Deleted = 0 AND \(\? = '' OR Name LIKE \?\) AND \(Strength >= \?\)/);
+    assert.deepEqual(statements[1].values, ["sword", "%sword%", 5]);
+});
+
 // Catches official item attribution disappearing, selecting a later duplicate
 // submission, or becoming dependent on nondeterministic database row order.
 test("official items expose the earliest submitting character", async function() {

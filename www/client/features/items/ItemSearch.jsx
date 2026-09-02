@@ -7,7 +7,7 @@ import {getPageAccountPreferencesStore} from "../../lib/account-preferences-stor
 import {parseCookieHeader} from "../../lib/cookies.js";
 import {glassTableBandClass} from "../../lib/glass-table-bands.js";
 import {equipmentTableValue} from "../../lib/equipment-display-preferences.js";
-import {loadItems} from "./item-search-api.js";
+import {itemSearchErrorMessage, loadItems} from "./item-search-api.js";
 import {columnsPreferenceCookie} from "./item-search-cookie.js";
 import {createInitialItemSearchState, itemSearchReducer, searchUrl} from "./item-search-reducer.js";
 
@@ -82,7 +82,11 @@ export default function ItemSearch(props) {
             const next = await loadItems(criteria, state.metadata.statInfo, controller.signal);
             dispatch({type: "search/succeeded", requestId, results: next.items, moreResults: next.moreResults});
         } catch (error) {
-            if (error?.name !== "AbortError") dispatch({type: "search/failed", requestId, error: "Search could not be completed. Try again."});
+            if (error?.name !== "AbortError") dispatch({
+                type: "search/failed",
+                requestId,
+                error: itemSearchErrorMessage(error)
+            });
         }
     }
     const visible = stat => state.selectedColumns.includes(stat.short);
@@ -91,7 +95,7 @@ export default function ItemSearch(props) {
         <div className="container-fluid"><div className="px-0"><div className="row"><div className="col-12"><div className="row text-center"><h1 className="col-12">Items</h1></div><div className="px-0 px-md-5">
             {Object.keys(state.nextCriteria.filters).length > 0 && <p className="text-info">Filters: {state.metadata.statInfo.filter(stat => Object.hasOwn(state.nextCriteria.filters, stat.var)).map(stat => <button type="button" key={stat.var} className="badge badge-pill badge-info border-0" onClick={() => dispatch({type: "filter/remove", field: stat.var})}>{stat.display}&nbsp;<i className="fas fa-times" aria-hidden="true" /></button>)}</p>}
             {state.filtersDirty && <p className="text-danger">You have updated your selection of filters. Please search again to apply them.</p>}
-            <form onSubmit={event => { event.preventDefault(); runSearch(state.nextCriteria); }}><div className="row"><div className="input-group col-12"><input type="text" className="form-control" placeholder="Search by name..." value={state.nextCriteria.search ?? ""} autoFocus onChange={event => dispatch({type: "search/text", search: event.target.value})} /><div className="input-group-append"><button ref={columnsTriggerRef} className="btn btn-outline-primary" type="button" aria-haspopup="dialog" aria-expanded={columnsOpen} onClick={() => setColumnsOpen(true)}><span className="d-none d-md-inline-block">Columns</span><i className="d-inline-block d-md-none fas fa-columns" /></button><button ref={filtersTriggerRef} className="btn btn-outline-primary" type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}><span className="d-none d-md-inline-block">Filters</span><i className="d-inline-block d-md-none fas fa-filter" /></button><button className="btn btn-primary" type="submit"><span className="d-none d-md-inline-block">{state.status === "pending" ? "Searching…" : "Search"}</span><i className="d-inline-block d-md-none fas fa-search" /></button></div></div></div></form>
+            <form onSubmit={event => { event.preventDefault(); runSearch(state.nextCriteria); }}><div className="row"><div className="input-group col-12"><input type="text" className="form-control" placeholder="Search by name or stats..." aria-describedby="item-search-query-help" value={state.nextCriteria.search ?? ""} autoFocus onChange={event => dispatch({type: "search/text", search: event.target.value})} /><div className="input-group-append"><button ref={columnsTriggerRef} className="btn btn-outline-primary" type="button" aria-haspopup="dialog" aria-expanded={columnsOpen} onClick={() => setColumnsOpen(true)}><span className="d-none d-md-inline-block">Columns</span><i className="d-inline-block d-md-none fas fa-columns" /></button><button ref={filtersTriggerRef} className="btn btn-outline-primary" type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(true)}><span className="d-none d-md-inline-block">Filters</span><i className="d-inline-block d-md-none fas fa-filter" /></button><button className="btn btn-primary" type="submit"><span className="d-none d-md-inline-block">{state.status === "pending" ? "Searching…" : "Search"}</span><i className="d-inline-block d-md-none fas fa-search" /></button></div></div><small id="item-search-query-help" className="form-text text-muted col-12">Try: sword, (strength &gt;= 15 and mind &lt; 10) or (dexterity &gt; 10 and spirit &lt; 5)</small></div></form>
         </div><br />
         {state.status === "error" && <p role="alert" className="text-danger">{state.error}</p>}
         <Pagination criteria={state.criteria} moreResults={state.moreResults} resultLength={state.results.length} onNavigate={runSearch} />

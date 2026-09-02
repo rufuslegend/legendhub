@@ -6,6 +6,13 @@ function filterString(filters) {
     }).join(",");
 }
 
+export function itemSearchErrorMessage(error) {
+    const inputError = Array.isArray(error?.errors)
+        ? error.errors.find(candidate => candidate?.code === 400)
+        : null;
+    return inputError?.message || "Search could not be completed. Try again.";
+}
+
 export async function loadItems(criteria, statInfo, signal) {
     const fields = [...new Set(["id", ...statInfo.map(stat => stat.var), "slots"])].join(" ");
     const data = await graphqlRequest({

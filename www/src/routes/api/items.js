@@ -4,7 +4,7 @@ let graphql = require("graphql");
 let { GraphQLDateTime } = require("graphql-scalars");
 let auth = require("./auth");
 let apiUtils = require("./utils");
-let {resolveItemFilters} = require("./item-filters");
+let {resolveItemFilters, resolveItemSearch} = require("./item-filters");
 let {resolveItemSort} = require("./item-sort");
 let {
     SlotValidationError,
@@ -511,7 +511,7 @@ let getItems = function(searchString, filterString, sortBy, sortAsc, page, rows)
         rows = 20;
 
     return new Promise(function(resolve, reject) {
-        mysql.query(`SELECT Var, Type, FilterString FROM ItemStatInfo`,
+        mysql.query(`SELECT Var, Display, Short, Type, FilterString FROM ItemStatInfo`,
             function(error, results, fields) {
                 if (error) {
                     reject(new graphql.GraphQLError(error.sqlMessage));
@@ -519,12 +519,21 @@ let getItems = function(searchString, filterString, sortBy, sortAsc, page, rows)
                 }
 
                 if (results.length > 0) {
-                    const filters = resolveItemFilters(filterString, results);
+                    let filters;
+                    let search;
+                    try {
+                        filters = resolveItemFilters(filterString, results);
+                        search = resolveItemSearch(searchString, results);
+                    }
+                    catch (error) {
+                        reject(new apiUtils.BadRequestError(error.message));
+                        return;
+                    }
 
                     const actualSortBy = resolveItemSort(sortBy, noSearch, results);
 
-                    mysql.query(`${ itemSelectSQL } FROM Items WHERE Deleted = 0 AND (? = '' OR Name LIKE ?)${filters.clause} ORDER BY ${actualSortBy} ${sortAsc ? "ASC" : "DESC"} LIMIT ${(page - 1) * rows}, ${rows + 1}`,
-                        [searchString, "%" + searchString + "%", ...filters.values],
+                    mysql.query(`${ itemSelectSQL } FROM Items WHERE Deleted = 0 AND (? = '' OR Name LIKE ?)${search.clause}${filters.clause} ORDER BY ${actualSortBy} ${sortAsc ? "ASC" : "DESC"} LIMIT ${(page - 1) * rows}, ${rows + 1}`,
+                        [search.name, "%" + search.name + "%", ...search.values, ...filters.values],
                         function(error, results, fields) {
                             if (error) {
                                 reject(new graphql.GraphQLError(error.sqlMessage));
