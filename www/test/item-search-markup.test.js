@@ -47,6 +47,18 @@ test("Item Search renders every slot capability in the Slot column", async funct
     assert.match(markup, /<td[^>]*><span>Neck, Hold<\/span><\/td>/);
 });
 
+// Catches the Item Search Slot header or values falling back to ordinary table
+// sizing and consuming spare horizontal room.
+test("Item Search marks the Slot column for compact sizing", async function() {
+    const markup = await renderItemSearch([
+        {id: 17, name: "Neck-held focus", slot: 2, slots: [2, 15]}
+    ]);
+
+    assert.match(markup, /<th[^>]*class="[^"]*\bitem-slot-column\b[^"]*"[^>]*>.*Slot/s);
+    assert.match(markup,
+        /<td[^>]*class="[^"]*\bitem-slot-column\b[^"]*"[^>]*><span>Neck, Hold<\/span><\/td>/);
+});
+
 // Catches item names in the main search remaining ordinary links that cannot
 // participate in the shared delayed-preview behavior.
 test("Item Search marks item names as hover-preview triggers", async function() {

@@ -20,6 +20,7 @@ with version 2.6.0.
 
 ### Changed
 
+- Slot columns now stay compact in Builder and Item Search across every theme, leaving more room for item names and stats.
 - Glass themes now use vertical-only separators and alternating three-row bands in Builder equipment, Item Search, and Choose Item results while keeping the existing row highlight.
 - Item hover previews now use a narrower single-column layout with the item name across the top, evenly aligned labels and values, and only non-zero stats in the body.
 - Builder's Choose Item search now combines item names with stat comparisons using `and`, `or`, commas, and parentheses, including `=`, `>`, `<`, `>=`, and `<=`.

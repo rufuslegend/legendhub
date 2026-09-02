@@ -135,7 +135,7 @@ function ItemNameWithDetails({children, item}) {
 function EquipmentHeaderRow({ stats, className = "" }) {
   return (
     <tr className={`${className} text-center`.trim()}>
-      <th scope="col">Slot</th>
+      <th scope="col" className="item-slot-column">Slot</th>
       <th scope="col">Lock</th>
       <th scope="col">Name</th>
       {stats.map((stat) => (
@@ -156,7 +156,7 @@ function EquipmentTotalRow({
 }) {
   return (
     <tr className="bg-secondary text-white text-center">
-      <td />
+      <td className="item-slot-column" />
       <td>
         <button
           type="button"
@@ -262,7 +262,7 @@ export default function EquipmentPanel({
               return (
                 <tr key={index} className={glassTableBandClass(index)}>
                   <WarningCell
-                    className={`${warning ? "bg-danger" : "bg-primary"} text-white text-center text-nowrap py-md-1 py-lg-0`}
+                    className={`${warning ? "bg-danger" : "bg-primary"} item-slot-column text-white text-center text-nowrap py-md-1 py-lg-0`}
                     warning={warning}
                   >
                     {SLOT_LABELS[item.slot] || item.slot}
@@ -384,7 +384,7 @@ export default function EquipmentPanel({
                 <table className="table table-striped table-sm mb-0">
                   <thead className="thead-dark">
                     <tr className="text-center">
-                      <th>Slot</th>
+                      <th className="item-slot-column">Slot</th>
                       <th>Lock</th>
                       <th>Name</th>
                       {stats.map((stat) => (
@@ -394,7 +394,7 @@ export default function EquipmentPanel({
                   </thead>
                   <tbody>
                     <tr className="bg-secondary text-white text-center">
-                      <td />
+                      <td className="item-slot-column" />
                       <td />
                       <th scope="row" className="font-weight-normal text-nowrap">
                         Total
@@ -406,7 +406,7 @@ export default function EquipmentPanel({
                       ))}
                     </tr>
                     <tr className="text-center">
-                      <td className="bg-primary text-white text-nowrap">
+                      <td className="item-slot-column bg-primary text-white text-nowrap">
                         {SLOT_LABELS[current.slot] || current.slot}
                       </td>
                       <td>

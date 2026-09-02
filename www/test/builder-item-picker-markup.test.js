@@ -93,6 +93,23 @@ test("locked Builder item picker renders the approved comparison workflow", asyn
     assert.equal((rendered.match(/class="builder-picker-result-disabled"/g) || []).length, 2);
 });
 
+// Catches either Builder Slot column returning to ordinary table sizing, which
+// lets it absorb space better used by item names and stats.
+test("Builder marks every Slot column for compact sizing", async function() {
+    const rendered = await renderLockedPicker();
+    const slotHeaders = Array.from(rendered.matchAll(/<th([^>]*)>Slot<\/th>/g),
+        match => match[1]);
+    const slotCells = Array.from(rendered.matchAll(
+        /<td([^>]*)>(?:<span[^>]*>)?Light(?:<\/span>)?<\/td>/g), match => match[1]);
+
+    assert.equal(slotHeaders.length, 3,
+        "equipment header, equipment footer, and current-item table must render Slot headers");
+    assert.ok(slotHeaders.every(attributes => /\bitem-slot-column\b/.test(attributes)));
+    assert.equal(slotCells.length, 2,
+        "equipped and current-item rows must both render the Light slot");
+    assert.ok(slotCells.every(attributes => /\bitem-slot-column\b/.test(attributes)));
+});
+
 // Catches any of the Builder's three item-name surfaces bypassing the shared
 // preview trigger: equipped gear, the current comparison, or picker results.
 test("Builder marks every real item name as a hover-preview trigger", async function() {

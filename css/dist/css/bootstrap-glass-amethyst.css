@@ -9064,6 +9064,11 @@ body > [data-react-root] {
   min-height: 1.5rem;
 }
 
+.item-slot-column {
+  width: 1%;
+  white-space: nowrap;
+}
+
 [ng\:cloak],
 [ng-cloak],
 [data-ng-cloak],
