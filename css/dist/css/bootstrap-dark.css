@@ -9067,7 +9067,8 @@ body > [data-react-root] {
   min-height: 1.5rem;
 }
 
-.item-slot-column {
+.item-slot-column,
+.item-lock-column {
   width: 1%;
   white-space: nowrap;
 }

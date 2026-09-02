@@ -256,6 +256,11 @@ body[ng-controller="builder"] > .container-fluid > .row:first-child > .col-lg-6,
   border-bottom-width: 0;
 }
 
+.glass-banded-table.table-bordered .glass-table-band-start > th,
+.glass-banded-table.table-bordered .glass-table-band-start > td {
+  border-top-width: $table-border-width;
+}
+
 .glass-banded-table.table-striped tbody tr:nth-of-type(odd) {
   background-color: transparent;
 }

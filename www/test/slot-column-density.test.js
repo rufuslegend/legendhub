@@ -24,9 +24,10 @@ async function columnStyles(page, theme) {
     await page.setContent(`
         <style>${stylesheet}</style>
         <table class="table table-sm" style="width: 800px">
-            <thead><tr><th class="item-slot-column">Slot</th><th>Name</th></tr></thead>
+            <thead><tr><th class="item-slot-column">Slot</th><th class="item-lock-column">Lock</th><th>Name</th></tr></thead>
             <tbody><tr>
                 <td class="item-slot-column">About Body</td>
+                <td class="item-lock-column">Lock</td>
                 <td>Plain iron breastplate</td>
             </tr></tbody>
         </table>
@@ -38,18 +39,23 @@ async function columnStyles(page, theme) {
 }
 
 // Catches any generated theme omitting the shared compact-column rule, which
-// would let Slot absorb spare width or wrap its readable label.
-test("every theme keeps Slot narrow and readable", async function() {
+// would let Slot or Lock absorb spare width or wrap its readable label.
+test("every theme keeps Slot and Lock narrow and readable", async function() {
     const browser = await chromium.launch({headless: true});
     try {
         const page = await browser.newPage();
         for (const theme of themes) {
-            const [slot, name] = await columnStyles(page, theme);
+            const [slot, lock, name] = await columnStyles(page, theme);
             assert.equal(slot.whiteSpace, "nowrap", `${theme} must not wrap Slot labels`);
             assert.ok(slot.width < name.width,
                 `${theme} Slot column must remain narrower than Name`);
             assert.ok(slot.width < 150,
                 `${theme} Slot column expanded to ${slot.width}px`);
+            assert.equal(lock.whiteSpace, "nowrap", `${theme} must not wrap Lock labels`);
+            assert.ok(lock.width < name.width,
+                `${theme} Lock column must remain narrower than Name`);
+            assert.ok(lock.width < 80,
+                `${theme} Lock column expanded to ${lock.width}px`);
         }
     }
     finally {

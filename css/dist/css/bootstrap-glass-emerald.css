@@ -9064,7 +9064,8 @@ body > [data-react-root] {
   min-height: 1.5rem;
 }
 
-.item-slot-column {
+.item-slot-column,
+.item-lock-column {
   width: 1%;
   white-space: nowrap;
 }
@@ -9687,6 +9688,11 @@ body[ng-controller=builder] > .container-fluid > .row:first-child > .col-lg-6,
 .glass-banded-table.table-bordered td {
   border-top-width: 0;
   border-bottom-width: 0;
+}
+
+.glass-banded-table.table-bordered .glass-table-band-start > th,
+.glass-banded-table.table-bordered .glass-table-band-start > td {
+  border-top-width: 1px;
 }
 
 .glass-banded-table.table-striped tbody tr:nth-of-type(odd) {

@@ -21,6 +21,7 @@ with version 2.6.0.
 ### Changed
 
 - Item hover previews now use one predictable equipment-stat order: Slot, Rent, AC, the six primary stats, their caps, the remaining visible-column groups, and Alignment last; Mob and Quest details are omitted.
+- Glass table bands now have a horizontal divider every three rows, and Builder Lock columns use only the space their controls need in every theme.
 - Slot columns now stay compact in Builder and Item Search across every theme, leaving more room for item names and stats.
 - Glass themes now use vertical-only separators and alternating three-row bands in Builder equipment, Item Search, and Choose Item results while keeping the existing row highlight.
 - Item hover previews now use a narrower single-column layout with the item name across the top, evenly aligned labels and values, and only non-zero stats in the body.

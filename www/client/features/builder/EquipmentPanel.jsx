@@ -136,7 +136,7 @@ function EquipmentHeaderRow({ stats, className = "" }) {
   return (
     <tr className={`${className} text-center`.trim()}>
       <th scope="col" className="item-slot-column">Slot</th>
-      <th scope="col">Lock</th>
+      <th scope="col" className="item-lock-column">Lock</th>
       <th scope="col">Name</th>
       {stats.map((stat) => (
         <th key={stat.var} scope="col" title={stat.display}>
@@ -157,7 +157,7 @@ function EquipmentTotalRow({
   return (
     <tr className="bg-secondary text-white text-center">
       <td className="item-slot-column" />
-      <td>
+      <td className="item-lock-column">
         <button
           type="button"
           className="btn btn-link p-0 builder-table-action builder-lock-action"
@@ -267,7 +267,7 @@ export default function EquipmentPanel({
                   >
                     {SLOT_LABELS[item.slot] || item.slot}
                   </WarningCell>
-                  <td className="text-center py-md-1 py-lg-0">
+                  <td className="item-lock-column text-center py-md-1 py-lg-0">
                     <button
                       type="button"
                       className="btn btn-link p-0 builder-table-action builder-lock-action"
@@ -385,7 +385,7 @@ export default function EquipmentPanel({
                   <thead className="thead-dark">
                     <tr className="text-center">
                       <th className="item-slot-column">Slot</th>
-                      <th>Lock</th>
+                      <th className="item-lock-column">Lock</th>
                       <th>Name</th>
                       {stats.map((stat) => (
                         <th key={stat.var}>{stat.short}</th>
@@ -395,7 +395,7 @@ export default function EquipmentPanel({
                   <tbody>
                     <tr className="bg-secondary text-white text-center">
                       <td className="item-slot-column" />
-                      <td />
+                      <td className="item-lock-column" />
                       <th scope="row" className="font-weight-normal text-nowrap">
                         Total
                       </th>
@@ -409,7 +409,7 @@ export default function EquipmentPanel({
                       <td className="item-slot-column bg-primary text-white text-nowrap">
                         {SLOT_LABELS[current.slot] || current.slot}
                       </td>
-                      <td>
+                      <td className="item-lock-column">
                         <button
                           type="button"
                           className="btn btn-link p-0 builder-table-action builder-lock-action"

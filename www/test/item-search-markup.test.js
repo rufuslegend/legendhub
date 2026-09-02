@@ -8,6 +8,11 @@ const {renderToStaticMarkup} = require("react-dom/server");
 
 const root = path.resolve(__dirname, "..");
 
+function hasClass(attributes, className) {
+    const classes = attributes.match(/\bclass="([^"]*)"/)?.[1].split(/\s+/) || [];
+    return classes.includes(className);
+}
+
 async function renderItemSearch(results, selectedColumns = ["Slot"]) {
     const {createServer} = await import("vite");
     const vite = await createServer({
@@ -72,7 +77,7 @@ test("Item Search marks item names as hover-preview triggers", async function() 
 
 // Catches the Items result list reverting to per-row striping instead of
 // exposing the approved three-plain, three-shaded Glass theme rhythm.
-test("Item Search marks alternating three-row bands for Glass themes", async function() {
+test("Item Search marks alternating three-row bands and their boundaries", async function() {
     const markup = await renderItemSearch(Array.from({length: 7}, function(_, index) {
         return {id: index + 1, name: `Item ${index + 1}`, slot: 2};
     }), ["Name"]);
@@ -80,8 +85,10 @@ test("Item Search marks alternating three-row bands for Glass themes", async fun
     const rows = Array.from(tbody.matchAll(/<tr([^>]*)>/g), match => match[1]);
 
     assert.match(markup, /<table class="[^"]*\bglass-banded-table\b[^"]*"/);
-    assert.deepEqual(rows.map(attributes => /\bglass-table-band\b/.test(attributes)),
+    assert.deepEqual(rows.map(attributes => hasClass(attributes, "glass-table-band")),
         [false, false, false, true, true, true, false]);
+    assert.deepEqual(rows.map(attributes => hasClass(attributes, "glass-table-band-start")),
+        [false, false, false, true, false, false, true]);
 });
 
 // Catches paging/search refreshes retaining only a scalar slot after the

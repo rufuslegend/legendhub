@@ -8,6 +8,11 @@ const {renderToStaticMarkup} = require("react-dom/server");
 
 const root = path.resolve(__dirname, "..");
 
+function hasClass(attributes, className) {
+    const classes = attributes.match(/\bclass="([^"]*)"/)?.[1].split(/\s+/) || [];
+    return classes.includes(className);
+}
+
 async function renderLockedPicker(searchString = "", {
     candidateCount = 2,
     selectedCount = 1
@@ -110,6 +115,20 @@ test("Builder marks every Slot column for compact sizing", async function() {
     assert.ok(slotCells.every(attributes => /\bitem-slot-column\b/.test(attributes)));
 });
 
+// Catches any Builder Lock header or cell returning to ordinary table sizing,
+// which lets a one-icon control absorb space better used by names and stats.
+test("Builder marks every Lock column for compact sizing", async function() {
+    const rendered = await renderLockedPicker();
+    const lockHeaders = Array.from(rendered.matchAll(/<th([^>]*)>Lock<\/th>/g),
+        match => match[1]);
+
+    assert.equal(lockHeaders.length, 3,
+        "equipment header, equipment footer, and current-item table must render Lock headers");
+    assert.ok(lockHeaders.every(attributes => /\bitem-lock-column\b/.test(attributes)));
+    assert.equal((rendered.match(/\bitem-lock-column\b/g) || []).length, 8,
+        "every Lock header and body cell must use compact sizing");
+});
+
 // Catches any of the Builder's three item-name surfaces bypassing the shared
 // preview trigger: equipped gear, the current comparison, or picker results.
 test("Builder marks every real item name as a hover-preview trigger", async function() {
@@ -133,7 +152,7 @@ function tableBodyRows(markup, tableClass) {
 
 // Catches either Builder equipment surface losing the row markers that let
 // Glass themes group data without changing the other themes.
-test("Builder equipment and Choose Item mark alternating three-row bands", async function() {
+test("Builder equipment and Choose Item mark three-row bands and boundaries", async function() {
     const rendered = await renderLockedPicker("", {
         candidateCount: 7,
         selectedCount: 7
@@ -141,15 +160,20 @@ test("Builder equipment and Choose Item mark alternating three-row bands", async
     const equipmentRows = tableBodyRows(rendered, "builder-equipment-table").slice(1);
     const pickerRows = tableBodyRows(rendered, "builder-picker-results");
     const expected = [false, false, false, true, true, true, false];
+    const expectedBoundaries = [false, false, false, true, false, false, true];
 
     assert.match(rendered,
         /<table class="[^"]*\bbuilder-equipment-table\b[^"]*\bglass-banded-table\b[^"]*"/);
     assert.match(rendered,
         /<table class="[^"]*\bbuilder-picker-results\b[^"]*\bglass-banded-table\b[^"]*"/);
-    assert.deepEqual(equipmentRows.map(attributes => /\bglass-table-band\b/.test(attributes)),
+    assert.deepEqual(equipmentRows.map(attributes => hasClass(attributes, "glass-table-band")),
         expected);
-    assert.deepEqual(pickerRows.map(attributes => /\bglass-table-band\b/.test(attributes)),
+    assert.deepEqual(pickerRows.map(attributes => hasClass(attributes, "glass-table-band")),
         expected);
+    assert.deepEqual(equipmentRows.map(attributes =>
+        hasClass(attributes, "glass-table-band-start")), expectedBoundaries);
+    assert.deepEqual(pickerRows.map(attributes =>
+        hasClass(attributes, "glass-table-band-start")), expectedBoundaries);
 });
 
 // Catches the query grammar becoming invisible again or malformed input being
