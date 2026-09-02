@@ -3,7 +3,7 @@
 <head>
     <%- include('../shared/meta') %>
     <meta property="og:description" content="
-<%_ if (vm.item.getMob) { _%>
+<%_ if (!vm.preview && vm.item.getMob) { _%>
 Mob: <%=vm.item.getMob.name_%>
 <%_ if (vm.item.getMob.areaName) { _%>
 &nbsp;(<%=vm.item.getMob.areaName%>)
@@ -54,88 +54,81 @@ AC: <%-vm.item.ac%>" />
             <%}%>
         </div>
         <% if (vm.preview) { %>
+        <%
+            const previewStats = [];
+            const addPreviewStat = (display, value, className = "") => {
+                previewStats.push({display, value, className});
+            };
+            const addNonZeroPreviewStat = (display, statVar) => {
+                const value = vm.item[statVar];
+                if (value != null && value != 0)
+                    addPreviewStat(display, value);
+            };
+
+            addPreviewStat("Slot", vm.item.slots
+                .map(slot => vm.constants.selectOptions.slot[slot]).join(", "));
+            addNonZeroPreviewStat("Rent", "rent");
+            addNonZeroPreviewStat("AC", "ac");
+
+            const previewPrimaryStats = [
+                ["Strength", "strength"], ["Mind", "mind"],
+                ["Dexterity", "dexterity"], ["Constitution", "constitution"],
+                ["Perception", "perception"], ["Spirit", "spirit"]
+            ];
+            for (const [display, statVar] of previewPrimaryStats)
+                addNonZeroPreviewStat(display, statVar);
+
+            const previewCapStats = [
+                ["Strength Cap", "strengthCap"], ["Mind Cap", "mindCap"],
+                ["Dexterity Cap", "dexterityCap"],
+                ["Constitution Cap", "constitutionCap"],
+                ["Perception Cap", "perceptionCap"],
+                ["Spirit Cap", "spiritCap"]
+            ];
+            for (const [display, statVar] of previewCapStats)
+                addNonZeroPreviewStat(display, statVar);
+
+            const previewFixedVars = new Set([
+                "slot", "name", "alignRestriction", "rent", "ac",
+                ...previewPrimaryStats.map(([, statVar]) => statVar),
+                ...previewCapStats.map(([, statVar]) => statVar)
+            ]);
+            for (const category of vm.statCategories) {
+                if (category.name === "Weapon" &&
+                    !(vm.item.slots.includes(14) || vm.item.slots.includes(15))) continue;
+                for (const stat of category.getItemStatInfo) {
+                    if (previewFixedVars.has(stat.var)) continue;
+                    if ((stat.type === "int" || stat.type === "decimal") &&
+                        vm.item[stat.var] == 0) continue;
+                    if ((stat.type === "string" || stat.type === "bool" ||
+                        stat.type === "select") && !vm.item[stat.var]) continue;
+                    if ((stat.var === "holdable" || stat.var === "weaponType" ||
+                        stat.var === "weaponStat" || stat.var === "speedFactor" ||
+                        stat.var === "quality") && !vm.item.slots.includes(14)) continue;
+                    if (stat.var === "accuracy" &&
+                        !vm.item.slots.includes(14) && !vm.item.slots.includes(15)) continue;
+                    if (stat.var === "value" && vm.item.rent === vm.item.value) continue;
+
+                    if (stat.type === "bool")
+                        addPreviewStat(stat.display, "yes", "text-success");
+                    else if (stat.type === "select")
+                        addPreviewStat(stat.display,
+                            vm.constants.selectOptions[stat.var][vm.item[stat.var]]);
+                    else
+                        addPreviewStat(stat.var === "value" ? "Sells For" : stat.display,
+                            vm.item[stat.var]);
+                }
+            }
+            addPreviewStat("Alignment",
+                vm.constants.selectOptions.alignRestriction[vm.item.alignRestriction]);
+        %>
         <dl class="item-preview-stats">
-            <% if (vm.item.getMob) { %>
-            <div class="item-preview-stat">
-                <dt>Mob</dt>
-                <dd><%=vm.item.getMob.name%><% if (vm.item.getMob.areaName) { %> (<%=vm.item.getMob.areaName%>)<% } %></dd>
-            </div>
-            <% } %>
-            <% if (vm.item.getQuest) { %>
-            <div class="item-preview-stat">
-                <dt>Quest</dt>
-                <dd><%=vm.item.getQuest.title%><% if (vm.item.getQuest.areaName) { %> (<%=vm.item.getQuest.areaName%>)<% } %></dd>
-            </div>
-            <% } %>
-            <div class="item-preview-stat">
-                <dt>Slot</dt>
-                <dd><%=vm.item.slots.map(slot => vm.constants.selectOptions.slot[slot]).join(", ")%></dd>
-            </div>
-            <% if (vm.item.uniqueWear) { %>
-            <div class="item-preview-stat">
-                <dt>Unique</dt>
-                <dd>yes</dd>
-            </div>
-            <% } %>
-            <% if (vm.item.rent != 0) { %>
-            <div class="item-preview-stat">
-                <dt>Rent</dt>
-                <dd><%=vm.item.rent%></dd>
-            </div>
-            <% } %>
-            <% if (vm.item.rent !== vm.item.value && vm.item.value != 0) { %>
-            <div class="item-preview-stat">
-                <dt>Sells For</dt>
-                <dd><%=vm.item.value%></dd>
-            </div>
-            <% } %>
-            <% const previewCoreStats = [
-                ["Strength", "strength"], ["Constitution", "constitution"],
-                ["Mind", "mind"], ["Perception", "perception"],
-                ["Dexterity", "dexterity"], ["Spirit", "spirit"],
-                ["AC", "ac"], ["Weight", "weight"], ["Net Stat", "netStat"]
-            ]; %>
-            <% for (const [display, statVar] of previewCoreStats) { %>
-            <% if (vm.item[statVar] != 0) { %>
-            <div class="item-preview-stat">
-                <dt><%=display%></dt>
-                <dd><%=vm.item[statVar]%></dd>
-            </div>
-            <% } %>
-            <% } %>
-            <% const previewCoreVars = new Set([
-                "slot", "name", "alignRestriction", "strength", "mind",
-                "dexterity", "constitution", "perception", "spirit", "ac",
-                "value", "uniqueWear", "rent", "netStat", "weight"
-            ]); %>
-            <% for (const category of vm.statCategories) { %>
-            <% if (category.name === "Weapon" &&
-                !(vm.item.slots.includes(14) || vm.item.slots.includes(15))) continue; %>
-            <% for (const stat of category.getItemStatInfo) { %>
-            <% if (previewCoreVars.has(stat.var)) continue; %>
-            <% if ((stat.type === "int" || stat.type === "decimal") && vm.item[stat.var] == 0) continue; %>
-            <% if ((stat.type === "string" || stat.type === "bool" || stat.type === "select") && !vm.item[stat.var]) continue; %>
-            <% if ((stat.var === "holdable" || stat.var === "weaponType" ||
-                stat.var === "weaponStat" || stat.var === "speedFactor" ||
-                stat.var === "quality") && !vm.item.slots.includes(14)) continue; %>
-            <% if (stat.var === "accuracy" &&
-                !vm.item.slots.includes(14) && !vm.item.slots.includes(15)) continue; %>
+            <% for (const stat of previewStats) { %>
             <div class="item-preview-stat">
                 <dt><%=stat.display%></dt>
-                <% if (stat.type === "bool") { %>
-                <dd class="text-success">yes</dd>
-                <% } else if (stat.type === "select") { %>
-                <dd><%=vm.constants.selectOptions[stat.var][vm.item[stat.var]]%></dd>
-                <% } else { %>
-                <dd><%=vm.item[stat.var]%></dd>
-                <% } %>
+                <dd<% if (stat.className) { %> class="<%=stat.className%>"<% } %>><%=stat.value%></dd>
             </div>
             <% } %>
-            <% } %>
-            <div class="item-preview-stat">
-                <dt>Alignment</dt>
-                <dd><%=vm.constants.selectOptions.alignRestriction[vm.item.alignRestriction]%></dd>
-            </div>
         </dl>
         <% } else { %>
         <%if (!vm.preview) {%>

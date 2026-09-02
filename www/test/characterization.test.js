@@ -484,9 +484,15 @@ test("item preview renders the item display without site or editing chrome", asy
         locals: shared,
         vm: {
             item, itemNotesHtml: "<p>Secret acquisition instructions</p>", preview: true,
-            statCategories: [{name: "Weapon", getItemStatInfo: [
-                {display: "Accuracy", type: "int", var: "accuracy"}
-            ]}],
+            statCategories: [
+                {name: "Basic", getItemStatInfo: [
+                    {display: "Weight", type: "decimal", var: "weight"},
+                    {display: "Net Stat", type: "decimal", var: "netStat"}
+                ]},
+                {name: "Ranged", getItemStatInfo: [
+                    {display: "Accuracy", type: "int", var: "accuracy"}
+                ]}
+            ],
             constants: {selectOptions: {
                 alignRestriction: ["No restriction"], slot: Array(14).fill("").concat("Wield")
             }}
@@ -505,7 +511,7 @@ test("item preview renders the item display without site or editing chrome", asy
     assert.match(html, />Accuracy<\/dt>\s*<dd>4<\/dd>/);
     assert.match(html, />Alignment<\/dt>\s*<dd>No restriction<\/dd>/);
     assert.doesNotMatch(html, />Rent<\/dt>|>Constitution<\/dt>|>Mind<\/dt>|>Perception<\/dt>|>Spirit<\/dt>/);
-    const orderedStats = [">Strength</dt>", ">Dexterity</dt>", ">AC</dt>", ">Weight</dt>", ">Net Stat</dt>"];
+    const orderedStats = [">AC</dt>", ">Strength</dt>", ">Dexterity</dt>", ">Weight</dt>", ">Net Stat</dt>"];
     for (let index = 1; index < orderedStats.length; ++index)
         assert.ok(html.indexOf(orderedStats[index - 1]) < html.indexOf(orderedStats[index]));
     assert.doesNotMatch(html, /class="card-header"|class="card-footer"|\bcol-sm-/);
@@ -525,6 +531,83 @@ test("item preview renders the item display without site or editing chrome", asy
     });
     assert.match(fullHtml, />Rent<\/dt>\s*<dd[^>]*>0<\/dd>/);
     assert.match(fullHtml, />Constitution<\/dt>\s*<dd[^>]*>0<\/dd>/);
+});
+
+// Catches preview fields drifting with template or metadata order, primary
+// caps separating from their attributes, or acquisition details leaking back
+// into the quick equipment summary.
+test("item preview uses the canonical equipment-stat order", async function() {
+    const ejs = require("ejs");
+    const {normalizeTheme} = require("../src/view-helpers");
+    const item = {
+        ac: -7, accuracy: 9, alignRestriction: 1, constitution: 4,
+        constitutionCap: 14, dexterity: 3, dexterityCap: 13,
+        getHistories: [],
+        getMob: {id: 21, name: "Clockwork guard", areaName: "Foundry"},
+        getQuest: {id: 31, title: "Repair the clock", areaName: "Foundry"},
+        hp: 25, id: 8, mind: 2, mindCap: 12, modifiedBy: "Tester",
+        name: "Ordered blade", netStat: 8.5, notes: "", perception: 5,
+        perceptionCap: 15, rent: 1200, slot: 14, slots: [14], spirit: 6,
+        spiritCap: 16, strength: 1, strengthCap: 11, uniqueWear: true,
+        value: 450, weight: 3.5
+    };
+    const shared = {
+        cookies: {}, displayDateTime: function() { return ""; }, normalizeTheme,
+        permissions: {hasPermission: function() { return false; }}, title: item.name,
+        url: {path: "/items/details.html"}, user: null, version: "test"
+    };
+    const html = await ejs.renderFile(path.join(__dirname, "../src/views/items/display.ejs"), {
+        ...shared,
+        locals: shared,
+        vm: {
+            item, itemNotesHtml: "", preview: true,
+            statCategories: [
+                {name: "Basic", getItemStatInfo: [
+                    {display: "Weight", type: "decimal", var: "weight"},
+                    {display: "Unique", type: "bool", var: "uniqueWear"},
+                    {display: "Net Stat", type: "decimal", var: "netStat"},
+                    {display: "Sell Price", type: "int", var: "value"}
+                ]},
+                {name: "Main", getItemStatInfo: [
+                    {display: "Strength", type: "int", var: "strength"},
+                    {display: "Mind", type: "int", var: "mind"},
+                    {display: "Dexterity", type: "int", var: "dexterity"},
+                    {display: "Constitution", type: "int", var: "constitution"},
+                    {display: "Perception", type: "int", var: "perception"},
+                    {display: "Spirit", type: "int", var: "spirit"},
+                    {display: "AC", type: "int", var: "ac"},
+                    {display: "Strength Cap", type: "int", var: "strengthCap"},
+                    {display: "Mind Cap", type: "int", var: "mindCap"},
+                    {display: "Dexterity Cap", type: "int", var: "dexterityCap"},
+                    {display: "Constitution Cap", type: "int", var: "constitutionCap"},
+                    {display: "Perception Cap", type: "int", var: "perceptionCap"},
+                    {display: "Spirit Cap", type: "int", var: "spiritCap"}
+                ]},
+                {name: "Regen", getItemStatInfo: [
+                    {display: "Hp", type: "int", var: "hp"}
+                ]},
+                {name: "Ranged", getItemStatInfo: [
+                    {display: "Accuracy", type: "int", var: "accuracy"}
+                ]}
+            ],
+            constants: {selectOptions: {
+                alignRestriction: ["No restriction", "Good"],
+                slot: Array(14).fill("").concat("Wield")
+            }}
+        }
+    });
+    const labels = Array.from(html.matchAll(
+        /<div class="item-preview-stat">\s*<dt>([^<]+)<\/dt>/g), match => match[1]);
+
+    assert.deepEqual(labels, [
+        "Slot", "Rent", "AC",
+        "Strength", "Mind", "Dexterity", "Constitution", "Perception", "Spirit",
+        "Strength Cap", "Mind Cap", "Dexterity Cap", "Constitution Cap",
+        "Perception Cap", "Spirit Cap",
+        "Weight", "Unique", "Net Stat", "Sells For", "Hp", "Accuracy",
+        "Alignment"
+    ]);
+    assert.doesNotMatch(html, /Clockwork guard|Repair the clock|>Mob<|>Quest</);
 });
 
 test("API error types retain their public status codes", function() {
