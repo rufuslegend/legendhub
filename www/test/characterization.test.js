@@ -466,7 +466,7 @@ test("item preview renders the item display without site or editing chrome", asy
     const ejs = require("ejs");
     const {normalizeTheme} = require("../src/view-helpers");
     const item = {
-        ac: -3, alignRestriction: 0, constitution: 0, dexterity: 2,
+        ac: -3, accuracy: 4, alignRestriction: 0, constitution: 0, dexterity: 2,
         getHistories: [{id: 70, item: {modifiedBy: "Tester", modifiedOn: new Date()}}],
         getMob: null, getQuest: null, id: 8, mind: 0, modifiedBy: "Tester",
         modifiedOn: new Date(), name: "Preview blade", netStat: 4.5,
@@ -484,7 +484,9 @@ test("item preview renders the item display without site or editing chrome", asy
         locals: shared,
         vm: {
             item, itemNotesHtml: "<p>Secret acquisition instructions</p>", preview: true,
-            statCategories: [],
+            statCategories: [{name: "Weapon", getItemStatInfo: [
+                {display: "Accuracy", type: "int", var: "accuracy"}
+            ]}],
             constants: {selectOptions: {
                 alignRestriction: ["No restriction"], slot: Array(14).fill("").concat("Wield")
             }}
@@ -493,11 +495,20 @@ test("item preview renders the item display without site or editing chrome", asy
 
     assert.match(html, /<body[^>]*class="item-preview-document"/);
     assert.match(html, /<h1[^>]*>Preview blade<\/h1>/);
-    assert.match(html, /<dt class="col-8">Slot<\/dt>\s*<dd class="col-4">Wield<\/dd>/);
+    assert.match(html, /<dl class="item-preview-stats">/);
+    const statRows = html.match(/<div class="item-preview-stat">[\s\S]*?<\/div>/g) || [];
+    assert.equal(statRows.length, 8);
+    for (const row of statRows) {
+        assert.match(row, /^<div class="item-preview-stat">\s*<dt>[^<]+<\/dt>\s*<dd(?: class="[^"]+")?>[^<]+<\/dd>\s*<\/div>$/);
+    }
+    assert.match(html, />Slot<\/dt>\s*<dd>Wield<\/dd>/);
+    assert.match(html, />Accuracy<\/dt>\s*<dd>4<\/dd>/);
+    assert.match(html, />Alignment<\/dt>\s*<dd>No restriction<\/dd>/);
     assert.doesNotMatch(html, />Rent<\/dt>|>Constitution<\/dt>|>Mind<\/dt>|>Perception<\/dt>|>Spirit<\/dt>/);
     const orderedStats = [">Strength</dt>", ">Dexterity</dt>", ">AC</dt>", ">Weight</dt>", ">Net Stat</dt>"];
     for (let index = 1; index < orderedStats.length; ++index)
         assert.ok(html.indexOf(orderedStats[index - 1]) < html.indexOf(orderedStats[index]));
+    assert.doesNotMatch(html, /class="card-header"|class="card-footer"|\bcol-sm-/);
     assert.doesNotMatch(html, />Notes<\/div>|Secret acquisition instructions/);
     assert.doesNotMatch(html, /<nav\b|<footer\b|data-target="#deleteModal"|\/items\/edit\.html|\/items\/history\.html/);
 

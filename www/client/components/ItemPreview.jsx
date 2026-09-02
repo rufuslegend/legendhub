@@ -3,7 +3,7 @@ import {createPortal} from "react-dom";
 
 const PREVIEW_MARGIN = 8;
 const PREVIEW_OFFSET = 12;
-const PREVIEW_WIDTH = 736;
+const PREVIEW_WIDTH = 400;
 
 export function placeItemPreview({
     height,

@@ -45,14 +45,99 @@ AC: <%-vm.item.ac%>" />
     <%- include('../shared/header') %>
     <%}%>
     <div class="container">
-        <div class="row">
-            <h1 class="col-12 text-center text-md-left text-primary"><%=vm.item.name%></h1>
+        <div class="<%-vm.preview ? "item-preview-header" : "row"%>">
+            <h1 class="<%-vm.preview ? "item-preview-title text-primary" : "col-12 text-center text-md-left text-primary"%>"><%=vm.item.name%></h1>
             <%if (vm.historyId && !vm.preview) {%>
             <h4 class="d-inline col-12 text-center text-md-left">
                 <a class="text-warning" href="/items/details.html?id=<%-vm.item.id%>">view latest version</a>
             </h4>
             <%}%>
         </div>
+        <% if (vm.preview) { %>
+        <dl class="item-preview-stats">
+            <% if (vm.item.getMob) { %>
+            <div class="item-preview-stat">
+                <dt>Mob</dt>
+                <dd><%=vm.item.getMob.name%><% if (vm.item.getMob.areaName) { %> (<%=vm.item.getMob.areaName%>)<% } %></dd>
+            </div>
+            <% } %>
+            <% if (vm.item.getQuest) { %>
+            <div class="item-preview-stat">
+                <dt>Quest</dt>
+                <dd><%=vm.item.getQuest.title%><% if (vm.item.getQuest.areaName) { %> (<%=vm.item.getQuest.areaName%>)<% } %></dd>
+            </div>
+            <% } %>
+            <div class="item-preview-stat">
+                <dt>Slot</dt>
+                <dd><%=vm.item.slots.map(slot => vm.constants.selectOptions.slot[slot]).join(", ")%></dd>
+            </div>
+            <% if (vm.item.uniqueWear) { %>
+            <div class="item-preview-stat">
+                <dt>Unique</dt>
+                <dd>yes</dd>
+            </div>
+            <% } %>
+            <% if (vm.item.rent != 0) { %>
+            <div class="item-preview-stat">
+                <dt>Rent</dt>
+                <dd><%=vm.item.rent%></dd>
+            </div>
+            <% } %>
+            <% if (vm.item.rent !== vm.item.value && vm.item.value != 0) { %>
+            <div class="item-preview-stat">
+                <dt>Sells For</dt>
+                <dd><%=vm.item.value%></dd>
+            </div>
+            <% } %>
+            <% const previewCoreStats = [
+                ["Strength", "strength"], ["Constitution", "constitution"],
+                ["Mind", "mind"], ["Perception", "perception"],
+                ["Dexterity", "dexterity"], ["Spirit", "spirit"],
+                ["AC", "ac"], ["Weight", "weight"], ["Net Stat", "netStat"]
+            ]; %>
+            <% for (const [display, statVar] of previewCoreStats) { %>
+            <% if (vm.item[statVar] != 0) { %>
+            <div class="item-preview-stat">
+                <dt><%=display%></dt>
+                <dd><%=vm.item[statVar]%></dd>
+            </div>
+            <% } %>
+            <% } %>
+            <% const previewCoreVars = new Set([
+                "slot", "name", "alignRestriction", "strength", "mind",
+                "dexterity", "constitution", "perception", "spirit", "ac",
+                "value", "uniqueWear", "rent", "netStat", "weight"
+            ]); %>
+            <% for (const category of vm.statCategories) { %>
+            <% if (category.name === "Weapon" &&
+                !(vm.item.slots.includes(14) || vm.item.slots.includes(15))) continue; %>
+            <% for (const stat of category.getItemStatInfo) { %>
+            <% if (previewCoreVars.has(stat.var)) continue; %>
+            <% if ((stat.type === "int" || stat.type === "decimal") && vm.item[stat.var] == 0) continue; %>
+            <% if ((stat.type === "string" || stat.type === "bool" || stat.type === "select") && !vm.item[stat.var]) continue; %>
+            <% if ((stat.var === "holdable" || stat.var === "weaponType" ||
+                stat.var === "weaponStat" || stat.var === "speedFactor" ||
+                stat.var === "quality") && !vm.item.slots.includes(14)) continue; %>
+            <% if (stat.var === "accuracy" &&
+                !vm.item.slots.includes(14) && !vm.item.slots.includes(15)) continue; %>
+            <div class="item-preview-stat">
+                <dt><%=stat.display%></dt>
+                <% if (stat.type === "bool") { %>
+                <dd class="text-success">yes</dd>
+                <% } else if (stat.type === "select") { %>
+                <dd><%=vm.constants.selectOptions[stat.var][vm.item[stat.var]]%></dd>
+                <% } else { %>
+                <dd><%=vm.item[stat.var]%></dd>
+                <% } %>
+            </div>
+            <% } %>
+            <% } %>
+            <div class="item-preview-stat">
+                <dt>Alignment</dt>
+                <dd><%=vm.constants.selectOptions.alignRestriction[vm.item.alignRestriction]%></dd>
+            </div>
+        </dl>
+        <% } else { %>
         <%if (!vm.preview) {%>
         <% if (vm.item.official) { %>
         <div class="row">
@@ -283,6 +368,7 @@ AC: <%-vm.item.ac%>" />
                 <% } %>
             </div>
         </div>
+        <% } %>
     </div>
     <% if (!vm.preview && !vm.item.official) { %>
     <div class="modal" id="deleteModal" tabindex="-1" role="dialog">
