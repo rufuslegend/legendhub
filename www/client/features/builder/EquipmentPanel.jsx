@@ -557,7 +557,7 @@ export default function EquipmentPanel({
                           </button>
                         </th>
                         {stats.map((stat) => (
-                          <th key={stat.var}>
+                          <th key={stat.var} className="text-center">
                             <button
                               className="btn btn-link p-0 text-white builder-table-action"
                               type="button"
@@ -622,7 +622,7 @@ export default function EquipmentPanel({
                               </ItemNameWithDetails>
                             </td>
                             {stats.map((stat) => (
-                              <td key={stat.var}>
+                              <td key={stat.var} className="text-center">
                                 {displayValue(
                                   item,
                                   stat,

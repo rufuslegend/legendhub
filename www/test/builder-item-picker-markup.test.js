@@ -127,6 +127,18 @@ test("locked Builder item picker renders the approved comparison workflow", asyn
     assert.equal((rendered.match(/class="builder-picker-result-disabled"/g) || []).length, 2);
 });
 
+// Catches Choose Item stat headings or values drifting left while the item
+// name remains the table's left-aligned identifying column.
+test("Builder item picker centers stat columns but keeps Name left-aligned", async function() {
+    const rendered = await renderLockedPicker();
+    const pickerStart = rendered.indexOf("builder-picker-results");
+    const picker = rendered.slice(pickerStart, rendered.indexOf("</table>", pickerStart));
+
+    assert.match(picker, /<th class="text-center"><button[^>]*>Str/);
+    assert.match(picker, /<td class="text-center"><span>2<\/span><\/td>/);
+    assert.match(picker, /<td><span[^>]*><button[^>]*>Brass lantern<\/button>/);
+});
+
 // Catches either Builder Slot column returning to ordinary table sizing, which
 // lets it absorb space better used by item names and stats.
 test("Builder marks every Slot column for compact sizing", async function() {
