@@ -22,6 +22,7 @@ with version 2.6.0.
 
 ### Changed
 
+- Choose Item now centers stat headings and values while keeping item names left-aligned.
 - Item names now remain visible in equipment tables and cannot be hidden from the shared column chooser.
 - Item hover previews now use one predictable equipment-stat order: Slot, Rent, AC, the six primary stats, their caps, the remaining visible-column groups, and Alignment last; Mob and Quest details are omitted.
 - Glass table bands now have a horizontal divider every three rows, and Builder Lock columns use only the space their controls need in every theme.
