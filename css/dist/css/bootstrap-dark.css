@@ -9034,10 +9034,10 @@ body > [data-react-root] {
   margin: 0;
 }
 .item-preview-document .item-preview-stat {
-  display: flex;
+  display: grid;
   gap: 1rem;
   align-items: baseline;
-  justify-content: space-between;
+  grid-template-columns: 10rem minmax(0, 1fr);
   padding: 0.0625rem 0;
 }
 .item-preview-document .item-preview-stat dt,
@@ -9045,12 +9045,11 @@ body > [data-react-root] {
   margin: 0;
 }
 .item-preview-document .item-preview-stat dt {
-  flex: 1 1 auto;
   min-width: 0;
 }
 .item-preview-document .item-preview-stat dd {
-  flex: 0 1 60%;
-  text-align: right;
+  min-width: 0;
+  text-align: left;
   overflow-wrap: anywhere;
 }
 

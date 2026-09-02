@@ -20,7 +20,7 @@ with version 2.6.0.
 
 ### Changed
 
-- Item hover previews now use a narrower single-column layout with the item name across the top and only non-zero stats in the body.
+- Item hover previews now use a narrower single-column layout with the item name across the top, evenly aligned labels and values, and only non-zero stats in the body.
 - Builder's Choose Item search now combines item names with stat comparisons using `and`, `or`, commas, and parentheses, including `=`, `>`, `<`, `>=`, and `<=`.
 - Official Legend-submitted items are protected from player editing, deletion, and history reverts for now.
 
