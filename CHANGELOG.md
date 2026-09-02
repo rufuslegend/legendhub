@@ -22,6 +22,7 @@ with version 2.6.0.
 
 ### Changed
 
+- Item names now remain visible in equipment tables and cannot be hidden from the shared column chooser.
 - Item hover previews now use one predictable equipment-stat order: Slot, Rent, AC, the six primary stats, their caps, the remaining visible-column groups, and Alignment last; Mob and Quest details are omitted.
 - Glass table bands now have a horizontal divider every three rows, and Builder Lock columns use only the space their controls need in every theme.
 - Slot columns now stay compact in Builder and Item Search across every theme, leaving more room for item names and stats.

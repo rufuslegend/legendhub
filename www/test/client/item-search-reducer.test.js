@@ -74,7 +74,7 @@ test("item search prefers enabled account columns without changing anonymous ini
         accountPreferences: {account: false, enabled: false, document: null}
     }));
 
-    assert.deepEqual(account.selectedColumns, ["Slot"]);
+    assert.deepEqual(account.selectedColumns, ["Slot", "Name"]);
     assert.deepEqual(anonymous.selectedColumns, ["Name"]);
 });
 
@@ -91,7 +91,18 @@ test("item search keeps unavailable verified accounts off anonymous columns", as
         }
     }));
 
-    assert.deepEqual(state.selectedColumns, []);
+    assert.deepEqual(state.selectedColumns, ["Name"]);
+});
+
+// Catches stale preferences or reducer actions hiding the identifying column
+// from the public Items table.
+test("item search always keeps Name selected", async function() {
+    const {createInitialItemSearchState, itemSearchReducer} = await loadSearch();
+    let state = createInitialItemSearchState(initial({selectedColumns: ["Slot"]}));
+
+    assert.deepEqual(state.selectedColumns, ["Slot", "Name"]);
+    state = itemSearchReducer(state, {type: "column/toggle", short: "Name"});
+    assert.deepEqual(state.selectedColumns, ["Slot", "Name"]);
 });
 
 // Catches a filter toggle that mutates unrelated criteria or fails to mark unapplied filters.

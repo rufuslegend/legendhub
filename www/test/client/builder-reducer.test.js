@@ -834,16 +834,19 @@ test("builder reducer owns visible-column and item-filter transitions", async fu
     const state = {
         ...createInitialBuilderState(),
         statInfo: [
+            {var: "name", short: "Name", showColumn: true, showColumnDefault: true, filter: ""},
             {var: "strength", short: "Str", showColumn: true, showColumnDefault: false, filter: "old"},
             {var: "mind", short: "Min", showColumn: false, showColumnDefault: true, filter: "keep"}
         ],
         defaultStatInfo: [{var: "strength", filter: "default"}]
     };
-    let next = builderReducer(state, {type: "column/toggle", stat: "Str"});
-    assert.equal(next.statInfo[0].showColumn, false);
+    let next = builderReducer(state, {type: "column/toggle", stat: "Name"});
+    assert.equal(next.statInfo[0].showColumn, true);
+    next = builderReducer(next, {type: "column/toggle", stat: "Str"});
+    assert.equal(next.statInfo[1].showColumn, false);
     next = builderReducer(next, {type: "columns/reset"});
-    assert.deepEqual(next.statInfo.map(stat => stat.showColumn), [false, true]);
+    assert.deepEqual(next.statInfo.map(stat => stat.showColumn), [true, false, true]);
     next = builderReducer(next, {type: "filters/reset"});
-    assert.deepEqual(next.statInfo.map(stat => stat.filter), ["default", "keep"]);
-    assert.equal(state.statInfo[0].showColumn, true);
+    assert.deepEqual(next.statInfo.map(stat => stat.filter), ["", "default", "keep"]);
+    assert.equal(state.statInfo[1].showColumn, true);
 });

@@ -27,7 +27,8 @@ export function applySelectedColumns(cookie, statInfo) {
     return (statInfo || []).map(function(stat) {
         return {
             ...stat,
-            showColumn: selected ? selected.has(stat.short) : Boolean(stat.showColumnDefault)
+            showColumn: stat.var === "name" || stat.short === "Name" ||
+                (selected ? selected.has(stat.short) : Boolean(stat.showColumnDefault))
         };
     });
 }
