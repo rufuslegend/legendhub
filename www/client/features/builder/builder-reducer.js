@@ -587,12 +587,12 @@ export function builderReducer(state, action) {
         case "column/toggle":
             return {
                 ...state,
-                statInfo: state.statInfo.map(stat => stat.short === action.stat ? {...stat, showColumn: !stat.showColumn} : stat)
+                statInfo: state.statInfo.map(stat => stat.var !== "name" && stat.short === action.stat ? {...stat, showColumn: !stat.showColumn} : stat)
             };
         case "columns/reset":
             return {
                 ...state,
-                statInfo: state.statInfo.map(stat => ({...stat, showColumn: stat.showColumnDefault}))
+                statInfo: state.statInfo.map(stat => ({...stat, showColumn: stat.var === "name" || stat.showColumnDefault}))
             };
         case "filters/reset": {
             const defaults = new Map(state.defaultStatInfo.map(stat => [stat.var, stat.filter]));

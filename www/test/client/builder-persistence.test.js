@@ -64,9 +64,9 @@ test("builder persistence reads each deployed list-key fallback in order", async
 test("builder persistence keeps Item Search and scoped Builder columns distinct", async function() {
     const {applySelectedColumns, readBuilderPersistence} = await loadPersistence();
     const statInfo = [
-        {short: "Slot", showColumnDefault: true},
-        {short: "Name", showColumnDefault: true},
-        {short: "Rent", showColumnDefault: false}
+        {var: "slot", short: "Slot", showColumnDefault: true},
+        {var: "name", short: "Name", showColumnDefault: true},
+        {var: "rent", short: "Rent", showColumnDefault: false}
     ];
     const preference = readBuilderPersistence({
         cookies: {"cookie-consent": "yes", "sc-Hero": "Rent-", sc2: "Name-"},
@@ -76,7 +76,7 @@ test("builder persistence keeps Item Search and scoped Builder columns distinct"
 
     assert.equal(preference.itemColumns, "Name-");
     assert.deepEqual(preference.builderColumns, {Hero: "Rent-"});
-    assert.deepEqual(applySelectedColumns(preference.builderColumns.Hero, statInfo).map(stat => stat.showColumn), [false, false, true]);
+    assert.deepEqual(applySelectedColumns(preference.builderColumns.Hero, statInfo).map(stat => stat.showColumn), [false, true, true]);
     assert.deepEqual(applySelectedColumns(["Name"], statInfo).map(stat => stat.showColumn), [false, true, false]);
     assert.deepEqual(applySelectedColumns(null, statInfo).map(stat => stat.showColumn), [true, true, false]);
     assert.equal(statInfo[0].showColumn, undefined);
@@ -111,7 +111,7 @@ test("fresh account Builder uses metadata defaults until that profile saves colu
     assert.deepEqual(visibleColumns({
         itemColumns: [],
         builderColumns: {"profile-a": []}
-    }), []);
+    }), ["Name"]);
 });
 
 // Catches writes that change key names, omit secure cookie options, or fail to request the deployed twenty-year expiry.

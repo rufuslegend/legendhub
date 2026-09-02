@@ -18,7 +18,15 @@ function cloneFilters(filters) {
 }
 
 function defaultColumns(statInfo) {
-    return statInfo.filter(stat => stat.showColumnDefault).map(stat => stat.short);
+    return requiredColumns(statInfo.filter(stat => stat.showColumnDefault).map(stat => stat.short), statInfo);
+}
+
+function requiredColumns(columns, statInfo) {
+    const selected = [...columns];
+    const name = statInfo.find(stat => stat.var === "name")?.short;
+    if (name && !selected.includes(name))
+        selected.push(name);
+    return selected;
 }
 
 function withCriteria(state, nextCriteria) {
@@ -74,7 +82,9 @@ export function createInitialItemSearchState(props) {
         equipmentPreferences: equipmentDisplayPreferences(props.accountPreferences),
         requestId: 0,
         results: props.results || [],
-        selectedColumns: [...(accountColumns || props.selectedColumns || defaultColumns(props.statInfo || []))],
+        selectedColumns: requiredColumns(
+            accountColumns || props.selectedColumns || defaultColumns(props.statInfo || []),
+            props.statInfo || []),
         status: "idle"
     };
 }
@@ -118,6 +128,8 @@ export function itemSearchReducer(state, action) {
         case "page/change":
             return withCriteria(state, {...state.criteria, page: Math.max(1, action.page)});
         case "column/toggle": {
+            if (state.metadata.statInfo.some(stat => stat.var === "name" && stat.short === action.short))
+                return state;
             const selectedColumns = state.selectedColumns.includes(action.short)
                 ? state.selectedColumns.filter(short => short !== action.short)
                 : [...state.selectedColumns, action.short];
