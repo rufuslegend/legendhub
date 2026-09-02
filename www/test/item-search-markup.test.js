@@ -78,6 +78,17 @@ test("Item Search renders every slot capability in the Slot column", async funct
     assert.match(markup, /<td[^>]*><span>Neck, Hold<\/span><\/td>/);
 });
 
+// Catches the public Items search hiding its expression grammar or diverging
+// from the example players already see in Choose Item.
+test("Item Search explains name and grouped stat expressions", async function() {
+    const markup = await renderItemSearch([]);
+
+    assert.match(markup,
+        /<input[^>]*aria-describedby="item-search-query-help"[^>]*>/);
+    assert.match(markup,
+        /id="item-search-query-help"[^>]*>Try: sword, \(strength &gt;= 15 and mind &lt; 10\) or \(dexterity &gt; 10 and spirit &lt; 5\)<\/small>/);
+});
+
 // Catches the account switches affecting non-equipment content, removing the
 // ordinary details link, hiding Rent, or leaving zero-valued stats visible.
 test("Item Search honors equipment preview and zero-display preferences", async function() {

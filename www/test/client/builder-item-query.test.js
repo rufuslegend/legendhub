@@ -107,3 +107,16 @@ test("builder item queries identify unknown stats and unmatched parentheses", as
     assert.match(parseBuilderItemQuery("(strength > 5", stats).error,
         /Expected a closing parenthesis/);
 });
+
+// Catches the deployed Two Handed abbreviation diverging between Builder and
+// the main Items grammar because its first character is numeric.
+test("builder item queries accept the deployed 2H alias", async function() {
+    const {compileBuilderItemQuery} = await loadQuery();
+    const matches = compileBuilderItemQuery(
+        "2H = 1",
+        [{display: "Two Handed", short: "2H", var: "twoHanded"}]
+    );
+
+    assert.equal(matches({name: "Great sword", twoHanded: 1}), true);
+    assert.equal(matches({name: "Short sword", twoHanded: 0}), false);
+});

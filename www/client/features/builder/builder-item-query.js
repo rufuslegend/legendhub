@@ -31,16 +31,16 @@ function tokenize(expression) {
             index += operator[0].length;
             continue;
         }
+        const word = rest.match(/^(?=[A-Za-z0-9_]*[A-Za-z_])[A-Za-z0-9_]+/);
+        if (word) {
+            tokens.push({type: "word", value: word[0]});
+            index += word[0].length;
+            continue;
+        }
         const number = rest.match(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)/);
         if (number) {
             tokens.push({type: "number", value: Number(number[0])});
             index += number[0].length;
-            continue;
-        }
-        const word = rest.match(/^[A-Za-z_][A-Za-z0-9_]*/);
-        if (word) {
-            tokens.push({type: "word", value: word[0]});
-            index += word[0].length;
             continue;
         }
         throw new Error(`Unexpected character "${character}".`);

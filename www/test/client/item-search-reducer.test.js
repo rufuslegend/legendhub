@@ -221,6 +221,19 @@ test("item search sends criteria as GraphQL variables and returns page results",
     }
 });
 
+// Catches safe parser diagnostics being replaced by an unhelpful generic
+// message, or private non-input failures being exposed to the page.
+test("item search exposes only safe query-syntax errors", async function() {
+    const {itemSearchErrorMessage} = await loadApi();
+
+    assert.equal(itemSearchErrorMessage({
+        errors: [{code: 400, message: 'Unknown numeric item stat "luck".'}]
+    }), 'Unknown numeric item stat "luck".');
+    assert.equal(itemSearchErrorMessage({
+        errors: [{code: 500, message: "private database failure"}]
+    }), "Search could not be completed. Try again.");
+});
+
 // Catches live result queries selecting only the legacy sortable slot and
 // dropping secondary capabilities before the refreshed table can render them.
 test("item search requests computed slots without exposing slot masks", async function() {

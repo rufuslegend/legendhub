@@ -7,6 +7,7 @@ with version 2.6.0.
 
 ### Added
 
+- Added Builder-style stat expressions to the main Items search, including comparisons, combined name searches, `and`/`or`, and parentheses.
 - Added Account preferences to turn item stat pop-ups on or off and optionally hide zero-valued stats in equipment tables while keeping Rent visible.
 - Added two-second item previews when hovering or focusing gear names in Item Search and Builder, while preserving the existing item links and new-tab actions.
 - Added verified email addresses to accounts. New accounts now require an email address and receive a verification link before email-only features become available.
