@@ -6,6 +6,7 @@ import {
 } from "./item-constants.js";
 import { useEffect, useRef } from "react";
 import ItemPreview from "../../components/ItemPreview.jsx";
+import { glassTableBandClass } from "../../lib/glass-table-bands.js";
 import {
   canEquipHandCandidate,
   canOpenEquipmentRow,
@@ -236,7 +237,7 @@ export default function EquipmentPanel({
   return (
     <section className="row">
       <div className="table-responsive">
-        <table className="table table-striped table-hover table-sm table-bordered builder-equipment-table">
+        <table className="table table-striped table-hover table-sm table-bordered builder-equipment-table glass-banded-table">
           <thead className="thead-dark">
             <EquipmentHeaderRow stats={stats} />
           </thead>
@@ -259,7 +260,7 @@ export default function EquipmentPanel({
               );
               const handStatusId = `builder-equipment-hand-status-${index}`;
               return (
-                <tr key={index}>
+                <tr key={index} className={glassTableBandClass(index)}>
                   <WarningCell
                     className={`${warning ? "bg-danger" : "bg-primary"} text-white text-center text-nowrap py-md-1 py-lg-0`}
                     warning={warning}
@@ -513,7 +514,7 @@ export default function EquipmentPanel({
             ) : (
               <>
                 <div className="table-responsive">
-                  <table className="table table-striped table-bordered table-hover table-sm mt-3 builder-picker-results">
+                  <table className="table table-striped table-bordered table-hover table-sm mt-3 builder-picker-results glass-banded-table">
                     <thead className="thead-dark">
                       <tr>
                         <th>
@@ -560,7 +561,7 @@ export default function EquipmentPanel({
                       </tr>
                     </thead>
                     <tbody>
-                      {choices.map((item) => {
+                      {choices.map((item, index) => {
                         const capacityBlocked = !canEquipHandCandidate(
                           state.selectedList.items,
                           state.currentItemIndex,
@@ -574,7 +575,10 @@ export default function EquipmentPanel({
                         return (
                           <tr
                             key={item.id}
-                            className={disabled ? "builder-picker-result-disabled" : "clickable"}
+                            className={[
+                              disabled ? "builder-picker-result-disabled" : "clickable",
+                              glassTableBandClass(index),
+                            ].filter(Boolean).join(" ")}
                             onClick={disabled ? undefined : () => onPick(item)}
                           >
                             <td>

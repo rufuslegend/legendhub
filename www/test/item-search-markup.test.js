@@ -58,6 +58,20 @@ test("Item Search marks item names as hover-preview triggers", async function() 
         /class="item-preview-trigger"[^>]*data-item-preview-id="17"[^>]*>.*href="\/items\/details\.html\?id=17"[^>]*>Neck-held focus<\/a>/);
 });
 
+// Catches the Items result list reverting to per-row striping instead of
+// exposing the approved three-plain, three-shaded Glass theme rhythm.
+test("Item Search marks alternating three-row bands for Glass themes", async function() {
+    const markup = await renderItemSearch(Array.from({length: 7}, function(_, index) {
+        return {id: index + 1, name: `Item ${index + 1}`, slot: 2};
+    }), ["Name"]);
+    const tbody = markup.match(/<tbody>(.*?)<\/tbody>/s)?.[1] || "";
+    const rows = Array.from(tbody.matchAll(/<tr([^>]*)>/g), match => match[1]);
+
+    assert.match(markup, /<table class="[^"]*\bglass-banded-table\b[^"]*"/);
+    assert.deepEqual(rows.map(attributes => /\bglass-table-band\b/.test(attributes)),
+        [false, false, false, true, true, true, false]);
+});
+
 // Catches paging/search refreshes retaining only a scalar slot after the
 // reducer accepts a live result that includes every capability.
 test("Item Search keeps every slot after a paginated result refresh", async function() {

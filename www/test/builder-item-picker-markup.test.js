@@ -8,7 +8,10 @@ const {renderToStaticMarkup} = require("react-dom/server");
 
 const root = path.resolve(__dirname, "..");
 
-async function renderLockedPicker(searchString = "") {
+async function renderLockedPicker(searchString = "", {
+    candidateCount = 2,
+    selectedCount = 1
+} = {}) {
     const {createServer} = await import("vite");
     const vite = await createServer({
         appType: "custom",
@@ -25,11 +28,21 @@ async function renderLockedPicker(searchString = "") {
             slot: 0,
             strength: 0
         };
-        const itemsBySlot = [];
-        itemsBySlot[0] = [
+        const candidates = [
             {id: 0, name: "-", slot: 0, strength: 0},
             {id: 41, name: "Brass lantern", slot: 0, strength: 2}
         ];
+        while (candidates.length < candidateCount) {
+            const id = 40 + candidates.length;
+            candidates.push({id, name: `Candidate ${candidates.length + 1}`, slot: 0, strength: 1});
+        }
+        const selectedItems = [currentItem];
+        while (selectedItems.length < selectedCount) {
+            const id = 100 + selectedItems.length;
+            selectedItems.push({id, name: `Equipped ${selectedItems.length + 1}`, slot: 0, strength: 1});
+        }
+        const itemsBySlot = [];
+        itemsBySlot[0] = candidates;
         const state = {
             charmSelectors: [],
             currentItem,
@@ -38,7 +51,7 @@ async function renderLockedPicker(searchString = "") {
             itemsBySlot,
             itemsPerPage: 20,
             searchString,
-            selectedList: {items: [currentItem]},
+            selectedList: {items: selectedItems},
             sortDir: "-",
             sortStat: "",
             statInfo: [
@@ -52,7 +65,7 @@ async function renderLockedPicker(searchString = "") {
             onOpen() {},
             onPick() {},
             onToggleLocks() {},
-            restrictions: [[]],
+            restrictions: selectedItems.map(() => []),
             state,
             statRestrictions: {strength: []},
             totals: {strength: 100}
@@ -73,7 +86,7 @@ test("locked Builder item picker renders the approved comparison workflow", asyn
         "search must precede the current-item comparison");
     assert.match(rendered, /<th[^>]*>Total<\/th><td[^>]*>100<\/td>/);
     assert.match(rendered,
-        /class="table table-striped table-bordered table-hover table-sm mt-3 builder-picker-results"/);
+        /class="table table-striped table-bordered table-hover table-sm mt-3 builder-picker-results glass-banded-table"/);
     assert.equal((rendered.match(/class="fas fa-sort(?:\s|\")/g) || []).length, 2);
     assert.match(rendered,
         /This slot is locked\. Unlock the current item to choose a replacement\./);
@@ -91,6 +104,35 @@ test("Builder marks every real item name as a hover-preview trigger", async func
         "picker result names must preview");
     assert.equal((rendered.match(/data-item-preview-id="0"/g) || []).length, 0,
         "empty item rows must not preview");
+});
+
+function tableBodyRows(markup, tableClass) {
+    const tableStart = markup.indexOf(tableClass);
+    const tableEnd = markup.indexOf("</table>", tableStart);
+    const table = markup.slice(tableStart, tableEnd);
+    const tbody = table.match(/<tbody>(.*?)<\/tbody>/s)?.[1] || "";
+    return Array.from(tbody.matchAll(/<tr([^>]*)>/g), match => match[1]);
+}
+
+// Catches either Builder equipment surface losing the row markers that let
+// Glass themes group data without changing the other themes.
+test("Builder equipment and Choose Item mark alternating three-row bands", async function() {
+    const rendered = await renderLockedPicker("", {
+        candidateCount: 7,
+        selectedCount: 7
+    });
+    const equipmentRows = tableBodyRows(rendered, "builder-equipment-table").slice(1);
+    const pickerRows = tableBodyRows(rendered, "builder-picker-results");
+    const expected = [false, false, false, true, true, true, false];
+
+    assert.match(rendered,
+        /<table class="[^"]*\bbuilder-equipment-table\b[^"]*\bglass-banded-table\b[^"]*"/);
+    assert.match(rendered,
+        /<table class="[^"]*\bbuilder-picker-results\b[^"]*\bglass-banded-table\b[^"]*"/);
+    assert.deepEqual(equipmentRows.map(attributes => /\bglass-table-band\b/.test(attributes)),
+        expected);
+    assert.deepEqual(pickerRows.map(attributes => /\bglass-table-band\b/.test(attributes)),
+        expected);
 });
 
 // Catches the query grammar becoming invisible again or malformed input being

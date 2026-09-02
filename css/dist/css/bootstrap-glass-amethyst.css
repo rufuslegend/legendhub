@@ -9678,6 +9678,21 @@ body[ng-controller=builder] > .container-fluid > .row:first-child > .col-lg-6,
   border-color: rgba(106, 58, 153, 0.7);
 }
 
+.glass-banded-table.table-bordered th,
+.glass-banded-table.table-bordered td {
+  border-top-width: 0;
+  border-bottom-width: 0;
+}
+
+.glass-banded-table.table-striped tbody tr:nth-of-type(odd) {
+  background-color: transparent;
+}
+
+.glass-banded-table.table-striped tbody tr.glass-table-band {
+  background-color: rgba(143, 74, 221, 0.08);
+}
+
+.glass-banded-table.table-hover tbody tr:hover,
 .table-hover tbody tr:hover,
 .dropdown-item:hover,
 .dropdown-item:focus,
