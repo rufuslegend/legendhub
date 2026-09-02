@@ -52,7 +52,8 @@ const searchMetadata = [
     {Var: "spirit", Display: "Spirit", Short: "Spi", Type: "int"},
     {Var: "ac", Display: "Armor Class", Short: "AC", Type: "int"},
     {Var: "hit", Display: "Hit Roll", Short: "HR", Type: "int"},
-    {Var: "rent", Display: "Rent", Short: "Rent", Type: "decimal"}
+    {Var: "rent", Display: "Rent", Short: "Rent", Type: "decimal"},
+    {Var: "twoHanded", Display: "Two Handed", Short: "2H", Type: "bool"}
 ];
 
 // Catches the main Items search treating the complete expression as literal
@@ -100,7 +101,8 @@ test("item search preserves ordinary name searches", function() {
 test("item search rejects malformed and unknown stat expressions", function() {
     assert.throws(
         () => resolveItemSearch("strength >> 5", searchMetadata),
-        /Expected a number after "strength >"\./
+        error => error?.constructor?.name === "ItemSearchSyntaxError" &&
+            /Expected a number after "strength >"\./.test(error.message)
     );
     assert.throws(
         () => resolveItemSearch("luck >= 5", searchMetadata),
@@ -109,5 +111,37 @@ test("item search rejects malformed and unknown stat expressions", function() {
     assert.throws(
         () => resolveItemSearch("name = 5", searchMetadata),
         /Unknown numeric item stat "name"\./
+    );
+});
+
+// Catches a digit-leading deployed alias being tokenized as the number 2 and
+// never reaching stat lookup.
+test("item search accepts the deployed 2H numeric stat alias", function() {
+    assert.deepEqual(resolveItemSearch("2H = 1", searchMetadata), {
+        name: "",
+        clause: " AND (TwoHanded = ?)",
+        values: [1]
+    });
+});
+
+// Catches hostile nesting exhausting the JavaScript stack or oversized and
+// non-finite values escaping the parser as database errors.
+test("item search bounds public expressions and rejects numeric overflow", function() {
+    const nested = `${"(".repeat(33)}strength = 1${")".repeat(33)}`;
+    assert.throws(
+        () => resolveItemSearch(nested, searchMetadata),
+        /Item search grouping is too deeply nested\./
+    );
+    assert.throws(
+        () => resolveItemSearch(`strength = ${"9".repeat(400)}`, searchMetadata),
+        /Item search number is too large\./
+    );
+    assert.throws(
+        () => resolveItemSearch(`${"s".repeat(1001)}, strength = 1`, searchMetadata),
+        /Item search query is too long\./
+    );
+    assert.throws(
+        () => resolveItemSearch(`${"Str=1,".repeat(70)}Str=1`, searchMetadata),
+        /Item search expression is too complex\./
     );
 });

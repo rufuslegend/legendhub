@@ -6,6 +6,15 @@ const identifierPattern = /^[a-z][A-Za-z0-9]*$/;
 const numericClausePattern = /^(?:=|<>|!=|>=|<=|>|<) -?\d+(?:\.\d+)?$/;
 const stringClausePattern = /^(?:=|<>|!=) ''$/;
 const selectClausePattern = /^(=|<>|!=|>=|<=|>|<) \{0\}$/;
+const MAX_ITEM_SEARCH_LENGTH = 1000;
+const MAX_ITEM_SEARCH_TOKENS = 256;
+const MAX_ITEM_SEARCH_DEPTH = 32;
+
+class ItemSearchSyntaxError extends TypeError {}
+
+function syntaxError(message) {
+    return new ItemSearchSyntaxError(message);
+}
 
 function normalizedStatName(value) {
     return typeof value === "string" ? value.trim().toLowerCase().replace(/\s+/g, " ") : "";
@@ -52,20 +61,25 @@ function tokenizeSearchExpression(expression) {
             index += operator[0].length;
             continue;
         }
-        const number = rest.match(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)/);
-        if (number) {
-            tokens.push({type: "number", value: Number(number[0])});
-            index += number[0].length;
-            continue;
-        }
-        const word = rest.match(/^[A-Za-z_][A-Za-z0-9_]*/);
+        const word = rest.match(/^(?=[A-Za-z0-9_]*[A-Za-z_])[A-Za-z0-9_]+/);
         if (word) {
             tokens.push({type: "word", value: word[0]});
             index += word[0].length;
             continue;
         }
-        throw new TypeError(`Unexpected character "${character}".`);
+        const number = rest.match(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)/);
+        if (number) {
+            const value = Number(number[0]);
+            if (!Number.isFinite(value))
+                throw syntaxError("Item search number is too large.");
+            tokens.push({type: "number", value});
+            index += number[0].length;
+            continue;
+        }
+        throw syntaxError(`Unexpected character "${character}".`);
     }
+    if (tokens.length > MAX_ITEM_SEARCH_TOKENS)
+        throw syntaxError("Item search expression is too complex.");
     return tokens;
 }
 
@@ -83,35 +97,37 @@ function compileSearchExpression(expression, metadataRows) {
         const statName = words.join(" ");
         const stat = stats.get(normalizedStatName(statName));
         if (!stat)
-            throw new TypeError(`Unknown numeric item stat "${statName}".`);
+            throw syntaxError(`Unknown numeric item stat "${statName}".`);
         const operator = take();
         if (!operator || operator.type !== "operator")
-            throw new TypeError(`Expected a comparison after "${statName}".`);
+            throw syntaxError(`Expected a comparison after "${statName}".`);
         const number = take();
         if (!number || number.type !== "number") {
-            throw new TypeError(
+            throw syntaxError(
                 `Expected a number after "${statName} ${operator.value}".`
             );
         }
         return {sql: `(${stat.column} ${operator.value} ?)`, values: [number.value]};
     }
 
-    function primary() {
+    function primary(depth) {
         if (peek()?.type !== "(")
             return comparison();
+        if (depth >= MAX_ITEM_SEARCH_DEPTH)
+            throw syntaxError("Item search grouping is too deeply nested.");
         take();
-        const result = orExpression();
+        const result = orExpression(depth + 1);
         if (take()?.type !== ")")
-            throw new TypeError("Expected a closing parenthesis.");
+            throw syntaxError("Expected a closing parenthesis.");
         return result;
     }
 
-    function andExpression() {
-        let result = primary();
+    function andExpression(depth) {
+        let result = primary(depth);
         while (peek()?.type === "," ||
             (peek()?.type === "word" && peek().value.toLowerCase() === "and")) {
             take();
-            const right = primary();
+            const right = primary(depth);
             result = {
                 sql: `(${result.sql} AND ${right.sql})`,
                 values: [...result.values, ...right.values]
@@ -120,11 +136,11 @@ function compileSearchExpression(expression, metadataRows) {
         return result;
     }
 
-    function orExpression() {
-        let result = andExpression();
+    function orExpression(depth) {
+        let result = andExpression(depth);
         while (peek()?.type === "word" && peek().value.toLowerCase() === "or") {
             take();
-            const right = andExpression();
+            const right = andExpression(depth);
             result = {
                 sql: `(${result.sql} OR ${right.sql})`,
                 values: [...result.values, ...right.values]
@@ -133,13 +149,15 @@ function compileSearchExpression(expression, metadataRows) {
         return result;
     }
 
-    const result = orExpression();
+    const result = orExpression(0);
     if (peek())
-        throw new TypeError(`Unexpected "${peek().value}".`);
+        throw syntaxError(`Unexpected "${peek().value}".`);
     return result;
 }
 
 function resolveItemSearch(searchString, metadataRows) {
+    if (typeof searchString === "string" && searchString.length > MAX_ITEM_SEARCH_LENGTH)
+        throw syntaxError("Item search query is too long.");
     const query = (searchString || "").trim();
     if (!/[<>=]/.test(query))
         return {name: query, clause: "", values: []};
@@ -215,4 +233,4 @@ function resolveItemFilters(filterString, metadataRows) {
     return {clause, values};
 }
 
-module.exports = {resolveItemFilters, resolveItemSearch};
+module.exports = {ItemSearchSyntaxError, resolveItemFilters, resolveItemSearch};

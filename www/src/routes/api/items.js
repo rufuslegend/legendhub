@@ -4,7 +4,11 @@ let graphql = require("graphql");
 let { GraphQLDateTime } = require("graphql-scalars");
 let auth = require("./auth");
 let apiUtils = require("./utils");
-let {resolveItemFilters, resolveItemSearch} = require("./item-filters");
+let {
+    ItemSearchSyntaxError,
+    resolveItemFilters,
+    resolveItemSearch
+} = require("./item-filters");
 let {resolveItemSort} = require("./item-sort");
 let {
     SlotValidationError,
@@ -526,7 +530,9 @@ let getItems = function(searchString, filterString, sortBy, sortAsc, page, rows)
                         search = resolveItemSearch(searchString, results);
                     }
                     catch (error) {
-                        reject(new apiUtils.BadRequestError(error.message));
+                        reject(error instanceof ItemSearchSyntaxError
+                            ? new apiUtils.BadRequestError(error.message)
+                            : new graphql.GraphQLError("Item search could not be completed."));
                         return;
                     }
 
