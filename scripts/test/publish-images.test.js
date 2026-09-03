@@ -191,7 +191,11 @@ test("refuses dirty service build inputs before invoking Docker", () => {
 });
 
 test("refuses dirty root web-image inputs before invoking Docker", async (t) => {
-    for (const dirtyPath of ["CHANGELOG.md", ".dockerignore"]) {
+    for (const dirtyPath of [
+        "CHANGELOG.md",
+        ".dockerignore",
+        "docs/user-manual.md",
+    ]) {
         await t.test(dirtyPath, () => {
             const result = runPublisher(` M ${dirtyPath}\n`);
             assert.notEqual(result.status, 0);
