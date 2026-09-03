@@ -4,7 +4,53 @@ const assert = require("node:assert/strict");
 const Module = require("node:module");
 const test = require("node:test");
 
-const {renderMarkdown} = require("../src/markdown");
+const {
+    renderMarkdown,
+    renderMarkdownDocument
+} = require("../src/markdown");
+
+test("renders stable unique heading anchors and metadata on request", function() {
+    const document = renderMarkdownDocument(
+        "## Quick Start\n\n" +
+        "### Search & Filters\n\n" +
+        "## Quick Start\n\n" +
+        "### Café gear\n\n" +
+        "### Ready :smile:\n",
+        {headingLevels: [2, 3]}
+    );
+
+    assert.deepEqual(document.headings, [
+        {level: 2, id: "quick-start", title: "Quick Start"},
+        {level: 3, id: "search-filters", title: "Search & Filters"},
+        {level: 2, id: "quick-start-2", title: "Quick Start"},
+        {level: 3, id: "cafe-gear", title: "Café gear"},
+        {level: 3, id: "ready", title: "Ready 😄"}
+    ]);
+    assert.match(document.html, /<h2 id="quick-start">Quick Start<\/h2>/);
+    assert.match(document.html, /<h3 id="search-filters">Search &amp; Filters<\/h3>/);
+    assert.match(document.html, /<h2 id="quick-start-2">Quick Start<\/h2>/);
+    assert.match(document.html, /<h3 id="cafe-gear">Café gear<\/h3>/);
+    assert.match(document.html, /<h3 id="ready">Ready 😄<\/h3>/);
+});
+
+test("keeps generated heading IDs unique when text resembles a suffix", function() {
+    const document = renderMarkdownDocument(
+        "## Foo\n\n## Foo 2\n\n## Foo\n"
+    );
+
+    assert.deepEqual(document.headings.map(heading => heading.id), [
+        "foo", "foo-2", "foo-3"
+    ]);
+});
+
+test("makes document tables responsive without changing standard rendering", function() {
+    const source = "| Ability | Effect |\n| --- | --- |\n| Focus | +1 |\n";
+    const document = renderMarkdownDocument(source);
+
+    assert.match(document.html,
+        /<div class="table-responsive"><table class="table table-sm table-bordered">/);
+    assert.doesNotMatch(renderMarkdown(source), /table-responsive|class="table/);
+});
 
 // Catches a renderer mutation that drops standard Markdown formatting or links.
 test("renders expected Markdown formatting", function() {
