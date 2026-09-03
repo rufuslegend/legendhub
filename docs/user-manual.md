@@ -44,7 +44,7 @@ Imported equipment carries an **Official item** notice. When attribution is avai
 
 ### Search Mobs, Quests, and Wiki pages
 
-- **Mobs:** choose an era and area, or search by name. Results can be sorted by the displayed Name, Area, Experience, Gold, and Aggro columns.
+- **Mobs:** choose an era and area, or search by name. Results can be sorted by the displayed Name, Area, Experience, Gold, and Agg columns.
 - **Quests:** choose an era and area, optionally turn on the **Stat** filter, or search title, whois, area, or content.
 - **Wiki:** choose a category and, where available, a subcategory, or search title, tags, or content. A lock icon marks a locked page. Pinned results use the highlighted pinned styling in recent or search results.
 
@@ -151,7 +151,7 @@ Account Settings also controls equipment displays:
 
 The eight notification choices are **Item Added**, **Item Updated**, **Mob Added**, **Mob Updated**, **Quest Added**, **Quest Updated**, **Wiki Page Added**, and **Wiki Page Updated**. Set each independently to **On** or **Off** and save the notification settings.
 
-LegendHUB uses cookies for login, consent, and preferences, and browser storage for browser-local Builder content. Review the [Privacy Policy](/privacy.html) and [Cookie Policy](/cookies.html) for what is handled and how to control it. Without cookie consent, browser-local Builder data and browser-persisted preferences are not read or written by the application.
+LegendHUB uses cookies for login, consent, and preferences, and browser storage for browser-local Builder content. Review the [Privacy Policy](/privacy.html) and [Cookie Policy](/cookies.html) for what is handled and how to control it. Without cookie consent, LegendHUB does not save browser-local Builder data or new browser-only preference changes.
 
 ## Contributing Information
 
