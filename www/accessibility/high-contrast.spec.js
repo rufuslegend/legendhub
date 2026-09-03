@@ -14,7 +14,12 @@ const pages = [
     { fixtureText: "Brass lantern", heading: "Items", name: "items", path: "/items/" },
     { fixtureText: "Test sentry", heading: "Mobs", name: "mobs", path: "/mobs/" },
     { fixtureText: "A representative quest", heading: "Quests", name: "quests", path: "/quests/" },
-    { fixtureText: "A representative wiki page", heading: "Wiki", name: "wiki", path: "/wiki/" }
+    { fixtureText: "A representative wiki page", heading: "Wiki", name: "wiki", path: "/wiki/" },
+    {
+        heading: "LegendHUB User Manual",
+        name: "manual",
+        path: "/manual/"
+    }
 ];
 
 let baseUrl;
