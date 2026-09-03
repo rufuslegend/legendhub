@@ -69,8 +69,12 @@ test("rejects missing, empty, incorrectly titled, and misnested manuals", functi
         /must begin with exactly one level-one heading/i);
     const misnested = temporaryManual(t,
         "# LegendHUB User Manual\n\n### Orphan task\n");
-    assert.throws(() => loadManual(misnested),
-        /before a level-two section/i);
+    assert.throws(() => loadManual(misnested), function(error) {
+        assert.match(error.message,
+            new RegExp(misnested.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+        assert.match(error.message, /before a level-two section/i);
+        return true;
+    });
 });
 
 test("fails application startup when the configured manual is missing", function(t) {

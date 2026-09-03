@@ -9,7 +9,7 @@ function defaultManualPath() {
         path.resolve(__dirname, "../../docs/user-manual.md");
 }
 
-function buildTableOfContents(headings) {
+function buildTableOfContents(headings, filePath) {
     const toc = [];
     let section = null;
     for (const heading of headings) {
@@ -24,7 +24,8 @@ function buildTableOfContents(headings) {
         }
         if (!section) {
             throw new Error(
-                `User manual heading "${heading.title}" appears before a level-two section`
+                `User manual at ${filePath}: heading "${heading.title}" ` +
+                "appears before a level-two section"
             );
         }
         section.children.push({id: heading.id, title: heading.title});
@@ -63,7 +64,7 @@ function loadManual(filePath = defaultManualPath()) {
         source,
         title,
         html: rendered.html,
-        toc: buildTableOfContents(rendered.headings)
+        toc: buildTableOfContents(rendered.headings, filePath)
     };
 }
 
