@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <%-include("../shared/meta")-%>
+        <link href="https://www.legendhub.org/manual/" rel="canonical">
+    </head>
+    <body>
+        <%-include("../shared/header")-%>
+        <main class="container">
+            <article class="card">
+                <div class="card-body manual">
+                    <h1><%=vm.title%></h1>
+                    <nav aria-label="Manual contents" class="mb-4">
+                        <h2 class="h4">On this page</h2>
+                        <ul>
+                            <%for (const section of vm.toc) {%>
+                            <li>
+                                <a href="#<%-section.id%>"><%=section.title%></a>
+                                <%if (section.children.length) {%>
+                                <ul>
+                                    <%for (const child of section.children) {%>
+                                    <li><a href="#<%-child.id%>"><%=child.title%></a></li>
+                                    <%}%>
+                                </ul>
+                                <%}%>
+                            </li>
+                            <%}%>
+                        </ul>
+                    </nav>
+                    <%-vm.html%>
+                </div>
+            </article>
+        </main>
+        <%-include("../shared/footer")-%>
+        <%-include("../shared/scripts")-%>
+    </body>
+</html>

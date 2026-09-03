@@ -19,6 +19,7 @@ const questsRouter = require("./routes/quests");
 const wikiRouter = require("./routes/wiki");
 const builderRouter = require("./routes/builder");
 const createChangelogRouter = require("./routes/changelog");
+const createManualRouter = require("./routes/manual");
 const notificationsRouter = require("./routes/notifications");
 const accountRouter = require("./routes/account");
 
@@ -108,6 +109,9 @@ module.exports = function createApp(options = {}) {
         changelogPath: options.changelogPath
     }));
     app.use(authRouter);
+    app.use("/manual", createManualRouter({
+        manualPath: options.manualPath
+    }));
 
     app.use("/", createAccountActionsRouter({
         accountEmailService: options.accountEmailService,
