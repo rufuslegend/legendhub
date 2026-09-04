@@ -15,27 +15,14 @@ import {
 } from "./builder-derivations.js";
 import { BuilderModal } from "./ImportExportDialog.jsx";
 import {
-  selectFilteredItems,
   selectItemSearchError,
+  selectSortedItems,
 } from "./builder-reducer.js";
 
 function visibleStats(state) {
   return state.statInfo.filter(
     (stat) => stat.showColumn && stat.var !== "name" && stat.var !== "slot",
   );
-}
-
-function sortItems(items, stat, direction) {
-  if (!stat) return items;
-  return items.slice().sort((left, right) => {
-    const a =
-      typeof left[stat] === "string" ? left[stat].toUpperCase() : left[stat];
-    const b =
-      typeof right[stat] === "string" ? right[stat].toUpperCase() : right[stat];
-    if (a === undefined) return -1;
-    if (b === undefined) return 1;
-    return (a < b ? -1 : a > b ? 1 : 0) * (direction === "-" ? -1 : 1);
-  });
 }
 
 function displayValue(item, stat, hideZeros = false) {
@@ -205,11 +192,7 @@ export default function EquipmentPanel({
   const stats = visibleStats(state);
   const current = state.currentItem;
   const allLocked = state.selectedList.items.every((item) => item.locked);
-  const filtered = sortItems(
-    selectFilteredItems(state) || [],
-    state.sortStat,
-    state.sortDir,
-  );
+  const filtered = selectSortedItems(state) || [];
   const queryError = selectItemSearchError(state);
   const totalPages = Math.max(
     1,

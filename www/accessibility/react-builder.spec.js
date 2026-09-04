@@ -2177,6 +2177,30 @@ test("Builder item picker restores result-table and sort affordances", async fun
     await expect(headers.first().getByRole("button", {name: "Name descending", exact: true}).locator("i.fa-sort-down")).toHaveCount(1);
 });
 
+// Catches a newly selected primary sort discarding the earlier sort order
+// that should continue ordering rows whose primary values are equal.
+test("Builder item picker retains earlier sorts as tie-breakers", async function({page}) {
+    await page.goto(`${baseUrl}/builder/`);
+    await equipmentTable(page).locator("tbody tr").nth(1)
+        .getByRole("button", {name: "Limited light", exact: true}).click();
+
+    const resultTable = page.getByRole("dialog", {name: "Choose Item"})
+        .locator("table").nth(1);
+    await resultTable.getByRole("button", {name: "Name", exact: true}).click();
+    await resultTable.getByRole("button", {name: "Str", exact: true}).click();
+    await expect(resultTable.getByRole("button", {
+        name: "Str descending", exact: true
+    })).toBeVisible();
+
+    const sortedNames = await resultTable.locator("tbody tr td:first-child button")
+        .allTextContents();
+    expect(sortedNames.filter(name => [
+        "Fixture light 08", "Fixture light 16"
+    ].includes(name.trim())).map(name => name.trim())).toEqual([
+        "Fixture light 16", "Fixture light 08"
+    ]);
+});
+
 // Catches locked choices dimming only their names without explaining why the
 // result grid cannot currently replace the equipped item.
 test("Builder item picker explains and consistently styles locked choices", async function({context, page}) {

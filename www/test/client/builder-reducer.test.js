@@ -33,6 +33,7 @@ test("builder initial state owns list, equipment, search, dialog, and request st
         searchString: "",
         sortStat: "",
         sortDir: "",
+        sorts: [],
         itemRestrictions: [],
         statRestrictions: {},
         isRuneCrafting: false,
@@ -633,8 +634,17 @@ test("builder reducer bounds pages and toggles the active search sort", async fu
     assert.equal(state.currentPage, 3);
     state = builderReducer(state, {type: "search/sort", stat: "name"});
     assert.deepEqual([state.sortStat, state.sortDir], ["name", "-"]);
+    assert.deepEqual(state.sorts, [{stat: "name", direction: "-"}]);
     state = builderReducer(state, {type: "search/sort", stat: "name"});
     assert.deepEqual([state.sortStat, state.sortDir], ["name", "+"]);
+    assert.deepEqual(state.sorts, [{stat: "name", direction: "+"}]);
+    state = builderReducer(state, {type: "search/sort", stat: "strength"});
+    assert.deepEqual(state.sorts, [
+        {stat: "strength", direction: "-"},
+        {stat: "name", direction: "+"}
+    ]);
+    state = builderReducer(state, {type: "search/open", item: {id: 1, slot: 0}, index: 0});
+    assert.deepEqual(state.sorts, []);
 });
 
 // Catches character and variant commands mutating prior state, losing sorted selection, or selecting the wrong primary.

@@ -178,6 +178,7 @@ export function createInitialBuilderState() {
         searchString: "",
         sortStat: "",
         sortDir: "",
+        sorts: [],
         itemRestrictions: [],
         statRestrictions: {},
         isRuneCrafting: false,
@@ -555,6 +556,7 @@ export function builderReducer(state, action) {
                 searchString: "",
                 sortStat: "",
                 sortDir: "",
+                sorts: [],
                 currentItem: action.item,
                 currentItemIndex: action.index,
                 isRuneCrafting: action.item.id === RUNE_CHARM_ID,
@@ -564,11 +566,17 @@ export function builderReducer(state, action) {
             };
         case "search/sort": {
             const sortDir = state.sortStat === action.stat && state.sortDir === "-" ? "+" : "-";
+            const previousSorts = Array.isArray(state.sorts) ? state.sorts : [];
+            const sorts = [
+                {stat: action.stat, direction: sortDir},
+                ...previousSorts.filter(sort => sort.stat !== action.stat)
+            ];
             return {
                 ...state,
                 sortStat: action.stat,
                 sortDir,
-                filteredItems: state.filteredItems.slice().sort(compareItems(sortDir + action.stat))
+                sorts,
+                filteredItems: sortBuilderItems(state.filteredItems, sorts)
             };
         }
         case "rune/update":
@@ -616,23 +624,27 @@ export function builderReducer(state, action) {
     }
 }
 
-function compareItems(property) {
-    let sortOrder = 1;
-    if (property[0] === "+")
-        property = property.slice(1);
-    else if (property[0] === "-") {
-        sortOrder = -1;
-        property = property.slice(1);
-    }
-    return function(a, b) {
-        if (a[property] === undefined)
-            return -1;
-        if (b[property] === undefined)
-            return 1;
-        const left = typeof a[property] === "string" ? a[property].toUpperCase() : a[property];
-        const right = typeof b[property] === "string" ? b[property].toUpperCase() : b[property];
-        return (left < right ? -1 : left > right ? 1 : 0) * sortOrder;
-    };
+export function sortBuilderItems(items, sorts = []) {
+    if (!Array.isArray(sorts) || sorts.length === 0)
+        return items;
+    return items.slice().sort(function(a, b) {
+        for (const sort of sorts) {
+            const left = a[sort.stat];
+            const right = b[sort.stat];
+            if (left === undefined && right === undefined)
+                continue;
+            if (left === undefined)
+                return -1;
+            if (right === undefined)
+                return 1;
+            const normalizedLeft = typeof left === "string" ? left.toUpperCase() : left;
+            const normalizedRight = typeof right === "string" ? right.toUpperCase() : right;
+            const result = normalizedLeft < normalizedRight ? -1 : normalizedLeft > normalizedRight ? 1 : 0;
+            if (result !== 0)
+                return result * (sort.direction === "-" ? -1 : 1);
+        }
+        return 0;
+    });
 }
 
 export function selectFilteredItems(state) {
@@ -643,6 +655,16 @@ export function selectFilteredItems(state) {
         return items;
     const {matches} = parseBuilderItemQuery(state.searchString, state.statInfo);
     return items.filter(matches);
+}
+
+export function selectSortedItems(state) {
+    const items = selectFilteredItems(state);
+    if (!items)
+        return items;
+    const sorts = Array.isArray(state.sorts) ? state.sorts : state.sortStat
+        ? [{stat: state.sortStat, direction: state.sortDir}]
+        : [];
+    return sortBuilderItems(items, sorts);
 }
 
 export function selectItemSearchError(state) {
