@@ -19,7 +19,7 @@ sha="$(git rev-parse --short=12 HEAD)"
   exit 1
 }
 
-dirty="$(git status --porcelain=v1 --untracked-files=all -- .dockerignore CHANGELOG.md www python mysql)"
+dirty="$(git status --porcelain=v1 --untracked-files=all -- .dockerignore CHANGELOG.md docs/user-manual.md www python mysql)"
 [[ -z "$dirty" ]] || {
   printf 'Refusing to publish dirty image inputs:\n%s\n' "$dirty" >&2
   exit 1

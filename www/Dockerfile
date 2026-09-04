@@ -15,6 +15,8 @@ RUN npm ci --omit=dev && rm -f node_modules/prettier/plugins/angular.js node_mod
 COPY --from=build /app/src ./src
 COPY --from=build /app/shared ./shared
 COPY CHANGELOG.md ./CHANGELOG.md
+COPY docs/user-manual.md ./docs/user-manual.md
 ENV CHANGELOG_PATH=/app/CHANGELOG.md
+ENV USER_MANUAL_PATH=/app/docs/user-manual.md
 EXPOSE $PORT
 ENTRYPOINT ["npm", "start"]

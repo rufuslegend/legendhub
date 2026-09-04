@@ -1,5 +1,7 @@
 **
 !CHANGELOG.md
+!docs/
+!docs/user-manual.md
 !www/
 !www/Dockerfile
 !www/package.json

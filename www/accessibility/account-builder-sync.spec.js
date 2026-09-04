@@ -871,8 +871,12 @@ test("account Builder sync preferences follow the account but device cookies do 
         );
         await expect(homePage.getByLabel("Variant", {exact: true})).toHaveValue("1");
         await homePage.getByRole("button", {name: "Hide/Show Columns", exact: true}).click();
-        await expect(homePage.getByRole("button", {name: "Name", exact: true}))
-            .toHaveAttribute("aria-pressed", "true");
+        const nameColumn = homePage.getByRole("button", {
+            name: "Name is always shown",
+            exact: true
+        });
+        await expect(nameColumn).toHaveAttribute("aria-pressed", "true");
+        await expect(nameColumn).toBeDisabled();
         await expect(homePage.getByRole("button", {name: "Rent", exact: true}))
             .toHaveAttribute("aria-pressed", "true");
         await homePage.keyboard.press("Escape");

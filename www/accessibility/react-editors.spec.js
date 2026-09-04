@@ -619,6 +619,10 @@ test("React migration: multi-slot editor exposes exclusive keyboard-operable cho
     await page.keyboard.press("Space");
     await expect(wield).toBeChecked();
     await expect(save).toBeEnabled();
+    await expect(page.locator("link#theme")).toHaveAttribute(
+        "href",
+        /\/css\/bootstrap-high-contrast\.min\.css/
+    );
 
     const results = await new AxeBuilder({page})
         .include('[data-react-root="item-editor"]')
