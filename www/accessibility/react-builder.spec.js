@@ -370,6 +370,87 @@ test("Builder equipment and picker choices share item previews", async function(
     await expect(chooser).toBeVisible();
 });
 
+// Catches an activated details link leaving focus behind on the selector,
+// which used to open a sticky preview while the details tab was active.
+test("Builder details navigation does not leave a sticky item preview", async function({page}) {
+    await page.goto(`${baseUrl}/builder/`);
+    const equipped = equipmentTable(page).locator("tbody tr").nth(1)
+        .getByRole("button", {name: "Limited light", exact: true});
+    await equipped.click();
+
+    const chooser = page.getByRole("dialog", {name: "Choose Item"});
+    const choice = chooser.locator('[data-item-preview-id="41"]');
+    const detailsLink = choice.getByRole("link", {
+        name: "Open details for Brass lantern in a new tab"
+    });
+    const preview = page.getByRole("dialog", {name: "Item preview: Brass lantern"});
+
+    await detailsLink.focus();
+    const popupPromise = page.waitForEvent("popup");
+    await page.keyboard.press("Enter");
+    const detailsPage = await popupPromise;
+    await detailsPage.waitForLoadState("domcontentloaded");
+    await page.waitForTimeout(2100);
+    await detailsPage.close();
+    await page.bringToFront();
+    await page.mouse.move(1, 1);
+    await page.waitForTimeout(2100);
+
+    await expect(chooser).toBeVisible();
+    await expect(preview).toHaveCount(0);
+});
+
+// Catches the same preview state surviving a same-tab details visit and Back.
+test("returning from item details does not leave a sticky item preview", async function({page}) {
+    await page.goto(`${baseUrl}/items/`);
+    const itemLink = page.getByRole("link", {name: "Brass lantern", exact: true});
+
+    await itemLink.click();
+    await expect(page).toHaveURL(`${baseUrl}/items/details.html?id=101`);
+    await page.goBack({waitUntil: "domcontentloaded"});
+    await expect(page).toHaveURL(`${baseUrl}/items/`);
+    await page.mouse.move(1, 1);
+    await page.waitForTimeout(2100);
+
+    await expect(page.getByRole("dialog", {
+        name: "Item preview: Brass lantern"
+    })).toHaveCount(0);
+});
+
+// Catches mouse-origin focus restoration being mistaken for keyboard intent
+// when the chooser returns focus to its opening equipment button.
+test("closing the Builder chooser does not arm a mouse-origin item preview", async function({page}) {
+    await page.goto(`${baseUrl}/builder/`);
+    const equipped = equipmentTable(page).locator("tbody tr").nth(1)
+        .getByRole("button", {name: "Limited light", exact: true});
+    const preview = page.getByRole("dialog", {name: "Item preview: Limited light"});
+
+    await equipped.click();
+    const chooser = page.getByRole("dialog", {name: "Choose Item"});
+    await chooser.getByRole("button", {name: "Close"}).click();
+    await expect(chooser).toHaveCount(0);
+    await page.mouse.move(1, 1);
+    await page.waitForTimeout(2100);
+
+    await expect(preview).toHaveCount(0);
+});
+
+// Catches a pending hover timer surviving a back/forward-cache page exit.
+test("item previews clear their pending state when the page is hidden", async function({page}) {
+    await page.goto(`${baseUrl}/items/`);
+    const itemLink = page.getByRole("link", {name: "Brass lantern", exact: true});
+    const preview = page.getByRole("dialog", {name: "Item preview: Brass lantern"});
+
+    await itemLink.hover();
+    await page.waitForTimeout(500);
+    await page.evaluate(() => globalThis.dispatchEvent(new PageTransitionEvent("pagehide", {
+        persisted: true
+    })));
+    await page.waitForTimeout(1700);
+
+    await expect(preview).toHaveCount(0);
+});
+
 // Catches a non-network preference rejection retrying automatically, exposing
 // server text, or preventing the same theme choice from explicitly recovering.
 test("theme preference status is fixed, nonretrying, and repeatable after a problem", async function({context, page}) {

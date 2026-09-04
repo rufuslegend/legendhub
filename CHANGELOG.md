@@ -44,6 +44,7 @@ with version 2.6.0.
 
 ### Fixed
 
+- Prevented item stat previews from appearing or staying open after following an item details link or closing the Builder item chooser.
 - Prevented successful Builder account saves from being replayed as duplicate conflict characters when a temporary network problem hid the original response.
 - Rendered legacy bold, italic, underline, and line-break markup in wiki content while continuing to block unsafe or structural HTML.
 - Restored the Builder's default Strength, Mind, Dexterity, Constitution, Perception, Spirit, Armor Class, Alignment, and Rent columns for fresh account storage.

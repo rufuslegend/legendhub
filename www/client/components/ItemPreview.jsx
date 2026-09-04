@@ -107,7 +107,14 @@ export default function ItemPreview({children, enabled = true, item}) {
     const controller = controllerRef.current;
 
     useEffect(function() {
-        return () => controller.dispose();
+        function pagehide() {
+            controller.dismiss();
+        }
+        globalThis.addEventListener("pagehide", pagehide);
+        return () => {
+            globalThis.removeEventListener("pagehide", pagehide);
+            controller.dispose();
+        };
     }, [controller]);
 
     useEffect(function() {
@@ -202,7 +209,13 @@ export default function ItemPreview({children, enabled = true, item}) {
             className="item-preview-trigger"
             data-item-preview-id={item.id}
             onBlur={() => controller.leave("trigger-focus")}
-            onFocus={event => enterFromTrigger(event, "trigger-focus")}
+            onClickCapture={() => controller.dismiss()}
+            onFocus={event => {
+                if (event.target.matches(":focus-visible"))
+                    enterFromTrigger(event, "trigger-focus");
+                else
+                    controller.leave("trigger-focus");
+            }}
             onPointerEnter={event => {
                 if (event.pointerType !== "touch")
                     enterFromTrigger(event, "trigger-pointer");
