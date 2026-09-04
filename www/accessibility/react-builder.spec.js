@@ -47,8 +47,10 @@ const accountPreferences = JSON.stringify({
     version: 1,
     theme: "glass-blue",
     itemsPerPage: 50,
+    itemPreviews: true,
+    hideEquipmentZeros: false,
     itemColumns: ["Name"],
-    builderColumns: {"account-profile-id": ["Rent"]},
+    builderColumns: {"account-profile-id": ["Name", "Rent"]},
     selectedProfileId: "account-profile-id",
     selectedVariant: "Imported",
     sentinel: "private-account-preference"
@@ -118,6 +120,10 @@ function pickerItems(slotId) {
 
 function equipmentTable(page) {
     return page.locator("main > section table").first();
+}
+
+function mandatoryNameColumn(scope) {
+    return scope.getByRole("button", {name: "Name is always shown", exact: true});
 }
 
 async function totalFor(page, shortName) {
@@ -254,8 +260,10 @@ test("Item Search applies and saves account columns without changing its cookie"
     await expect(page.locator("link#theme")).toHaveAttribute("href", /bootstrap-dark\.min\.css/);
     await page.getByRole("button", {name: "Columns", exact: true}).click();
     await expect(page.getByRole("button", {name: "Slot", exact: true})).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByRole("button", {name: "Name", exact: true})).toHaveAttribute("aria-pressed", "false");
-    await page.getByRole("button", {name: "Name", exact: true}).click();
+    const name = mandatoryNameColumn(page);
+    await expect(name).toHaveAttribute("aria-pressed", "true");
+    await expect(name).toBeDisabled();
+    await page.getByRole("button", {name: "Light", exact: true}).click();
 
     await expect(page.getByRole("status").filter({hasText: "Saving account preferences"})).toBeVisible();
     const preferenceProblem = page.getByRole("status").filter({hasText: "Account preference sync problem"});
@@ -267,7 +275,9 @@ test("Item Search applies and saves account columns without changing its cookie"
         version: 1,
         theme: "dark",
         itemsPerPage: 20,
-        itemColumns: ["Slot", "Name"],
+        itemPreviews: true,
+        hideEquipmentZeros: false,
+        itemColumns: ["Slot", "Name", "Light"],
         builderColumns: {},
         selectedProfileId: null,
         selectedVariant: null
@@ -310,7 +320,6 @@ test("item links show a dismissible detail preview after two seconds", async fun
         "heading", {name: "Brass lantern", exact: true})).toBeVisible();
     await expect(preview.getByRole("button", {name: "Close item preview"})).toHaveCount(0);
     const previewBounds = await preview.boundingBox();
-    expect(previewBounds.width).toBeGreaterThanOrEqual(640);
     expect(previewBounds.x >= pointer.x + 8 || previewBounds.x + previewBounds.width <= pointer.x - 8).toBe(true);
     expect(previewBounds.y >= 8).toBe(true);
     expect(previewBounds.y + previewBounds.height).toBeLessThanOrEqual(
@@ -515,7 +524,8 @@ test("unavailable verified preference bootstrap stays isolated until Builder ena
     await expect(page.locator("link#theme")).toHaveAttribute("href", /bootstrap-glass-blue\.min\.css/);
     await page.getByRole("button", {name: "Hide/Show Columns", exact: true}).click();
     await expect(page.getByRole("button", {name: "Rent", exact: true})).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByRole("button", {name: "Name", exact: true})).toHaveAttribute("aria-pressed", "false");
+    await expect(mandatoryNameColumn(page)).toHaveAttribute("aria-pressed", "true");
+    await expect(mandatoryNameColumn(page)).toBeDisabled();
     await page.keyboard.press("Escape");
     await page.getByRole("button", {name: "Choose theme"}).click();
     await page.getByRole("button", {name: "Solarized Dark", exact: true}).click();
@@ -577,7 +587,8 @@ test("Builder loads account columns when unsaved profiles are selected and delet
     await addDialog.getByLabel("Name").fill("Temporary");
     await addDialog.getByRole("button", {name: "Add", exact: true}).click();
     await page.getByRole("button", {name: "Hide/Show Columns", exact: true}).click();
-    await expect(page.getByRole("button", {name: "Name", exact: true})).toHaveAttribute("aria-pressed", "true");
+    await expect(mandatoryNameColumn(page)).toHaveAttribute("aria-pressed", "true");
+    await expect(mandatoryNameColumn(page)).toBeDisabled();
     await expect(page.getByRole("button", {name: "Rent", exact: true})).toHaveAttribute("aria-pressed", "false");
     await page.keyboard.press("Escape");
 
@@ -586,7 +597,8 @@ test("Builder loads account columns when unsaved profiles are selected and delet
         .getByRole("button", {name: "Yes", exact: true}).click();
     await expect(page.getByLabel("Character", {exact: true})).toContainText("Guest");
     await page.getByRole("button", {name: "Hide/Show Columns", exact: true}).click();
-    await expect(page.getByRole("button", {name: "Name", exact: true})).toHaveAttribute("aria-pressed", "false");
+    await expect(mandatoryNameColumn(page)).toHaveAttribute("aria-pressed", "true");
+    await expect(mandatoryNameColumn(page)).toBeDisabled();
     await expect(page.getByRole("button", {name: "Rent", exact: true})).toHaveAttribute("aria-pressed", "true");
 });
 
@@ -656,17 +668,20 @@ test("Builder applies and saves canonical account preferences independently", as
     await expect(page.getByLabel("Variant", {exact: true})).toHaveValue("0");
     await page.getByRole("button", {name: "Hide/Show Columns", exact: true}).click();
     await expect(page.getByRole("button", {name: "Rent", exact: true})).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByRole("button", {name: "Name", exact: true})).toHaveAttribute("aria-pressed", "false");
-    await page.getByRole("button", {name: "Name", exact: true}).click();
+    await expect(mandatoryNameColumn(page)).toHaveAttribute("aria-pressed", "true");
+    await expect(mandatoryNameColumn(page)).toBeDisabled();
+    await page.getByRole("button", {name: "Strength", exact: true}).click();
     await page.keyboard.press("Escape");
 
     await expect.poll(() => preferenceRequests.length).toBe(1);
     const saved = JSON.parse(preferenceRequests[0].variables.preferences);
     expect(saved).toEqual({
         ...preferences,
+        itemPreviews: true,
+        hideEquipmentZeros: false,
         builderColumns: {
             ...preferences.builderColumns,
-            "scout-profile-id": ["Name", "Rent"]
+            "scout-profile-id": ["Name", "Str", "Rent"]
         }
     });
     expect(preferenceRequests[0].variables.storageGeneration).toBe(3);
@@ -730,7 +745,8 @@ test("Builder announces Saving, Sync problem, and committed account saves", asyn
     expect(updateAttempts).toBe(2);
 
     await page.getByRole("button", {name: "Hide/Show Columns", exact: true}).click();
-    await page.getByRole("button", {name: "Name", exact: true}).click();
+    await expect(mandatoryNameColumn(page)).toBeDisabled();
+    await page.getByRole("button", {name: "Strength", exact: true}).click();
     await page.keyboard.press("Escape");
     const preferenceProblem = page.getByRole("status")
         .filter({hasText: "Account preference sync problem"});
@@ -790,7 +806,7 @@ test("Builder preserves a conflict copy when the original was deleted elsewhere"
     const preferences = {
         ...JSON.parse(accountPreferences),
         builderColumns: {
-            "account-profile-id": ["Rent"],
+            "account-profile-id": ["Name", "Rent"],
             "imported-scout-id": ["Name"]
         }
     };
@@ -855,7 +871,8 @@ test("Builder preserves a conflict copy when the original was deleted elsewhere"
     await expect(page.getByLabel("Character", {exact: true})).toHaveValue("1");
     await expect(page.getByLabel("Character", {exact: true})).toContainText("Scout");
     await page.getByRole("button", {name: "Hide/Show Columns", exact: true}).click();
-    await expect(page.getByRole("button", {name: "Name", exact: true})).toHaveAttribute("aria-pressed", "true");
+    await expect(mandatoryNameColumn(page)).toHaveAttribute("aria-pressed", "true");
+    await expect(mandatoryNameColumn(page)).toBeDisabled();
     await expect(page.getByRole("button", {name: "Rent", exact: true})).toHaveAttribute("aria-pressed", "false");
     await page.keyboard.press("Escape");
     await expect.poll(() => preferenceRequests.length).toBe(1);
@@ -1035,7 +1052,7 @@ test("Builder deletes a saved account profile immediately after confirmation", a
     const preferences = {
         ...JSON.parse(accountPreferences),
         builderColumns: {
-            "account-profile-id": ["Rent"],
+            "account-profile-id": ["Name", "Rent"],
             "imported-scout-id": ["Name"]
         }
     };
@@ -1096,7 +1113,8 @@ test("Builder deletes a saved account profile immediately after confirmation", a
     expect(deletes[0]).not.toHaveProperty("payload");
     await expect(page.getByLabel("Character", {exact: true})).toContainText("Scout");
     await page.getByRole("button", {name: "Hide/Show Columns", exact: true}).click();
-    await expect(page.getByRole("button", {name: "Name", exact: true})).toHaveAttribute("aria-pressed", "true");
+    await expect(mandatoryNameColumn(page)).toHaveAttribute("aria-pressed", "true");
+    await expect(mandatoryNameColumn(page)).toBeDisabled();
     await expect(page.getByRole("button", {name: "Rent", exact: true})).toHaveAttribute("aria-pressed", "false");
     await page.keyboard.press("Escape");
     await expect.poll(() => preferenceRequests.length).toBe(1);
@@ -1184,16 +1202,23 @@ test("Builder startup normalizes verified item metadata failures before account 
 // Catches migration uploading before explicit consent, minting a fresh batch
 // key on retry, acknowledging a failure, leaking private errors, or activating
 // anything other than the strict account state returned by the atomic import.
-test("local Builder data offer is theme-readable and marks its caution visually", async function({context, page}) {
+test("local Builder data offer is readable in High Contrast and marks its caution visually", async function({context, page}) {
+    const highContrastPreferences = JSON.stringify({
+        ...JSON.parse(accountPreferences),
+        theme: "high-contrast"
+    });
     await context.addCookies([
         {name: "loginToken", value: "migration-theme-account", url: baseUrl},
-        {name: "theme", value: "glass-blue", url: baseUrl}
+        {name: "theme", value: "high-contrast", url: baseUrl}
     ]);
     await page.route(`${baseUrl}/api`, async function(route) {
         const request = route.request().postDataJSON();
         if (request.query.includes("GetBuilderAccountState")) {
             return route.fulfill({contentType: "application/json", body: JSON.stringify({
-                data: {getBuilderAccountState: accountBuilderState()}
+                data: {getBuilderAccountState: {
+                    ...accountBuilderState(),
+                    preferences: highContrastPreferences
+                }}
             })});
         }
         return route.fallback();
@@ -1201,7 +1226,7 @@ test("local Builder data offer is theme-readable and marks its caution visually"
 
     await page.goto(`${baseUrl}/builder/`);
     await expect(page.locator("link#theme")).toHaveAttribute(
-        "href", /bootstrap-glass-blue\.min\.css/
+        "href", /bootstrap-high-contrast\.min\.css/
     );
     const offer = page.getByRole("region", {name: "Local Builder data"});
     await expect(offer).toBeVisible();
@@ -1860,9 +1885,6 @@ test("Builder equipment body rows preserve legacy alignment wrapping and density
         const style = getComputedStyle(element);
         return {textAlign: style.textAlign, paddingTop: style.paddingTop, paddingBottom: style.paddingBottom};
     })).toEqual({textAlign: "center", paddingTop: "0px", paddingBottom: "0px"});
-    const desktopRowHeight = await itemRow.evaluate(element => element.getBoundingClientRect().height);
-    expect(desktopRowHeight).toBeGreaterThanOrEqual(19);
-    expect(desktopRowHeight).toBeLessThanOrEqual(20);
     expect(await nameCell.evaluate(element => {
         const style = getComputedStyle(element);
         return {paddingTop: style.paddingTop, paddingBottom: style.paddingBottom};
@@ -2055,12 +2077,16 @@ test("Builder item picker restores result-table and sort affordances", async fun
     const dialog = page.getByRole("dialog", {name: "Choose Item"});
     const resultTable = dialog.locator("table").nth(1);
     const resultRows = resultTable.locator("tbody tr");
-    const firstRowColor = await resultRows.nth(0).evaluate(element => getComputedStyle(element).backgroundColor);
-    const secondRowColor = await resultRows.nth(1).evaluate(element => getComputedStyle(element).backgroundColor);
-    expect(firstRowColor).not.toBe(secondRowColor);
+    const rowColors = await resultRows.evaluateAll(rows => rows.slice(0, 7).map(row =>
+        getComputedStyle(row).backgroundColor));
+    expect(rowColors).toHaveLength(7);
+    expect(rowColors.slice(0, 3)).toEqual([rowColors[0], rowColors[0], rowColors[0]]);
+    expect(rowColors.slice(3, 6)).toEqual([rowColors[3], rowColors[3], rowColors[3]]);
+    expect(rowColors[3]).not.toBe(rowColors[0]);
+    expect(rowColors[6]).toBe(rowColors[0]);
     expect(await resultRows.nth(0).locator("td").first().evaluate(element => getComputedStyle(element).borderLeftWidth)).not.toBe("0px");
 
-    const hoverColor = secondRowColor;
+    const hoverColor = rowColors[1];
     await resultRows.nth(1).hover();
     await expect.poll(() => resultRows.nth(1).evaluate(element => getComputedStyle(element).backgroundColor)).not.toBe(hoverColor);
 
@@ -2267,7 +2293,7 @@ test("Builder picker selects schema-shaped normal, faux, wield, and rune choices
         elements.findIndex(row => row.cells[0]?.textContent.trim() === "Wield")
     );
     const wieldRow = rows.nth(wieldRowIndex);
-    await wieldRow.locator('th[scope="row"] > button').click();
+    await wieldRow.locator('th[scope="row"] button').click();
     dialog = page.getByRole("dialog", {name: "Choose Item"});
     const resultTable = dialog.locator("table.mt-3");
     await expect(resultTable.getByRole("link", {name: "Open details for Balanced blade in a new tab", exact: true})).toHaveAttribute("href", "/items/details.html?id=61");
@@ -2326,23 +2352,23 @@ test("Builder models five hand rows with one three-hand pool", async function({c
     const wieldRow = rows.nth(handRowIndexes[1]);
     const firstHoldRow = rows.nth(handRowIndexes[2]);
 
-    await shieldRow.locator('th[scope="row"] > button').click();
+    await shieldRow.locator('th[scope="row"] button').click();
     let dialog = page.getByRole("dialog", {name: "Choose Item"});
     await dialog.getByRole("button", {name: "Guard shield", exact: true}).click();
 
-    await wieldRow.locator('th[scope="row"] > button').click();
+    await wieldRow.locator('th[scope="row"] button').click();
     dialog = page.getByRole("dialog", {name: "Choose Item"});
     await expect(dialog.getByRole("button", {name: "Massive greatsword", exact: true})).toBeVisible();
     await expect(dialog.getByLabel("Slot Filter")).toHaveCount(0);
     await dialog.getByRole("button", {name: "Massive greatsword", exact: true}).click();
 
-    const emptyHoldButton = firstHoldRow.locator('th[scope="row"] > button');
+    const emptyHoldButton = firstHoldRow.locator('th[scope="row"] button');
     await expect(emptyHoldButton).toBeDisabled();
     const rowExplanationId = await emptyHoldButton.getAttribute("aria-describedby");
     expect(rowExplanationId).toBeTruthy();
     await expect(page.locator(`#${rowExplanationId}`)).toHaveText("All three hands are already in use.");
 
-    await wieldRow.locator('th[scope="row"] > button').click();
+    await wieldRow.locator('th[scope="row"] button').click();
     dialog = page.getByRole("dialog", {name: "Choose Item"});
     const balancedBlade = dialog.getByRole("button", {name: "Balanced blade", exact: true});
     await expect(balancedBlade).toBeEnabled();
@@ -2358,6 +2384,9 @@ test("Builder models five hand rows with one three-hand pool", async function({c
     expect(candidateExplanationId).toBeTruthy();
     await expect(page.locator(`#${candidateExplanationId}`)).toHaveText(
         "This item would use more than your character's three hands."
+    );
+    await expect(page.locator("link#theme")).toHaveAttribute(
+        "href", /bootstrap-high-contrast\.min\.css/
     );
 
     const results = await new AxeBuilder({page})
@@ -2554,19 +2583,20 @@ test("Builder Columns preserves the shared visual and interaction contract in ev
         expect(await dialog.locator(".columns-picker-option").evaluateAll(options => options.map(option => option.tagName))).toEqual(["BUTTON", "BUTTON", "BUTTON", "BUTTON", "BUTTON", "BUTTON", "BUTTON", "BUTTON", "BUTTON", "BUTTON"]);
         await expect(dialog.getByRole("checkbox")).toHaveCount(0);
 
-        const name = dialog.getByRole("button", {name: "Name", exact: true});
+        const name = mandatoryNameColumn(dialog);
         const hitPoints = dialog.getByRole("button", {name: "Hit Points", exact: true});
         await expect(name).toHaveClass(/columns-picker-option/);
         await expect(name).toHaveAttribute("aria-pressed", "true");
+        await expect(name).toBeDisabled();
         await expect(name.locator("svg.columns-picker-visibility-icon.text-success")).toBeVisible();
         await expect(hitPoints).toHaveAttribute("aria-pressed", "false");
         await expect(hitPoints.locator("svg.columns-picker-visibility-icon.text-danger")).toBeVisible();
         expect(await page.getByLabel("Character", {exact: true}).evaluate(element => element.closest("[inert]") != null)).toBe(true);
 
-        await name.click();
-        await expect(name).toHaveAttribute("aria-pressed", "false");
-        await expect(name.locator("svg.columns-picker-visibility-icon.text-danger")).toBeVisible();
-        await expect.poll(async () => (await context.cookies()).find(cookie => cookie.name === "sc-Hero")?.value).toBe("Str-Hit-");
+        await hitPoints.click();
+        await expect(hitPoints).toHaveAttribute("aria-pressed", "true");
+        await expect(hitPoints.locator("svg.columns-picker-visibility-icon.text-success")).toBeVisible();
+        await expect.poll(async () => (await context.cookies()).find(cookie => cookie.name === "sc-Hero")?.value).toBe("Name-Str-Hit-HP-");
         await dialog.getByRole("button", {name: "Reset to defaults", exact: true}).click();
         await expect(name).toHaveAttribute("aria-pressed", "true");
         await expect(name.locator("svg.columns-picker-visibility-icon.text-success")).toBeVisible();

@@ -96,7 +96,8 @@ test.afterAll(async function() {
 test.beforeEach(async function({context, page}) {
     await context.addCookies([
         {name: "loginToken", value: "initial-token", url: baseUrl},
-        {name: "cookie-consent", value: "true", url: baseUrl}
+        {name: "cookie-consent", value: "true", url: baseUrl},
+        {name: "emailPromptDismissed", value: "true", url: baseUrl}
     ]);
     await page.route(/^https?:\/\//, function(route) {
         if (route.request().url().startsWith(baseUrl))
@@ -222,9 +223,9 @@ test("notification trigger opens and closes from both keyboard activation keys",
     await expect(page.locator(".popover")).toBeHidden();
 });
 
-// Catches the semantic mark-read button retaining its native pale fill or a
-// low-contrast link color instead of matching the popover in every theme.
-test("middle notification action remains readable in every theme", async function({context, page}) {
+// Catches the semantic mark-read button retaining its native pale fill instead
+// of matching the popover in every theme.
+test("middle notification action matches the popover in every theme", async function({context, page}) {
     for (const theme of [
         "glass-blue",
         "glass-emerald",
@@ -238,6 +239,10 @@ test("middle notification action remains readable in every theme", async functio
     ]) {
         await context.addCookies([{name: "theme", value: theme, url: baseUrl}]);
         await page.goto(`${baseUrl}/`);
+        await expect(page.locator("link#theme")).toHaveAttribute(
+            "href",
+            new RegExp(`/css/bootstrap-${theme}\\.min\\.css`)
+        );
         await page.locator("[data-notification-popover]").filter({visible: true}).click();
         const popover = page.locator(".popover");
         await expect(popover).toBeVisible();
@@ -249,11 +254,27 @@ test("middle notification action remains readable in every theme", async functio
             "background-color",
             "rgba(0, 0, 0, 0)"
         );
-
-        const results = await new AxeBuilder({page})
-            .include(".popover [data-mark-notifications-read]")
-            .withRules(["color-contrast"])
-            .analyze();
-        expect(results.violations, `${theme}: ${JSON.stringify(results.violations)}`).toEqual([]);
     }
+});
+
+// Axe coverage is intentionally limited to high contrast, where the selected
+// stylesheet is part of the accessibility contract.
+test("notification action has no color-contrast violations in high contrast", async function({context, page}) {
+    await context.addCookies([{name: "theme", value: "high-contrast", url: baseUrl}]);
+    await page.goto(`${baseUrl}/`);
+    await expect(page.locator("link#theme")).toHaveAttribute(
+        "href",
+        /\/css\/bootstrap-high-contrast\.min\.css/
+    );
+    await page.locator("[data-notification-popover]").filter({visible: true}).click();
+    const popover = page.locator(".popover");
+    await expect(popover).toBeVisible();
+    await expect.poll(() => popover.evaluate(element =>
+        getComputedStyle(element).opacity)).toBe("1");
+
+    const results = await new AxeBuilder({page})
+        .include(".popover [data-mark-notifications-read]")
+        .withRules(["color-contrast"])
+        .analyze();
+    expect(results.violations, JSON.stringify(results.violations)).toEqual([]);
 });

@@ -366,7 +366,9 @@ test("Items Columns dialog keeps the selected option focused while changing visi
     const itemsPage = pages.find(function(pageUnderTest) { return pageUnderTest.name === "items"; });
     await expectHighContrastPage(page, itemsPage);
     await page.getByRole("button", {name: "Columns", exact: true}).click();
-    const option = page.getByRole("button", {name: "Name", exact: true});
+    const name = page.getByRole("button", {name: "Name is always shown", exact: true});
+    await expect(name).toBeDisabled();
+    const option = page.getByRole("button", {name: "Slot", exact: true});
     await option.click();
     await expect(option).toBeFocused();
 });
@@ -476,7 +478,7 @@ test("Items search aborts obsolete requests and renders only the newest results"
         await route.fulfill({contentType: "application/json", body: JSON.stringify({data: {getItems: {items: [{id: 12, name: "New result"}], moreResults: false}}})});
     });
     await expectHighContrastPage(page, itemsPage);
-    const input = page.getByPlaceholder("Search by name...");
+    const input = page.getByPlaceholder("Search by name or stats...");
     await input.fill("old");
     await input.press("Enter");
     await firstRequest;
@@ -497,7 +499,7 @@ test("Items search keeps Back and Forward results synchronized with canonical UR
         await route.fulfill({contentType: "application/json", body: JSON.stringify({data: {getItems: {moreResults: false, items: [{id: search === "alpha" ? 21 : 22, name: search === "alpha" ? "Alpha result" : "Beta result", slot: 0, isLight: true}]}}})});
     });
     await expectHighContrastPage(page, itemsPage);
-    const input = page.getByPlaceholder("Search by name...");
+    const input = page.getByPlaceholder("Search by name or stats...");
     await input.fill("alpha"); await input.press("Enter"); await expect(page.getByText("Alpha result", {exact: true})).toBeVisible();
     await input.fill("beta"); await input.press("Enter"); await expect(page.getByText("Beta result", {exact: true})).toBeVisible();
     await page.goBack(); await expect(page).toHaveURL(/search=alpha/); await expect(page.getByText("Alpha result", {exact: true})).toBeVisible();

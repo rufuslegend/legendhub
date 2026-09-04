@@ -56,6 +56,25 @@ function loadAppWithAccountJourneys() {
         apiUtils.postAsync = async function(query) {
             if (query.includes("authLogin"))
                 return {authLogin: {token: "signed-in-session", expires: null}};
+            if (query.includes("AccountPreferenceBootstrap")) {
+                return {
+                    getBuilderAccountPreferences: {
+                        preferences: JSON.stringify({
+                            version: 1,
+                            theme: "high-contrast",
+                            itemsPerPage: 20,
+                            itemPreviews: true,
+                            hideEquipmentZeros: false,
+                            itemColumns: ["Name"],
+                            builderColumns: {},
+                            selectedProfileId: null,
+                            selectedVariant: null
+                        }),
+                        preferenceRevision: 1,
+                        storageGeneration: 7
+                    }
+                };
+            }
             if (query.includes("getNotifications(")) {
                 return {getNotifications: {moreResults: false, results: []}};
             }
@@ -147,7 +166,8 @@ test.beforeEach(async function({context, page}) {
     };
     await context.addCookies([
         {name: "loginToken", value: "initial-session", url: baseUrl},
-        {name: "emailPromptDismissed", value: "true", url: baseUrl}
+        {name: "emailPromptDismissed", value: "true", url: baseUrl},
+        {name: "theme", value: "high-contrast", url: baseUrl}
     ]);
     await page.route(/^https?:\/\//, function(route) {
         if (route.request().url().startsWith(baseUrl))
@@ -256,7 +276,7 @@ test("Builder storage exports fresh data and separately confirms generation-safe
     await expect(page.getByText("4 KB of 10 MB used", {exact: true})).toBeVisible();
     await page.getByRole("button", {name: "Export all Builder data"}).click();
     await expect.poll(() => exportCalls).toBe(1);
-    expect(await page.evaluate(() => window.__builderDownloadEvents)).toEqual([
+    await expect.poll(() => page.evaluate(() => window.__builderDownloadEvents)).toEqual([
         {type: "create", blobType: "text/plain;charset=utf-8", size: 35},
         {
             type: "click",
@@ -455,6 +475,10 @@ test("Builder storage failures stay independent and unverified accounts expose n
 });
 
 async function expectNoAxeViolations(page, selector = "main") {
+    await expect(page.locator("link#theme")).toHaveAttribute(
+        "href",
+        /\/css\/bootstrap-high-contrast\.min\.css/
+    );
     const results = await new AxeBuilder({page})
         .include(selector)
         .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa"])
@@ -483,6 +507,10 @@ test("email prompt dismissal resets on login and email settings announce both re
     await expect.poll(() => prompt.evaluate(element =>
         element.contains(document.activeElement))).toBe(true);
     await page.keyboard.press("Escape");
+    await expect(prompt).toBeVisible();
+
+    await context.addCookies([{name: "theme", value: "high-contrast", url: baseUrl}]);
+    await page.reload();
     await expect(prompt).toBeVisible();
     await expectNoAxeViolations(page, "#emailVerificationPrompt");
 
