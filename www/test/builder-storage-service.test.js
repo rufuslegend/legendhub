@@ -17,7 +17,8 @@ const auth = {
 };
 const baseStats = "0U0U0U0U0U0U";
 const blanks37 = "_".repeat(37);
-const multiVariantHero = `7*Hero~Tank~${baseStats}000000___00000000000000000${blanks37}*` +
+const singleVariantHero = `7*Hero~Tank~${baseStats}000000___00000000000000000${blanks37}*`;
+const multiVariantHero = singleVariantHero +
     `Hero~Caster~${baseStats}000000___00000000000000000${blanks37}*`;
 
 function deferred() {
@@ -643,6 +644,35 @@ test("matching revision saves canonical payload after generation and row locks",
     assert.deepEqual(events, ["begin", "commit", "release"]);
 });
 
+// Catches a committed save whose response was lost being replayed with its
+// original revision and creating one or more identical conflict profiles.
+test("stale replay of already-saved canonical content returns the current profile", async function() {
+    const current = profile({
+        payload: multiVariantHero,
+        payloadBytes: Buffer.byteLength(multiVariantHero)
+    });
+    const {service, state} = createHarness({
+        useRealProfileBoundary: true,
+        profiles: [current]
+    });
+
+    const result = await service.updateProfile(auth, {
+        id: current.id,
+        name: current.name,
+        payload: current.payload,
+        revision: current.revision - 1,
+        storageGeneration: 1
+    });
+
+    assert.equal(result.status, "saved");
+    assert.deepEqual(result.profile, current);
+    assert.equal(result.conflictProfile, undefined);
+    assert.equal(result.usedBytes, current.payloadBytes);
+    assert.equal(state.insertCount, 0);
+    assert.equal(state.profiles.length, 1);
+    assert.equal(state.calls.some(([operation]) => operation === "update"), false);
+});
+
 // Catches stale edits overwriting the server row, dropping the attempted
 // edit, or choosing a non-deterministic/non-exact conflict name.
 test("stale update preserves the server row and creates a conflict copy", async function() {
@@ -677,7 +707,10 @@ test("real stale conflict copy renames every variant and recomputes canonical me
     const {service, state} = createHarness({
         useRealProfileBoundary: true,
         profiles: [
-            profile({payload: multiVariantHero, payloadBytes: Buffer.byteLength(multiVariantHero)}),
+            profile({
+                payload: singleVariantHero,
+                payloadBytes: Buffer.byteLength(singleVariantHero)
+            }),
             profile({id: "existing-conflict", name: "Hero Conflict"})
         ]
     });
@@ -713,7 +746,10 @@ test("renamed conflict byte growth cannot exceed the account quota", async funct
     const originalBytes = Buffer.byteLength(multiVariantHero, "utf8");
     const {service, state} = createHarness({
         useRealProfileBoundary: true,
-        profiles: [profile({payload: multiVariantHero, payloadBytes: originalBytes})],
+        profiles: [profile({
+            payload: singleVariantHero,
+            payloadBytes: Buffer.byteLength(singleVariantHero)
+        })],
         usedBytesResult: QUOTA_BYTES - originalBytes
     });
 

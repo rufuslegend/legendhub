@@ -395,6 +395,17 @@ function createBuilderStorageService({
                 });
             }
 
+            if (!current.deletedOn &&
+                current.name === validated.name &&
+                current.payload === validated.payload) {
+                return resultState({
+                    status: "saved",
+                    profile: current,
+                    preferences,
+                    usedBytes
+                });
+            }
+
             const profiles = await repository.list(memberId, options);
             const conflictName = nextConflictName(validated.name, profiles);
             const renamed = await validateStorageProfile(
