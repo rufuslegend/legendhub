@@ -1,7 +1,7 @@
 FROM debian:bookworm-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends cron default-mysql-client gzip \
+    && apt-get install -y --no-install-recommends cron mariadb-client gzip \
         openssh-client python3 python3-pymysql \
     && rm -rf /var/lib/apt/lists/*
 

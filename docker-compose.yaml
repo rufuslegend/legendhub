@@ -1,5 +1,6 @@
 volumes:
     database:
+    mariadb-database:
     database-logs:
     database-backups:
     python-logs:
@@ -9,24 +10,28 @@ networks:
 
 services:
     mysql:
-        image: mysql:5
+        image: mariadb:12.3.3@sha256:dd9b303aed4f4890ed09f766d8ca9ddfd176c0c6f6267feff53b3192ec65a979
         platform: linux/amd64
         environment:
             - MYSQL_PORT=${MYSQL_PORT}
             - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-            - MYSQL_USER=legendhub
+            - MYSQL_USER=${MYSQL_USER}
             - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-            - MYSQL_DATABASE=legendhub
+            - MYSQL_DATABASE=${MYSQL_DATABASE}
+            - MARIADB_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+            - MARIADB_USER=${MYSQL_USER}
+            - MARIADB_PASSWORD=${MYSQL_PASSWORD}
+            - MARIADB_DATABASE=${MYSQL_DATABASE}
         networks:
             - legendhub
         volumes:
-            - database:/var/lib/mysql
+            - mariadb-database:/var/lib/mysql
             - database-logs:/var/log
             - ./mysql/init:/docker-entrypoint-initdb.d
-            - ./mysql/conf:/etc/mysql/mysql.conf.d
+            - ./mysql/mariadb-conf:/etc/mysql/conf.d:ro
         tty: true
         healthcheck:
-            test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+            test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
             interval: 2s
             timeout: 5s
             retries: 30
@@ -40,9 +45,9 @@ services:
                 condition: service_healthy
         environment:
             - MYSQL_PORT=${MYSQL_PORT}
-            - MYSQL_USER=legendhub
+            - MYSQL_USER=${MYSQL_USER}
             - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-            - MYSQL_DATABASE=legendhub
+            - MYSQL_DATABASE=${MYSQL_DATABASE}
         networks:
             - legendhub
         volumes:

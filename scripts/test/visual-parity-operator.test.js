@@ -12,6 +12,9 @@ const operator = path.join(candidateRoot, "scripts/run-visual-parity.sh");
 const referenceSha = "0cab3ac95826a53de19b3146d277e7056495210f";
 const candidateSha = "1234567890abcdef1234567890abcdef12345678";
 const candidateShortSha = candidateSha.slice(0, 12);
+const referenceDatabaseImage = "mysql:5.7.44";
+const candidateDatabaseImage = "mariadb:12.3.3@sha256:" +
+    "dd9b303aed4f4890ed09f766d8ca9ddfd176c0c6f6267feff53b3192ec65a979";
 const timestamp = "20260824T120000Z";
 const reportDirectory = path.join(candidateRoot, "data/parity-report",
     `${timestamp}-${candidateShortSha}`);
@@ -72,14 +75,15 @@ set -euo pipefail
 printf '%s\0' "${dollar}@" >> "${dollar}FAKE_DOCKER_LOG"
 printf '\036' >> "${dollar}FAKE_DOCKER_LOG"
 printf 'docker|%s\n' "${dollar}*" >> "${dollar}FAKE_EVENT_LOG"
-printf '%s\0%s\0%s\0%s\0%s\0%s\0%s\0\036' \
+printf '%s\0%s\0%s\0%s\0%s\0%s\0%s\0%s\0\036' \
   "${dollar}{LEGENDHUB_PARITY_HTTPS_PORT:-}" \
   "${dollar}{LEGENDHUB_PARITY_STATE_DIR:-}" \
   "${dollar}{LEGENDHUB_PARITY_FIXTURE:-}" \
   "${dollar}{LEGENDHUB_PARITY_NGINX_CONFIG:-}" \
   "${dollar}{LEGENDHUB_PARITY_SNAPSHOT:-}" \
   "${dollar}{LEGENDHUB_PARITY_CERTIFICATE:-}" \
-  "${dollar}{LEGENDHUB_PARITY_CERTIFICATE_KEY:-}" >> "${dollar}FAKE_DOCKER_ENV_LOG"
+  "${dollar}{LEGENDHUB_PARITY_CERTIFICATE_KEY:-}" \
+  "${dollar}{LEGENDHUB_PARITY_DATABASE_IMAGE:-}" >> "${dollar}FAKE_DOCKER_ENV_LOG"
 
 project=""
 for ((index = 1; index <= ${dollar}#; index += 1)); do
@@ -214,8 +218,11 @@ function composePrefix(checkout, project, platform = "Darwin") {
 
 function printableCompose(checkout, project, suffix, platform = "Darwin") {
     const port = project.endsWith("reference") ? "7443" : "7444";
+    const databaseImage = project.endsWith("reference") ?
+        referenceDatabaseImage : candidateDatabaseImage;
     return [
         `LEGENDHUB_PARITY_HTTPS_PORT=${port}`,
+        `LEGENDHUB_PARITY_DATABASE_IMAGE=${databaseImage}`,
         `LEGENDHUB_PARITY_STATE_DIR=${stateDirectory}`,
         `LEGENDHUB_PARITY_FIXTURE=${path.join(candidateRoot,
             "scripts/fixtures/visual-parity.sql")}`,
@@ -365,6 +372,26 @@ test("creates the cached reference as a detached worktree at the fixed SHA", () 
         ["-C", referenceRoot, "symbolic-ref", "-q", "HEAD"],
     ]);
     assert.equal(fs.existsSync(path.join(referenceRoot, "docker-compose.yaml")), true);
+    assertNoForbiddenTarget(result);
+});
+
+test("pins the reference to MySQL 5.7 while the candidate uses MariaDB", () => {
+    const result = runOperator(["--mode", "smoke"]);
+
+    assert.equal(result.status, 0, result.stderr);
+    const calls = readRecords(logs.docker);
+    const environments = readRecords(logs.dockerEnvironment);
+    for (const [project, expectedImage] of [
+        ["legendhub-parity-reference", referenceDatabaseImage],
+        ["legendhub-parity-candidate", candidateDatabaseImage],
+    ]) {
+        const indexes = calls.map((call, index) => ({call, index}))
+            .filter(({call}) => call[0] === "compose" &&
+                call.includes(project));
+        assert.notEqual(indexes.length, 0, project);
+        assert.equal(indexes.every(({index}) =>
+            environments[index][7] === expectedImage), true, project);
+    }
     assertNoForbiddenTarget(result);
 });
 

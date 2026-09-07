@@ -5,7 +5,9 @@ with version 2.6.0.
 
 ## [4.0.0-beta]
 
-Development cycle opened. No player-facing changes have been released in this cycle yet.
+### Changed
+
+- Prepared the site for a newer database engine, including account and Builder storage checks and private backups. This beta is in development; server upgrades are still pending.
 
 ## [3.2.0] - 2026-09-07
 

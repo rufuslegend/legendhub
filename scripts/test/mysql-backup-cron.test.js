@@ -132,8 +132,8 @@ function runBackup(fakeDumpBody) {
         "fake_bin=$(mktemp -d)",
         "trap 'rm -rf -- \"$fake_bin\"' EXIT",
         "printf '%s\\n' '#!/bin/sh' " +
-            `'${fakeDumpBody.replaceAll("'", "'\\''")}' > \"$fake_bin/mysqldump\"`,
-        "chmod +x \"$fake_bin/mysqldump\"",
+            `'${fakeDumpBody.replaceAll("'", "'\\''")}' > \"$fake_bin/mariadb-dump\"`,
+        "chmod +x \"$fake_bin/mariadb-dump\"",
         "PATH=\"$fake_bin:$PATH\" /usr/local/bin/backup-mysql",
     ].join("; ");
     return docker(["run", "--rm", ...environmentArguments(),
@@ -164,17 +164,17 @@ test("backup keeps account storage private and excludes it from public content",
         "PersistentLogins",
     ];
     const fakeDumpBody = [
-        "printf '%s\\n' \"$*\" >> /tmp/mysqldump-arguments",
+        "printf '%s\\n' \"$*\" >> /tmp/mariadb-dump-arguments",
         "printf 'CREATE TABLE backup_test (id int);\\n'",
     ].join("; ");
     const command = [
         "fake_bin=$(mktemp -d)",
         "trap 'rm -rf -- \"$fake_bin\"' EXIT",
         "printf '%s\\n' '#!/bin/sh' " +
-            `'${fakeDumpBody.replaceAll("'", "'\\''")}' > \"$fake_bin/mysqldump\"`,
-        "chmod +x \"$fake_bin/mysqldump\"",
+            `'${fakeDumpBody.replaceAll("'", "'\\''")}' > \"$fake_bin/mariadb-dump\"`,
+        "chmod +x \"$fake_bin/mariadb-dump\"",
         "PATH=\"$fake_bin:$PATH\" /usr/local/bin/backup-mysql",
-        "sed -n '1p;2p;3p' /tmp/mysqldump-arguments",
+        "sed -n '1p;2p;3p' /tmp/mariadb-dump-arguments",
     ].join("; ");
     const result = docker(["run", "--rm", ...environmentArguments(),
         image, "bash", "-c", command]);
@@ -200,9 +200,9 @@ test("backup keeps account storage private and excludes it from public content",
 function runBackupFailureAtInvocation(failingInvocation) {
     const fakeDumpBody = [
         "count=0",
-        "test ! -f /tmp/mysqldump-count || read -r count < /tmp/mysqldump-count",
+        "test ! -f /tmp/mariadb-dump-count || read -r count < /tmp/mariadb-dump-count",
         "count=$((count + 1))",
-        "printf '%s\\n' \"$count\" > /tmp/mysqldump-count",
+        "printf '%s\\n' \"$count\" > /tmp/mariadb-dump-count",
         "printf 'partial dump invocation %s\\n' \"$count\"",
         `test "$count" -ne ${failingInvocation} || exit 17`,
     ].join("; ");
@@ -210,8 +210,8 @@ function runBackupFailureAtInvocation(failingInvocation) {
         "fake_bin=$(mktemp -d)",
         "trap 'rm -rf -- \"$fake_bin\"' EXIT",
         "printf '%s\\n' '#!/bin/sh' " +
-            `'${fakeDumpBody.replaceAll("'", "'\\''")}' > "$fake_bin/mysqldump"`,
-        "chmod +x \"$fake_bin/mysqldump\"",
+            `'${fakeDumpBody.replaceAll("'", "'\\''")}' > "$fake_bin/mariadb-dump"`,
+        "chmod +x \"$fake_bin/mariadb-dump\"",
         "private_backup=\"/backups/private/database_$(date +%m-%d-%Y).sql.gz\"",
         "public_backup=/backups/public/database.sql",
         "printf 'original private artifact\\n' | gzip > \"$private_backup\"",
@@ -260,10 +260,10 @@ function runPromotionFailureAtInvocation(failingInvocation, rollbackAlsoFails = 
         "fake_bin=$(mktemp -d)",
         "trap 'rm -rf -- \"$fake_bin\"' EXIT",
         "printf '%s\\n' '#!/bin/sh' \"printf 'new backup data\\\\n'\" " +
-            "> \"$fake_bin/mysqldump\"",
+            "> \"$fake_bin/mariadb-dump\"",
         "printf '%s\\n' '#!/bin/sh' " +
             `'${fakeMoveBody.replaceAll("'", "'\\''")}' > "$fake_bin/mv"`,
-        "chmod +x \"$fake_bin/mysqldump\" \"$fake_bin/mv\"",
+        "chmod +x \"$fake_bin/mariadb-dump\" \"$fake_bin/mv\"",
         "private_backup=\"/backups/private/database_$(date +%m-%d-%Y).sql.gz\"",
         "public_backup=/backups/public/database.sql",
         "printf 'original private artifact\\n' | gzip > \"$private_backup\"",
@@ -373,10 +373,10 @@ function runBackupWithFakeStat(fakeStatBody) {
         "fake_bin=$(mktemp -d)",
         "trap 'rm -rf -- \"$fake_bin\"' EXIT",
         "printf '%s\\n' '#!/bin/sh' \"printf 'backup data\\\\n'\" " +
-            "> \"$fake_bin/mysqldump\"",
+            "> \"$fake_bin/mariadb-dump\"",
         "printf '%s\\n' '#!/bin/sh' " +
             `'${fakeStatBody}' > "$fake_bin/stat"`,
-        "chmod +x \"$fake_bin/mysqldump\" \"$fake_bin/stat\"",
+        "chmod +x \"$fake_bin/mariadb-dump\" \"$fake_bin/stat\"",
         "PATH=\"$fake_bin:$PATH\" /usr/local/bin/backup-mysql",
     ].join("; ");
     return docker(["run", "--rm", ...environmentArguments(),

@@ -1,5 +1,12 @@
 "use strict";
 
+const {
+    inspectDatabaseEngine,
+    normalizeActualDefault,
+    normalizeExpectedDefault,
+    normalizeIntegerDisplayWidth
+} = require("./schema-metadata");
+
 const ITEM_COLUMNS = [
     {
         table: "Items", name: "Official",
@@ -206,14 +213,15 @@ async function withLegacyZeroDatesAllowed(query, action) {
 }
 
 exports.verify = async function({query}) {
+    const engine = await inspectDatabaseEngine(query);
     for (const definition of ITEM_COLUMNS) {
         const actual = await readItemColumn(query, definition.table, definition.name);
-        if (!columnMatches(actual, definition.expected))
+        if (!columnMatches(actual, definition.expected, engine))
             return false;
     }
     for (const [name, definition] of Object.entries(TABLES)) {
         if (!await tableExists(query, name) ||
-            !await tableColumnsMatch(query, name, definition.columns) ||
+            !await tableColumnsMatch(query, name, definition.columns, engine) ||
             !await tableIndexesMatch(query, name, definition.indexes)) {
             return false;
         }
@@ -247,13 +255,14 @@ function readItemColumn(query, tableName, columnName) {
     ).then(rows => rows[0]);
 }
 
-function columnMatches(actual, expected) {
+function columnMatches(actual, expected, engine = "mysql") {
     if (!actual)
         return false;
     const type = normalizeIntegerDisplayWidth(actual.COLUMN_TYPE || actual.type);
     const nullable = actual.IS_NULLABLE || actual.nullable;
-    const defaultValue = normalizeDefault(
-        actual.COLUMN_DEFAULT === undefined ? actual.defaultValue : actual.COLUMN_DEFAULT);
+    const defaultValue = normalizeActualDefault(
+        actual.COLUMN_DEFAULT === undefined ? actual.defaultValue : actual.COLUMN_DEFAULT,
+        engine);
     return type === expected.type && nullable === expected.nullable &&
         (expected.defaultValue === undefined || defaultValue === expected.defaultValue) &&
         (expected.characterSet === undefined ||
@@ -274,7 +283,7 @@ async function tableExists(query, tableName) {
     return rows.length === 1;
 }
 
-async function tableColumnsMatch(query, tableName, expected) {
+async function tableColumnsMatch(query, tableName, expected, engine) {
     const actual = await query(
         `inspect ${tableName} columns`,
         `
@@ -284,8 +293,8 @@ async function tableColumnsMatch(query, tableName, expected) {
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '${tableName}'
         `
     );
-    const left = actual.map(columnSignature).sort();
-    const right = expected.map(columnSignature).sort();
+    const left = actual.map(value => columnSignature(value, true, engine)).sort();
+    const right = expected.map(value => columnSignature(value, false, engine)).sort();
     if (left.length !== right.length || !left.every((value, index) => value === right[index]))
         return false;
     return expected.every(function(definition) {
@@ -417,11 +426,6 @@ function quoteIdentifier(value) {
     return `\`${value.replace(/`/g, "``")}\``;
 }
 
-function normalizeIntegerDisplayWidth(value) {
-    return value.replace(/^(tinyint|smallint|mediumint|int|bigint)\(\d+\)( unsigned)?$/,
-        "$1$2");
-}
-
 function normalizeDefault(value) {
     return value === null || value === undefined ? null : String(value);
 }
@@ -435,13 +439,17 @@ function index(name, nonUnique, columns) {
     return {name, nonUnique, columns};
 }
 
-function columnSignature(value) {
+function columnSignature(value, actual = false, engine = "mysql") {
     return [
         value.COLUMN_NAME || value.name,
         normalizeIntegerDisplayWidth(value.COLUMN_TYPE || value.type),
         value.IS_NULLABLE || value.nullable,
         value.CHARACTER_SET_NAME === undefined ? value.characterSet : value.CHARACTER_SET_NAME,
-        normalizeDefault(value.COLUMN_DEFAULT === undefined ? value.defaultValue : value.COLUMN_DEFAULT),
+        actual
+            ? normalizeActualDefault(
+                value.COLUMN_DEFAULT === undefined ? value.defaultValue : value.COLUMN_DEFAULT,
+                engine)
+            : normalizeExpectedDefault(value.defaultValue),
         value.EXTRA === undefined ? value.extra : value.EXTRA
     ].join("|");
 }

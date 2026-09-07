@@ -6,6 +6,8 @@ readonly reference_project="legendhub-parity-reference"
 readonly candidate_project="legendhub-parity-candidate"
 readonly reference_port="7443"
 readonly candidate_port="7444"
+readonly reference_database_image="mysql:5.7.44"
+readonly candidate_database_image="mariadb:12.3.3@sha256:dd9b303aed4f4890ed09f766d8ca9ddfd176c0c6f6267feff53b3192ec65a979"
 
 usage() {
   printf 'Usage: %s [--mode smoke|full] [--keep] [--fail-on-diff]\n' "$0" >&2
@@ -206,13 +208,27 @@ validate_destructive_project() {
   esac
 }
 
+database_image_for_project() {
+  case "$1" in
+    legendhub-parity-reference) printf '%s\n' "$reference_database_image" ;;
+    legendhub-parity-candidate) printf '%s\n' "$candidate_database_image" ;;
+    *)
+      printf 'visual-parity: refusing unsafe project name\n' >&2
+      return 1
+      ;;
+  esac
+}
+
 compose_for() {
   local project_name="$1"
   local checkout_root="$2"
   local https_port="$3"
+  local database_image
   shift 3
+  database_image="$(database_image_for_project "$project_name")"
 
-  LEGENDHUB_PARITY_HTTPS_PORT="$https_port" docker compose \
+  LEGENDHUB_PARITY_HTTPS_PORT="$https_port" \
+    LEGENDHUB_PARITY_DATABASE_IMAGE="$database_image" docker compose \
     --project-directory "$checkout_root" \
     --project-name "$project_name" \
     --env-file "$environment_file" \
@@ -229,10 +245,13 @@ print_compose_command() {
   local project_name="$1"
   local checkout_root="$2"
   local https_port="$3"
+  local database_image
   shift 3
+  database_image="$(database_image_for_project "$project_name")"
   local word
   local -a command=(
     "LEGENDHUB_PARITY_HTTPS_PORT=${https_port}"
+    "LEGENDHUB_PARITY_DATABASE_IMAGE=${database_image}"
     "LEGENDHUB_PARITY_STATE_DIR=${state_directory}"
     "LEGENDHUB_PARITY_FIXTURE=${fixture_file}"
     "LEGENDHUB_PARITY_NGINX_CONFIG=${nginx_config_file}"
@@ -323,9 +342,12 @@ safe_down() {
   local project_name="$1"
   local checkout_root="$2"
   local https_port="$3"
+  local database_image
 
   validate_destructive_project "$project_name"
-  LEGENDHUB_PARITY_HTTPS_PORT="$https_port" docker compose \
+  database_image="$(database_image_for_project "$project_name")"
+  LEGENDHUB_PARITY_HTTPS_PORT="$https_port" \
+    LEGENDHUB_PARITY_DATABASE_IMAGE="$database_image" docker compose \
     --project-directory "$checkout_root" \
     --project-name "$project_name" \
     --env-file "$environment_file" \

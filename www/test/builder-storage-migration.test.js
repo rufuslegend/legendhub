@@ -55,8 +55,11 @@ const COLUMN_DEFAULTS = {
 };
 const AUTO_INCREMENT_COLUMNS = new Set(["BuilderProfiles.Id", "BuilderImportReceipts.Id"]);
 
-function createSchemaContext({tables = [], mutateSchema} = {}) {
-    const schemas = new Map(tables.map((tableName) => [tableName, schemaFromExpectation(tableName)]));
+function createSchemaContext({tables = [], mutateSchema, server = "mysql"} = {}) {
+    const schemas = new Map(tables.map((tableName) => [
+        tableName,
+        schemaForServer(tableName, server)
+    ]));
     if (mutateSchema)
         mutateSchema(schemas);
 
@@ -64,22 +67,34 @@ function createSchemaContext({tables = [], mutateSchema} = {}) {
         tables: function() { return [...schemas.keys()].sort(); },
         query: async function(_operation, sql) {
             const tableName = /TABLE_NAME = '([^']+)'/.exec(sql)?.[1];
+            if (sql.includes("VERSION()"))
+                return [{VERSION: server === "mariadb" ? "12.3.3-MariaDB" : "5.7.44"}];
             if (sql.includes("information_schema.tables"))
                 return schemas.has(tableName) ? [{TABLE_NAME: tableName}] : [];
             if (sql.includes("information_schema.columns"))
                 return schemas.get(tableName)?.columns || [];
+            if (sql.includes("information_schema.check_constraints"))
+                return schemas.get(tableName)?.checks || [];
             if (sql.includes("information_schema.statistics"))
                 return schemas.get(tableName)?.indexes || [];
             if (sql.includes("information_schema.key_column_usage"))
                 return schemas.get(tableName)?.foreignKeys || [];
             if (sql.includes("CREATE TABLE")) {
                 const createdTable = /CREATE TABLE (\w+)/.exec(sql)[1];
-                schemas.set(createdTable, parseTableDefinition(sql));
+                const schema = parseTableDefinition(sql);
+                schemas.set(createdTable, server === "mariadb"
+                    ? asMariaDbSchema(createdTable, schema)
+                    : schema);
                 return [];
             }
             throw new Error(`Unexpected SQL: ${sql}`);
         }
     };
+}
+
+function schemaForServer(tableName, server) {
+    const schema = schemaFromExpectation(tableName);
+    return server === "mariadb" ? asMariaDbSchema(tableName, schema) : schema;
 }
 
 function schemaFromExpectation(tableName) {
@@ -92,8 +107,26 @@ function schemaFromExpectation(tableName) {
         })),
         foreignKeys: expected.foreignKeys.map(([
             CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME
-        ]) => ({CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME}))
+        ]) => ({CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME})),
+        checks: []
     };
+}
+
+function asMariaDbSchema(tableName, schema) {
+    for (const column of schema.columns) {
+        if (column.COLUMN_DEFAULT === null && column.IS_NULLABLE === "YES")
+            column.COLUMN_DEFAULT = "NULL";
+        if (column.COLUMN_TYPE === "json") {
+            column.COLUMN_TYPE = "longtext";
+            column.CHARACTER_SET_NAME = "utf8mb4";
+            column.COLLATION_NAME = "utf8mb4_bin";
+            schema.checks.push({
+                CONSTRAINT_NAME: `${tableName}_${column.COLUMN_NAME}_json`,
+                CHECK_CLAUSE: `json_valid(\`${column.COLUMN_NAME}\`)`
+            });
+        }
+    }
+    return schema;
 }
 
 function expectedColumnMetadata(tableName, [
@@ -160,7 +193,7 @@ function parseTableDefinition(sql) {
                 columns.at(-1).COLLATION_NAME = collation;
         }
     }
-    return {columns, indexes, foreignKeys};
+    return {columns, indexes, foreignKeys, checks: []};
 }
 
 test("storage migration creates all tables and verifies a partial retry", async function() {
@@ -252,6 +285,76 @@ test("storage migration verification accepts MySQL 5.7 JSON metadata", async fun
     });
 
     assert.equal(await migration.verify(context), true);
+});
+
+// Catches MariaDB's JSON alias and nullable defaults making a successful
+// migration 9 verify as incomplete on the next application startup.
+test("storage migration creates and verifies MariaDB 12.3 table metadata", async function() {
+    const context = createSchemaContext({server: "mariadb"});
+
+    await migration.up(context);
+
+    assert.equal(await migration.verify(context), true);
+});
+
+test("storage migration requires an exact MariaDB JSON alias contract", async function(t) {
+    const cases = [
+        {
+            name: "plain longtext",
+            mutate: schema => { schema.checks = []; }
+        },
+        {
+            name: "wrong character set",
+            mutate: schema => {
+                schema.columns.find(column => column.COLUMN_NAME === "Payload")
+                    .CHARACTER_SET_NAME = "latin1";
+            }
+        },
+        {
+            name: "wrong collation",
+            mutate: schema => {
+                schema.columns.find(column => column.COLUMN_NAME === "Payload")
+                    .COLLATION_NAME = "utf8mb4_general_ci";
+            }
+        },
+        {
+            name: "unrelated validation",
+            mutate: schema => {
+                schema.checks[0].CHECK_CLAUSE = "json_valid(`OtherPayload`)";
+            }
+        },
+        {
+            name: "permissive validation",
+            mutate: schema => {
+                schema.checks[0].CHECK_CLAUSE = "json_valid(`Payload`) OR TRUE";
+            }
+        }
+    ];
+
+    for (const fixture of cases) {
+        await t.test(fixture.name, async function() {
+            const context = createSchemaContext({
+                tables: Object.keys(EXPECTED_TABLES),
+                server: "mariadb",
+                mutateSchema: schemas => fixture.mutate(schemas.get("AccountPreferences"))
+            });
+
+            assert.equal(await migration.verify(context), false);
+        });
+    }
+});
+
+test("storage migration does not treat a MySQL literal NULL default as SQL NULL", async function() {
+    const context = createSchemaContext({
+        tables: Object.keys(EXPECTED_TABLES),
+        mutateSchema: function(schemas) {
+            schemas.get("BuilderProfiles").columns.find(
+                column => column.COLUMN_NAME === "Payload"
+            ).COLUMN_DEFAULT = "NULL";
+        }
+    });
+
+    assert.equal(await migration.verify(context), false);
 });
 
 test("storage migration verification rejects an incorrect column default", async function() {

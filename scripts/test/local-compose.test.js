@@ -8,6 +8,8 @@ const {spawnSync} = require("node:child_process");
 const test = require("node:test");
 
 const root = path.resolve(__dirname, "../..");
+const mariaDbImage = "mariadb:12.3.3@sha256:" +
+    "dd9b303aed4f4890ed09f766d8ca9ddfd176c0c6f6267feff53b3192ec65a979";
 const localState = "/example/legendhub-local-stack";
 const environment = {
     ...process.env,
@@ -26,7 +28,7 @@ const environment = {
     RECAPTCHA_SITEKEY: "",
 };
 
-function renderLocalCompose() {
+function renderLocalCompose(overrides = {}) {
     const result = spawnSync("docker", [
         "compose",
         "--project-name", "legendhub-local",
@@ -37,7 +39,7 @@ function renderLocalCompose() {
     ], {
         cwd: root,
         encoding: "utf8",
-        env: environment,
+        env: {...environment, ...overrides},
     });
     assert.equal(result.status, 0, result.stderr);
     return JSON.parse(result.stdout);
@@ -85,16 +87,70 @@ test("renders a persistent production-shaped local HTTPS stack", () => {
         "6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI");
     assert.equal(services.www.environment.RECAPTCHA_SECRET,
         "6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe");
+    assert.equal(services.mysql.image, mariaDbImage);
+    assert.equal(services.mysql.platform, "linux/amd64");
+    assert.equal(services.mysql.environment.MARIADB_ROOT_PASSWORD,
+        environment.MYSQL_ROOT_PASSWORD);
+    assert.equal(services.mysql.environment.MARIADB_USER,
+        environment.MYSQL_USER);
+    assert.equal(services.mysql.environment.MARIADB_PASSWORD,
+        environment.MYSQL_PASSWORD);
+    assert.equal(services.mysql.environment.MARIADB_DATABASE,
+        environment.MYSQL_DATABASE);
+    assert.equal(services.mysql.environment.MYSQL_ROOT_PASSWORD,
+        environment.MYSQL_ROOT_PASSWORD);
     assert.equal(services.mysql.volumes.find((volume) =>
         volume.target === "/docker-entrypoint-initdb.d/01-dunwich.sql.gz").source,
     path.join(localState, "backups/dunwich-latest.sql.gz"));
+    assert.equal(services.mysql.volumes.find((volume) =>
+        volume.target === "/var/lib/mysql").source,
+    "mariadb-database");
+    assert.equal(services.mysql.volumes.some((volume) =>
+        volume.source === "database"), false);
+    const mariaConfigMount = services.mysql.volumes.find((volume) =>
+        volume.target === "/etc/mysql/conf.d");
+    assert.equal(mariaConfigMount.source,
+        path.join(root, "mysql/mariadb-conf"));
+    assert.equal(mariaConfigMount.read_only, true);
     assert.deepEqual(services.mysql.healthcheck.test, [
-        "CMD-SHELL",
-        "mysqladmin ping --protocol=tcp -h 127.0.0.1 -u root " +
-            "-p$${MYSQL_ROOT_PASSWORD} --silent",
+        "CMD",
+        "healthcheck.sh",
+        "--connect",
+        "--innodb_initialized",
     ]);
+    assert.equal("mariadb-database" in config.volumes, true);
+    assert.equal(config.volumes["mariadb-database"].name,
+        "legendhub-local_mariadb-database");
+    assert.match(fs.readFileSync(path.join(root, "docker-compose.yaml"), "utf8"),
+        /^    database:\s*$/m);
+
+    const mariaConfig = fs.readFileSync(path.join(root,
+        "mysql/mariadb-conf/server.cnf"), "utf8");
+    assert.match(mariaConfig, /^\[mariadb\]$/m);
+    assert.match(mariaConfig,
+        /^sql-mode=STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION$/m);
+    assert.match(mariaConfig, /^character-set-server=latin1$/m);
+    assert.match(mariaConfig, /^collation-server=latin1_swedish_ci$/m);
+    assert.match(mariaConfig,
+        /^character-set-collations=utf8mb4=utf8mb4_general_ci$/m);
     assert.equal(JSON.stringify(config).includes("/tmp/"), false);
     assert.equal("equipment-importer" in services, false);
+});
+
+test("database and backup worker share the configured application credentials", () => {
+    const configured = {
+        MYSQL_USER: "rehearsal_user",
+        MYSQL_DATABASE: "rehearsal_database",
+        MYSQL_PASSWORD: "disposable-password"
+    };
+    const {services} = renderLocalCompose(configured);
+    for (const service of ["mysql", "mysql-backup", "www", "python"]) {
+        for (const [key, value] of Object.entries(configured))
+            assert.equal(services[service].environment[key], value, `${service}.${key}`);
+    }
+    assert.equal(services.mysql.environment.MARIADB_USER, configured.MYSQL_USER);
+    assert.equal(services.mysql.environment.MARIADB_DATABASE, configured.MYSQL_DATABASE);
+    assert.equal(services.mysql.environment.MARIADB_PASSWORD, configured.MYSQL_PASSWORD);
 });
 
 test("prepares private persistent state and renders through the local wrapper", (t) => {

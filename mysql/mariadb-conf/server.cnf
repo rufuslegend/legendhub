@@ -1,0 +1,5 @@
+[mariadb]
+sql-mode=STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+character-set-server=latin1
+collation-server=latin1_swedish_ci
+character-set-collations=utf8mb4=utf8mb4_general_ci

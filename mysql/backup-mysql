@@ -80,7 +80,7 @@ public_temporary="$(mktemp "${public_backup}.tmp.XXXXXX")"
 private_rollback="${private_temporary}.rollback"
 public_rollback="${public_temporary}.rollback"
 
-mysqldump \
+mariadb-dump \
     -P "${MYSQL_PORT}" \
     -h mysql \
     -u "${MYSQL_USER}" \
@@ -91,7 +91,7 @@ mysqldump \
     -B "${MYSQL_DATABASE}" \
     | gzip > "${private_temporary}"
 
-mysqldump \
+mariadb-dump \
     -P "${MYSQL_PORT}" \
     -h mysql \
     -u "${MYSQL_USER}" \
@@ -105,7 +105,7 @@ mysqldump \
     "${MYSQL_DATABASE}" \
     | sed -e 's/DEFINER[ ]*=[ ]*[^*  ]*\*/\*/' > "${public_temporary}"
 
-mysqldump \
+mariadb-dump \
     -P "${MYSQL_PORT}" \
     -h mysql \
     -u "${MYSQL_USER}" \

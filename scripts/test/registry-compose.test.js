@@ -6,6 +6,8 @@ const {spawnSync} = require("node:child_process");
 const test = require("node:test");
 
 const root = path.resolve(__dirname, "../..");
+const mariaDbImage = "mariadb:12.3.3@sha256:" +
+    "dd9b303aed4f4890ed09f766d8ca9ddfd176c0c6f6267feff53b3192ec65a979";
 const baseEnvironment = {
     ...process.env,
     EQUIPMENT_SPOOL_HOST_PATH: "/example/legendhub-spool",
@@ -87,7 +89,7 @@ test("uses immutable registry images without builds or the web source mount", ()
     }
     assert.equal((services.www.volumes || []).some(
         (volume) => volume.target === "/app/src"), false);
-    assert.equal(services.mysql.image, "mysql:5");
+    assert.equal(services.mysql.image, mariaDbImage);
     assert.equal(services.mysql.platform, "linux/amd64");
     assert.equal("equipment-importer" in services, false);
 });

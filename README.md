@@ -47,13 +47,10 @@
 * Navigate to the directory where you've downloaded the [repository](https://github.com/rufuslegend/legendhub)
 * Copy the `.env_example` and rename it to `.env`
 * Replace the dummy data in `.env` with your desired environment variables
-* If you have a backup sql script, simply place this file in the mysql directory before building the images for the first time
-    * This backup file must be named `backup.sql`
-    * If you do not provide a backup script, it will try to use a public backup which may be outdated or deleted, as it points to Stolve's Google Drive
-    * The location for this fallback backup script can be modified in the `mysql/entrypoint.sh` file on line `39`
-    * If you need to clear out the database and use a new backup script, the image and volumes need to be deleted before rebuilding again.
-* Run `docker-compose up` or `docker-compose compose up -d` to run in detached mode
-* This will start up three containers. A MYSQL container for database storage, a web container for the actual website, and a python container which handles routine maintenance and notifications
+* For a new database, place a trusted full SQL backup (`.sql` or `.sql.gz`) in `mysql/init/`. Init files run alphabetically, only when the database volume is empty. Keep private backups out of Git.
+* Start the database first with `docker compose up -d mysql`, wait for its healthcheck, and verify the restore before starting the application with `docker compose up -d --build`.
+* The four base services are MariaDB, the website, Python maintenance/notifications, and the database backup worker. The database service is still named `mysql` for connection compatibility.
+* **Upgrading an existing MySQL installation:** follow the [MariaDB migration runbook](docs/operations/mariadb-migration.md). Version 4 uses a separate `mariadb-database` volume; starting it does not copy data from the old `database` volume. Preserve the old volume and take a full logical backup before cutover.
 
 ## Tech Stack
 > The following is a brief overview of the LegendHUB technical stack.
@@ -81,7 +78,12 @@ workflows intact while giving each page a maintained client foundation.
 Bootstrap is used as the primary CSS tool. Bootstrap and custom bootstrap styles are written in [SCSS](https://sass-lang.com/).
 
 ### Database
-[MySQL](https://www.mysql.com/) is used for the main LegendHUB database.
+[MariaDB](https://mariadb.org/) 12.3.3 is used for the main LegendHUB database,
+pinned by image digest on `linux/amd64`. The existing Node and Python database
+clients and `MYSQL_*` application settings remain in use. MariaDB stores its
+files in the `mariadb-database` Docker volume mounted at `/var/lib/mysql`.
+The old MySQL `database` volume is retained for fallback and must never be
+mounted into MariaDB.
 
 ### Services
 There are additional routine maintenance and related services that run periodically outside of the web server.
@@ -92,9 +94,16 @@ These services are written in python and are found within the `python/` director
 > Each of the following sections includes detailed instructions for maintenance of the various areas in LegendHUB.
 
 ### Backups
-LegendHUB automatically creates daily backups of the SQL database and drops them in `database-backups` Docker volume. This backup file is overwritten every day. It is recommended that you take these backups and copy them to a remote location.
+LegendHUB creates daily backups using `mariadb-dump` in the `database-backups`
+Docker volume. Private backups have dated filenames; the public export is
+replaced on each successful run. Copy private backups to separate protected
+storage and periodically rehearse a restore with the MariaDB client.
 
 There is a public and private directory in this volume. The public directory contains a backup without sensitive data, such as accounts, notifications, settings, etc.. The private directory contains a full backup of everything.
+
+Production-to-test content sync stays disabled during the MariaDB transition;
+cross-engine compatibility is deferred. The [migration runbook](docs/operations/mariadb-migration.md)
+covers restore verification and the frozen MySQL fallback.
 
 ### Updating the Builder
 The builder is perhaps the messiest bit of code on the website.
@@ -132,10 +141,10 @@ The current application version is stored in `www/package.json`. Root
 The package lock and README badge must carry the same version. Run
 `node scripts/verify-release-version.js` before committing release metadata.
 
-During 4.0 development, add public-facing changes under `4.0.0-beta`. The MariaDB
-migration is planned for this cycle; the application still uses MySQL until that
-work is implemented. Content-sync compatibility work is deferred while sync is
-disabled. Promote to `4.0.0` only when the maintainer declares the release.
+During 4.0 development, add public-facing changes under `4.0.0-beta`. The
+application configuration now uses MariaDB; server cutovers remain pending.
+Content-sync compatibility work is deferred while sync is disabled. Promote
+to `4.0.0` only when the maintainer declares the release.
 
 Release `v3.2.0` is the stable MySQL checkpoint. Release tags preserve application
 code; restoring database contents also requires a separate private database backup.

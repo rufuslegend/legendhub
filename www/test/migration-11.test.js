@@ -15,6 +15,8 @@ function createQuery(responses = {}) {
                 : responses[operation];
         if (operation === "read session SQL mode")
             return [{SqlMode: "STRICT_TRANS_TABLES"}];
+        if (operation === "inspect database engine")
+            return [{VERSION: "5.7.44"}];
         return [];
     };
     return {calls, query};
@@ -62,6 +64,23 @@ test("migration 11 leaves completed schema steps alone", async () => {
     const mutating = calls.filter(call => /^(ALTER|CREATE|INSERT|UPDATE|DROP)/.test(call.sql.trim()));
     assert.deepEqual(mutating, []);
     assert.equal(await migration.verify({query}), true);
+});
+
+// Catches MariaDB reporting nullable COLUMN_DEFAULT values as the string NULL
+// and SQL string defaults with their quotes still present.
+test("migration 11 verifies MariaDB 12.3 column defaults", async () => {
+    const complete = migration.__test.completeInspectionResponses();
+    complete["inspect database engine"] = [{VERSION: "12.3.3-MariaDB"}];
+    for (const [operation, rows] of Object.entries(complete)) {
+        if (!operation.endsWith(" columns") && !operation.includes("."))
+            continue;
+        for (const row of rows) {
+            if (row.COLUMN_DEFAULT === null && row.IS_NULLABLE === "YES")
+                row.COLUMN_DEFAULT = "NULL";
+        }
+    }
+
+    assert.equal(await migration.verify({query: createQuery(complete).query}), true);
 });
 
 test("migration 11 verify rejects malformed provenance tables or stale audit trigger", async () => {

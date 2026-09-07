@@ -1,13 +1,9 @@
 services:
     mysql:
-        image: mysql:5.7.44
-        volumes: !override
-            - database:/var/lib/mysql
-            - database-logs:/var/log
-            - type: bind
-              source: ./mysql/conf
-              target: /etc/mysql/mysql.conf.d
-              read_only: true
+        image: ${LEGENDHUB_PARITY_DATABASE_IMAGE:?set LEGENDHUB_PARITY_DATABASE_IMAGE}
+        volumes:
+            - type: tmpfs
+              target: /docker-entrypoint-initdb.d
             - type: bind
               source: ${LEGENDHUB_PARITY_STATE_DIR:?set LEGENDHUB_PARITY_STATE_DIR}/backups/dunwich-latest.sql.gz
               target: /docker-entrypoint-initdb.d/01-dunwich.sql.gz

@@ -13,13 +13,10 @@ services:
               protocol: tcp
         restart: unless-stopped
     mysql:
-        image: mysql:5.7.44
-        healthcheck:
-            test: ["CMD-SHELL", "mysqladmin ping --protocol=tcp -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
         volumes: !override
-            - database:/var/lib/mysql
+            - mariadb-database:/var/lib/mysql
             - database-logs:/var/log
-            - ./mysql/conf:/etc/mysql/mysql.conf.d:ro
+            - ./mysql/mariadb-conf:/etc/mysql/conf.d:ro
             - type: bind
               source: ${LEGENDHUB_LOCAL_STATE_DIR:?set LEGENDHUB_LOCAL_STATE_DIR}/backups/dunwich-latest.sql.gz
               target: /docker-entrypoint-initdb.d/01-dunwich.sql.gz

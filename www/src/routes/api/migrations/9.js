@@ -1,3 +1,11 @@
+const {
+    hasExactJsonValidation,
+    inspectDatabaseEngine,
+    normalizeActualDefault,
+    normalizeExpectedDefault,
+    normalizeIntegerDisplayWidth
+} = require("./schema-metadata");
+
 const TABLES = {
     BuilderProfiles: {
         sql: `
@@ -110,10 +118,11 @@ exports.up = async function({query}) {
 };
 
 exports.verify = async function({query}) {
+    const engine = await inspectDatabaseEngine(query);
     for (const [tableName, table] of Object.entries(TABLES)) {
         if (!await tableExists(query, tableName))
             return false;
-        if (!await tableColumnsMatch(query, tableName, table.columns))
+        if (!await tableColumnsMatch(query, tableName, table.columns, engine))
             return false;
         if (!await tableIndexesMatch(query, tableName, table.indexes))
             return false;
@@ -136,7 +145,7 @@ async function tableExists(query, tableName) {
     return tables.length === 1;
 }
 
-async function tableColumnsMatch(query, tableName, expectedColumns) {
+async function tableColumnsMatch(query, tableName, expectedColumns, engine) {
     const columns = await query(
         `inspect ${tableName} columns`,
         `
@@ -147,8 +156,12 @@ async function tableColumnsMatch(query, tableName, expectedColumns) {
                 AND TABLE_NAME = '${tableName}'
         `
     );
-    const expectedSignatures = expectedColumns.map(columnSignature).sort();
-    const actualSignatures = columns.map(columnSignature).sort();
+    const checks = engine === "mariadb" && expectedColumns.some(column => column.type === "json")
+        ? await readCheckConstraints(query, tableName)
+        : [];
+    const expectedSignatures = expectedColumns.map(column => columnSignature(column)).sort();
+    const actualSignatures = columns.map(column =>
+        columnSignature(column, {actual: true, engine, checks})).sort();
     if (actualSignatures.length !== expectedSignatures.length ||
         !actualSignatures.every((signature, index) => signature === expectedSignatures[index])) {
         return false;
@@ -190,17 +203,27 @@ async function tableIndexesMatch(query, tableName, expectedIndexes) {
         actualSignatures.every((signature, index) => signature === expectedSignatures[index]);
 }
 
-function columnSignature(column) {
-    const type = normalizeIntegerDisplayWidth(column.COLUMN_TYPE || column.type);
+function columnSignature(column, {actual = false, engine = "mysql", checks = []} = {}) {
+    const columnName = column.COLUMN_NAME || column.name;
+    let type = normalizeIntegerDisplayWidth(column.COLUMN_TYPE || column.type);
     const characterSet = column.CHARACTER_SET_NAME === undefined
         ? column.characterSet || null
         : column.CHARACTER_SET_NAME;
+    if (actual && engine === "mariadb" && type === "longtext" &&
+        characterSet === "utf8mb4" && column.COLLATION_NAME === "utf8mb4_bin" &&
+        hasExactJsonValidation(checks, columnName)) {
+        type = "json";
+    }
     return [
-        column.COLUMN_NAME || column.name,
+        columnName,
         type,
         column.IS_NULLABLE || column.nullable,
         type === "json" && characterSet === null ? "utf8mb4" : characterSet,
-        normalizeColumnDefault(column.COLUMN_DEFAULT === undefined ? column.defaultValue : column.COLUMN_DEFAULT),
+        actual
+            ? normalizeActualDefault(
+                column.COLUMN_DEFAULT === undefined ? column.defaultValue : column.COLUMN_DEFAULT,
+                engine)
+            : normalizeExpectedDefault(column.defaultValue),
         column.EXTRA === undefined ? column.autoIncrement ? "auto_increment" : "" : column.EXTRA
     ].join("|");
 }
@@ -209,15 +232,16 @@ function indexSignature(index) {
     return [index.INDEX_NAME, index.NON_UNIQUE, index.SEQ_IN_INDEX, index.COLUMN_NAME].join("|");
 }
 
-function normalizeIntegerDisplayWidth(type) {
-    return type.replace(
-        /^(tinyint|smallint|mediumint|int|bigint)\(\d+\)( unsigned)?$/,
-        "$1$2"
+function readCheckConstraints(query, tableName) {
+    return query(
+        `inspect ${tableName} check constraints`,
+        `
+            SELECT CONSTRAINT_NAME, CHECK_CLAUSE
+            FROM information_schema.check_constraints
+            WHERE CONSTRAINT_SCHEMA = DATABASE()
+                AND TABLE_NAME = '${tableName}'
+        `
     );
-}
-
-function normalizeColumnDefault(value) {
-    return value === null || value === undefined ? null : String(value);
 }
 
 async function foreignKeyMatches(query, tableName, expected) {
