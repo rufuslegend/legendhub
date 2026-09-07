@@ -74,7 +74,9 @@ old_project=EXISTING_SOURCE_PROJECT
 new_project=UNIQUE_MARIADB_PROJECT
 migration_dir=/ABSOLUTE/PRIVATE/PATH/TO/CHECKPOINT
 mkdir -p "$migration_dir/empty-init"
-chmod 700 "$migration_dir" "$migration_dir/empty-init"
+chmod 700 "$migration_dir"
+# This directory stays empty and must be readable by MariaDB's container user.
+chmod 755 "$migration_dir/empty-init"
 
 old_compose=(docker compose --project-directory "$old_checkout"
   --project-name "$old_project" --env-file "$old_env"
@@ -246,4 +248,32 @@ profile/preferences/import-receipt roundtrips, and trigger behavior using
 node --test scripts/test/mariadb-integration.test.js
 ```
 
-These are local results, not evidence that either server has been migrated.
+These are local results; the separate test-server deployment is recorded below.
+
+## Dunwich cutover — 2026-09-07
+
+- Deployed application commit: `5d9286ed9cea`, version `4.0.0-beta`.
+- Checkout: `/home/rufus/legendhub`; active project: `legendhub-test-mariadb`.
+- MariaDB 12.3.3 uses `legendhub-test-mariadb_mariadb-database`.
+- The web app, Python, backup worker, and equipment importer run on MariaDB.
+  Content sync remains off. Production was not changed.
+- The final MySQL snapshot at `2026-09-07T16:26:50Z` contained 37 tables,
+  174,916 rows, and 10 triggers. All table hashes and trigger definitions
+  matched after import and after a MariaDB backup/restore rehearsal.
+- Restored schema checks, Builder repository persistence, Python connectivity,
+  public-backup exclusions, public routes, and the live HTTPS Builder passed.
+- All five original `legendhub-test` containers are stopped and retained,
+  including MySQL volume `legendhub-test_database`, at source commit
+  `ae1815b08a8aeffb5b78bb1a2a95a5fa5aa9266a`.
+
+The private checkpoint and original deployment configuration are on Dunwich at
+`/home/rufus/legendhub/data/mariadb-cutover-20260907`. Its
+`rollback-to-mysql.py --check` validates the retained fallback without changing
+anything. `rollback-to-mysql.py --execute` stops the MariaDB stack, restores the
+original checkout/configuration, waits for MySQL health, and restarts the
+retained source containers. Post-cutover MariaDB-only writes are not imported.
+
+The deployment wrapper now reads either allowed project name from the server's
+environment file, so subsequent authorized `scripts/deploy-test.sh <sha>` runs
+target the active MariaDB project. Routine Dunwich deployments need a startup
+and live Builder smoke check; repeating this migration rehearsal is unnecessary.

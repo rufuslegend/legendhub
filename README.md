@@ -142,7 +142,8 @@ The package lock and README badge must carry the same version. Run
 `node scripts/verify-release-version.js` before committing release metadata.
 
 During 4.0 development, add public-facing changes under `4.0.0-beta`. The
-application configuration now uses MariaDB; server cutovers remain pending.
+application configuration now uses MariaDB. Dunwich was cut over on
+2026-09-07; the production cutover remains pending.
 Content-sync compatibility work is deferred while sync is disabled. Promote
 to `4.0.0` only when the maintainer declares the release.
 
