@@ -123,7 +123,7 @@ function createPreferenceStatePool(initial) {
         release() {},
         query(sql, values, callback) {
             calls.push({sql, values});
-            if (sql.includes("INSERT IGNORE INTO AccountPreferences")) {
+            if (sql.includes("INSERT INTO AccountPreferences")) {
                 if (!row) {
                     row = {
                         DocumentVersion: 1,

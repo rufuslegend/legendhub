@@ -194,10 +194,14 @@ function createBuilderProfileRepository({pool}) {
         },
 
         async readPreferencesForUpdate(memberId, {executor = pool} = {}) {
+            // Take an exclusive duplicate-row lock immediately. INSERT IGNORE
+            // takes a shared lock, so concurrent saves can deadlock when both
+            // upgrade to SELECT FOR UPDATE below. Preserve all existing data.
             await query(executor, `
-                INSERT IGNORE INTO AccountPreferences
+                INSERT INTO AccountPreferences
                     (MemberId, DocumentVersion, Payload, Revision, StorageGeneration, UpdatedOn)
-                VALUES (?, 1, ?, 1, 1, NOW())`, [memberId, DEFAULT_PREFERENCES_JSON]);
+                VALUES (?, 1, ?, 1, 1, NOW())
+                ON DUPLICATE KEY UPDATE MemberId = MemberId`, [memberId, DEFAULT_PREFERENCES_JSON]);
             const rows = await query(executor, `
                 SELECT DocumentVersion, Payload, Revision, StorageGeneration, UpdatedOn
                 FROM AccountPreferences

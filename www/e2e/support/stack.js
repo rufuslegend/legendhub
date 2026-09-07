@@ -101,7 +101,7 @@ async function startStack() {
         const databasePort = Number(published.stdout.trim().split(":").at(-1));
         const connectionOptions = {
             host: "127.0.0.1", port: databasePort, user: "root", password,
-            multipleStatements: true, connectionLimit: 2, connectTimeout: 5000, acquireTimeout: 5000
+            multipleStatements: true, connectionLimit: 4, connectTimeout: 5000, acquireTimeout: 5000
         };
         pool = mysql.createPool(connectionOptions);
         let ready = false;
@@ -125,10 +125,6 @@ async function startStack() {
         pool = mysql.createPool({...connectionOptions, database: "legendhub"});
         await query(await fs.readFile(path.join(__dirname, "builder-baseline.sql"), "utf8"));
         const fixturePassword = hash("disposable-builder-password");
-        for (const [index, username] of ["BuilderTester", "IsolationOwner", "IsolationOther"].entries()) {
-            await query("INSERT INTO Members (Id, Username, Password) VALUES (?, ?, ?)",
-                [index + 1, username, fixturePassword]);
-        }
         await query("CREATE USER 'builder_app'@'%' IDENTIFIED BY ?", [password]);
         await query("GRANT ALL ON legendhub.* TO 'builder_app'@'%'");
 
@@ -170,11 +166,40 @@ async function startStack() {
             throw new Error(`Application did not become ready\n${appOutput}`);
         }
         await launchApp();
-        await query("UPDATE Members SET Email = CONCAT(Username, '@example.test'), " +
-            "NormalizedEmail = LOWER(CONCAT(Username, '@example.test')), EmailVerifiedOn = NOW()");
+        let accountNumber = 0;
         started = true;
         return {
             url, query, close,
+            get pool() { return pool; },
+            async lockAccountPreferences(memberId) {
+                const connection = await new Promise((resolve, reject) =>
+                    pool.getConnection((error, connection) => error ? reject(error) : resolve(connection)));
+                const execute = (sql, values = []) => new Promise((resolve, reject) =>
+                    connection.query(sql, values, (error, result) => error ? reject(error) : resolve(result)));
+                try {
+                    await execute("START TRANSACTION");
+                    await execute("SELECT MemberId FROM AccountPreferences WHERE MemberId = ? FOR UPDATE", [memberId]);
+                }
+                catch (error) {
+                    connection.destroy();
+                    throw error;
+                }
+                const unlock = async () => {
+                    try { await execute("ROLLBACK"); }
+                    finally { connection.release(); }
+                };
+                return {unlock, connectionId: connection.threadId};
+            },
+            async createAccount() {
+                const username = `FunctionalUser${++accountNumber}`;
+                const email = `${username.toLowerCase()}@example.test`;
+                const result = await query(
+                    "INSERT INTO Members (Username, Password, Email, NormalizedEmail, EmailVerifiedOn) VALUES (?, ?, ?, ?, NOW())",
+                    [username, fixturePassword, email, email]
+                );
+                await query("INSERT INTO NotificationSettings (MemberId) VALUES (?)", [result.insertId]);
+                return {id: result.insertId, username, email};
+            },
             async restartApp() {
                 await stopApp(child);
                 await launchApp();

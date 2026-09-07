@@ -2,6 +2,7 @@
 
 const {test: base, expect} = require("@playwright/test");
 const {startStack} = require("./stack");
+const {freshLogin} = require("./builder");
 const fulfillLocalBrowserScript = require("../../accessibility/support/local-browser-scripts");
 
 const test = base.extend({
@@ -14,6 +15,12 @@ const test = base.extend({
             await stack.close();
         }
     }, {scope: "worker", timeout: 300_000}],
+    account: async ({stack}, use) => {
+        await use(await stack.createAccount());
+    },
+    signedIn: async ({newDevice, account}, use) => {
+        await use(await freshLogin(newDevice, account));
+    },
     newDevice: async ({browser, stack}, use, testInfo) => {
         const contexts = [];
         const pageErrors = [];

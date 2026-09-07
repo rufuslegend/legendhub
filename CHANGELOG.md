@@ -5,6 +5,10 @@ with version 2.6.0.
 
 ## [4.0.0-beta]
 
+### Fixed
+
+- Fixed occasional Builder sync failures when character changes and account preferences were saved at the same time.
+
 ### Changed
 
 - Prepared the site for a newer database engine, including account and Builder storage checks and private backups. This beta is in development; server upgrades are still pending.

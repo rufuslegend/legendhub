@@ -67,17 +67,32 @@ The command builds the client, starts the pinned `linux/amd64` MariaDB image wit
 temporary storage and a random localhost port, and launches the application.
 The first run may need to download the database image.
 
-The end-to-end tests cover:
+The command runs 28 functional tests: 27 browser journeys and one database
+concurrency regression using the real storage service.
 
-* Signing in, saving a character's stats and equipment, restarting the app, and
-  reopening that character in a fresh browser session.
-* Editing from another session and checking the updated character after reload.
-* Logging out and switching accounts without exposing another player's characters.
+| Area | Tests | Coverage |
+| --- | ---: | --- |
+| Authentication | 3 | Incorrect passwords, verified email login, expired sessions |
+| Characters and variants | 8 | Separate stats, renaming, validation, confirmed deletion, cloning, primary variants |
+| Equipment | 3 | Database search, unequipping, locked items and clearing gear |
+| Persistence and account switching | 2 | Application restart, fresh sessions, edits across devices, private character lists |
+| Import and export | 4 | Transfer between accounts, invalid input, skip/overwrite, explicit copying of anonymous data |
+| Save failures and concurrency | 3 | Rejected database writes and recovery, conflicting edits, concurrent character/preference transactions |
+| Account storage and preferences | 5 | Download and restore, deletion with a stale session, themes/columns, rejection of another account's update/delete requests |
+
+Each test gets separate synthetic accounts. Normal saves wait for the real
+GraphQL response, and persistence assertions use fresh browser sessions and/or
+independent database reads. Failure tests reject writes inside MariaDB or queue
+real storage transactions behind a database lock; they do not simulate API replies.
+Run a subset with, for example, `npm run test:e2e -- --grep "variant"`.
 
 The database contains only synthetic users/items. Its minimal legacy schema
 starts before migration 8; application startup runs the real migrations from
 8 onward. Accounts are seeded as email-verified, so registration, email delivery,
-and migrations 1–7 are outside this suite's scope. Application requests are never
+and migrations 1–7 are outside this suite's scope. Content editing, moderation,
+notifications, and maintenance/content-sync jobs also need separate functional
+coverage; these counts describe scenarios, not a percentage of code covered.
+Application requests are never
 mocked; the existing pinned CDN scripts are supplied locally for repeatability.
 The runner uses its own database container and ignores application `.env` files;
 it does not connect to an existing local stack, Dunwich, or production.
