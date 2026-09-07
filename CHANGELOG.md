@@ -3,7 +3,7 @@
 All notable user-facing changes to LegendHUB are documented here beginning
 with version 2.6.0.
 
-## [3.1.0-beta] - 2026-08-26
+## [3.2.0] - 2026-09-07
 
 ### Added
 
@@ -12,7 +12,7 @@ with version 2.6.0.
 - Added Account preferences to turn item stat pop-ups on or off and optionally hide zero-valued stats in equipment tables while keeping Rent visible.
 - Added two-second item previews when hovering or focusing gear names in Item Search and Builder, while preserving the existing item links and new-tab actions.
 - Added verified email addresses to accounts. New accounts now require an email address and receive a verification link before email-only features become available.
-- Added a themed, dismissible email-verification modal after each login for existing accounts without a verified address; all features available before 3.1 continue to work without one.
+- Added a themed, dismissible email-verification modal after each login for existing accounts without a verified address; previously available features continue to work without one.
 - Added a plain-language Privacy Policy covering account information, Builder storage, cookies, service providers, retention, and deletion requests.
 - Added password recovery through a verified email address, with one-hour reset links that sign out every existing session after the password changes.
 - Added account-backed Builder storage for players with a verified email address. Characters autosave separately, follow the player between work, home, and other browsers, and share a 10 MB account limit.
@@ -52,7 +52,7 @@ with version 2.6.0.
 - Made the local Builder data copy notice readable in every theme, summarized large profile sets in scrollable dialogs, transitioned supported Builder preferences automatically, let players dismiss the notice without refreshing, and stopped preference changes from prompting players to copy the same profiles again.
 - Kept the email reminder from blocking the email-verification page.
 - Aligned Account Settings actions and aligned and widened the labels and entry fields across the sign-in and registration forms.
-- Kept the 3.1 account-storage database upgrade starting correctly on the MySQL version used by LegendHUB servers.
+- Kept the account-storage database upgrade starting correctly on the MySQL version used by LegendHUB servers.
 - Kept account verification, recovery, and synced Builder records out of the public game-content copy while retaining them in private database backups.
 - Kept older exact usernames usable for sign-in and recovery while preventing a new email address from shadowing another player's username.
 - Hardened verification and password-reset transitions so copied action links, concurrent password changes, and older pending actions cannot retain unintended account access.
