@@ -6,6 +6,7 @@
 ## Table of Contents
 * [Prerequisites](#prerequisites)
 * [Installation](#installation)
+* [Functional Tests](#functional-tests)
 * [Tech Stack](#tech-stack)
   + [Website Server-Side Code](#website-server-side-code)
   + [Website Client-Side Code](#website-client-side-code)
@@ -51,6 +52,39 @@
 * Start the database first with `docker compose up -d mysql`, wait for its healthcheck, and verify the restore before starting the application with `docker compose up -d --build`.
 * The four base services are MariaDB, the website, Python maintenance/notifications, and the database backup worker. The database service is still named `mysql` for connection compatibility.
 * **Upgrading an existing MySQL installation:** follow the [MariaDB migration runbook](docs/operations/mariadb-migration.md). Version 4 uses a separate `mariadb-database` volume; starting it does not copy data from the old `database` volume. Preserve the old volume and take a full logical backup before cutover.
+
+## Functional Tests
+
+From `www`, run `npm test` for the unit/service/route suite and
+`npm run test:a11y` for the browser suite with simulated API data.
+Run these commands separately: `npm test` includes a clean client build that
+would remove assets needed by browser tests running at the same time.
+
+Run `npm run test:e2e` for Builder journeys through the real application and
+MariaDB. This requires Docker running, the Docker CLI on `PATH`, installed npm
+dependencies (`npm ci`), and Playwright Chromium (`npx playwright install chromium`).
+The command builds the client, starts the pinned `linux/amd64` MariaDB image with
+temporary storage and a random localhost port, and launches the application.
+The first run may need to download the database image.
+
+The end-to-end tests cover:
+
+* Signing in, saving a character's stats and equipment, restarting the app, and
+  reopening that character in a fresh browser session.
+* Editing from another session and checking the updated character after reload.
+* Logging out and switching accounts without exposing another player's characters.
+
+The database contains only synthetic users/items. Its minimal legacy schema
+starts before migration 8; application startup runs the real migrations from
+8 onward. Accounts are seeded as email-verified, so registration, email delivery,
+and migrations 1–7 are outside this suite's scope. Application requests are never
+mocked; the existing pinned CDN scripts are supplied locally for repeatability.
+The runner uses its own database container and ignores application `.env` files;
+it does not connect to an existing local stack, Dunwich, or production.
+
+The runner removes its container and temporary files when tests pass or fail.
+Failure screenshots, traces, and application logs are available in
+`www/test-results/e2e/`. Browser coverage currently uses Chromium.
 
 ## Tech Stack
 > The following is a brief overview of the LegendHUB technical stack.

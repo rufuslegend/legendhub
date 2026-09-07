@@ -14,6 +14,8 @@
         "test:smoke": "node --test test/smoke.test.js",
         "pretest:a11y": "npm run build:client",
         "test:a11y": "playwright test",
+        "pretest:e2e": "npm run build:client",
+        "test:e2e": "playwright test --config playwright.e2e.config.js",
         "start": "node src/app.js"
     },
     "engines": {
