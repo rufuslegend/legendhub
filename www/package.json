@@ -1,6 +1,6 @@
 {
     "name": "legendhub",
-    "version": "3.2.0",
+    "version": "4.0.0-beta",
     "description": "A resource hub for LegendMUD",
     "scripts": {
         "build:client": "vite build",

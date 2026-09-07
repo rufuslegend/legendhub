@@ -3,6 +3,10 @@
 All notable user-facing changes to LegendHUB are documented here beginning
 with version 2.6.0.
 
+## [4.0.0-beta]
+
+Development cycle opened. No player-facing changes have been released in this cycle yet.
+
 ## [3.2.0] - 2026-09-07
 
 ### Added

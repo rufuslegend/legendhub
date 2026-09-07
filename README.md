@@ -1,7 +1,7 @@
 # [LegendHUB](https://www.legendhub.org)
 > A resource hub for [LegendMUD](www.legendmud.org).
 
-[![Version v=3.2.0](https://img.shields.io/badge/version-v=3.2.0-brightgreen.svg?style=flat-square)](https://www.legendhub.org) [![License](https://img.shields.io/:license-mit-blue.svg?style=flat-square)](https://badges.mit-license.org)
+[![Version v=4.0.0-beta](https://img.shields.io/badge/version-v=4.0.0--beta-brightgreen.svg?style=flat-square)](https://www.legendhub.org) [![License](https://img.shields.io/:license-mit-blue.svg?style=flat-square)](https://badges.mit-license.org)
 
 ## Table of Contents
 * [Prerequisites](#prerequisites)
@@ -132,9 +132,14 @@ The current application version is stored in `www/package.json`. Root
 The package lock and README badge must carry the same version. Run
 `node scripts/verify-release-version.js` before committing release metadata.
 
-Release `3.2.0` is the stable MySQL checkpoint before the 4.0 MariaDB development
-cycle. Release tags preserve application code; restoring database contents also
-requires a separate private database backup. A release does not deploy production.
+During 4.0 development, add public-facing changes under `4.0.0-beta`. The MariaDB
+migration is planned for this cycle; the application still uses MySQL until that
+work is implemented. Content-sync compatibility work is deferred while sync is
+disabled. Promote to `4.0.0` only when the maintainer declares the release.
+
+Release `v3.2.0` is the stable MySQL checkpoint. Release tags preserve application
+code; restoring database contents also requires a separate private database backup.
+A release does not deploy production.
 
 ### Updating CSS
 LegendHUB uses [https://getbootstrap.com/docs/4.5/getting-started/introduction/ Bootstrap 4.x] to provide an easy-to-use UI framework.
