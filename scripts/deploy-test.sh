@@ -21,6 +21,7 @@ require_file() {
 
 validate_compose_project() {
   local line
+  local project_name=""
   local project_definitions=0
   local literal_definitions=0
   local project_pattern='^[[:space:]]*(export[[:space:]]+)?COMPOSE_PROJECT_NAME'
@@ -30,17 +31,20 @@ validate_compose_project() {
     if [[ "$line" =~ $project_pattern ]]; then
       project_definitions=$((project_definitions + 1))
     fi
-    if [[ "$line" == COMPOSE_PROJECT_NAME=legendhub-test ]]; then
-      literal_definitions=$((literal_definitions + 1))
-    fi
+    case "$line" in
+      COMPOSE_PROJECT_NAME=legendhub-test|COMPOSE_PROJECT_NAME=legendhub-test-mariadb)
+        literal_definitions=$((literal_definitions + 1))
+        project_name="${line#COMPOSE_PROJECT_NAME=}"
+        ;;
+    esac
   done < .env
 
   if [[ "$project_definitions" -ne 1 || "$literal_definitions" -ne 1 ]]; then
     printf '%s\n' \
-      'Compose project in .env must be exactly COMPOSE_PROJECT_NAME=legendhub-test.' >&2
+      'Compose project in .env must be exactly COMPOSE_PROJECT_NAME=legendhub-test or COMPOSE_PROJECT_NAME=legendhub-test-mariadb.' >&2
     exit 1
   fi
-  export COMPOSE_PROJECT_NAME=legendhub-test
+  export COMPOSE_PROJECT_NAME="$project_name"
 }
 
 deploy_remote() {
@@ -127,7 +131,7 @@ deploy_remote() {
   "${compose[@]}" config --quiet
   if [[ -z "$tracked_content_sync" ]]; then
     content_sync_containers="$(docker ps --all --quiet --no-trunc \
-      --filter label=com.docker.compose.project=legendhub-test \
+      --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" \
       --filter label=com.docker.compose.service=content-sync)"
     if [[ "$content_sync_containers" == *$'\n'* ]]; then
       printf 'Legacy rollback expected at most one legacy content-sync container.\n' >&2
@@ -142,7 +146,7 @@ deploy_remote() {
 
   if [[ -z "$tracked_equipment_importer" ]]; then
     equipment_importer_containers="$(docker ps --all --quiet --no-trunc \
-      --filter label=com.docker.compose.project=legendhub-test \
+      --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" \
       --filter label=com.docker.compose.service=equipment-importer)"
     if [[ "$equipment_importer_containers" == *$'\n'* ]]; then
       printf 'Legacy rollback expected at most one legacy equipment importer container.\n' >&2

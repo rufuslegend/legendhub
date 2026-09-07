@@ -279,6 +279,10 @@ const invalidProjectDefinitions = [
         "COMPOSE_PROJECT_NAME=legendhub-test",
         "COMPOSE_PROJECT_NAME=legendhub-test",
     ]},
+    {name: "ambiguous legacy and MariaDB project definitions", lines: [
+        "COMPOSE_PROJECT_NAME=legendhub-test",
+        "COMPOSE_PROJECT_NAME=legendhub-test-mariadb",
+    ]},
     {name: "the wrong project", lines: ["COMPOSE_PROJECT_NAME=other"]},
     {name: "a malformed project definition", lines: [
         "export COMPOSE_PROJECT_NAME = legendhub-test",
@@ -364,6 +368,43 @@ const equipmentImporterDiscovery = [
     "--filter", "label=com.docker.compose.project=legendhub-test",
     "--filter", "label=com.docker.compose.service=equipment-importer",
 ];
+
+test("a MariaDB target scopes legacy cleanup discovery to its .env project", () => {
+    writeProjectEnvironment(["COMPOSE_PROJECT_NAME=legendhub-test-mariadb"]);
+    fs.writeFileSync(path.join(remoteRoot, "docker-compose.test.yaml"),
+        "services: {}\n");
+    fs.writeFileSync(path.join(remoteRoot, "docker-compose.registry.yaml"),
+        "services: {}\n");
+
+    const result = runRemote({
+        COMPOSE_PROJECT_NAME: "legendhub-test",
+        FAKE_TRACKS_CONTENT_SYNC: "0",
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readIfPresent(projectNameLog),
+        "legendhub-test-mariadb\n".repeat(5));
+    const calls = readDockerCalls();
+    assert.deepEqual(calls, [
+        [...legacyCompose, "config", "--quiet"],
+        [
+            "ps", "--all", "--quiet", "--no-trunc",
+            "--filter",
+            "label=com.docker.compose.project=legendhub-test-mariadb",
+            "--filter", "label=com.docker.compose.service=content-sync",
+        ],
+        [
+            "ps", "--all", "--quiet", "--no-trunc",
+            "--filter",
+            "label=com.docker.compose.project=legendhub-test-mariadb",
+            "--filter", "label=com.docker.compose.service=equipment-importer",
+        ],
+        [...legacyCompose, "pull", "www", "python", "mysql-backup"],
+        [...legacyCompose, "up", "-d", "--no-build"],
+    ]);
+    assert.equal(calls.flat().includes(
+        "label=com.docker.compose.project=legendhub-test"), false);
+});
 
 test("a legacy target uses three overlays when its Git tree predates content sync", () => {
     writeLegacyRemoteFiles();
