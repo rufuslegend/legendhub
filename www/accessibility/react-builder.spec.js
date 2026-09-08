@@ -2416,6 +2416,9 @@ test("Builder picker selects schema-shaped normal, faux, wield, and rune choices
     await wieldRow.locator('th[scope="row"] button').click();
     dialog = page.getByRole("dialog", {name: "Choose Item"});
     const resultTable = dialog.locator("table.mt-3");
+    await expect(resultTable.locator("tbody tr").first().getByRole("button")).toHaveText("-");
+    await expect(dialog.getByRole("button", {name: "Previous", exact: true})).toBeDisabled();
+    await dialog.getByRole("button", {name: "Next", exact: true}).click();
     await expect(resultTable.getByRole("link", {name: "Open details for Balanced blade in a new tab", exact: true})).toHaveAttribute("href", "/items/details.html?id=61");
     await expect(dialog.getByRole("button", {name: "Offhand focus", exact: true})).toHaveCount(0);
     await expect(dialog.getByRole("button", {name: "Guard shield", exact: true})).toHaveCount(0);

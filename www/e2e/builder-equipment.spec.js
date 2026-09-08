@@ -20,13 +20,36 @@ test("item search uses database results and cancelling a search preserves equipp
     expect(await profiles(stack, account.id)).toEqual(before);
 });
 
-test("unequipping an item persists the empty slot", async ({signedIn: {page}, account, newDevice}) => {
-    await renameCharacter(page, "Empty Hands");
-    await equipLight(page, "Test brass lantern");
-    await lightRow(page).locator('th[scope="row"] button').click();
-    await saveAction(page, () => page.getByRole("dialog", {name: "Choose Item"}).getByRole("button", {name: "-", exact: true}).click());
-    const fresh = await freshLogin(newDevice, account);
-    await expect(lightRow(fresh.page).locator('th[scope="row"] button')).toHaveText("-");
+test("reopening a paged item picker restores the empty choice and unequipping persists", async ({signedIn: {page}, account, stack, newDevice}) => {
+    const extraItems = Array.from({length: 21}, (_, index) => [1000 + index, `Paging lantern ${index + 1}`, 0, 1]);
+    await stack.query("INSERT INTO Items (Id, Name, Slot, SlotMask) VALUES ?", [extraItems]);
+    try {
+        await renameCharacter(page, "Empty Hands");
+        await equipLight(page, "Test brass lantern");
+        const open = () => lightRow(page).locator('th[scope="row"] button').click();
+        const picker = page.getByRole("dialog", {name: "Choose Item"});
+        const firstChoice = picker.locator(".builder-picker-results tbody tr").first().getByRole("button");
+
+        // Closing from a later page must not hide the empty choice on reopening.
+        await open();
+        await picker.getByRole("button", {name: "Next", exact: true}).click();
+        await expect(picker.getByRole("button", {name: "2", exact: true})).toHaveAttribute("aria-current", "page");
+        await picker.getByRole("button", {name: "Close", exact: true}).click();
+        await open();
+        await expect(firstChoice).toHaveText("-");
+        await expect(picker.getByRole("button", {name: "Previous", exact: true})).toBeDisabled();
+
+        // Selecting from a later page closes the picker through a different path.
+        await picker.getByRole("button", {name: "Next", exact: true}).click();
+        await saveAction(page, () => firstChoice.click());
+        await open();
+        await expect(firstChoice).toHaveText("-");
+        await saveAction(page, () => firstChoice.click());
+        const fresh = await freshLogin(newDevice, account);
+        await expect(lightRow(fresh.page).locator('th[scope="row"] button')).toHaveText("-");
+    } finally {
+        await stack.query("DELETE FROM Items WHERE Id IN (?)", [extraItems.map(item => item[0])]);
+    }
 });
 
 test("locked equipment survives clear and reload while unlocked equipment is cleared", async ({signedIn: {page}, account, newDevice}) => {

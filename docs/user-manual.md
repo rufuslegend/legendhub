@@ -79,7 +79,7 @@ Open **Era Abilities** and choose the rank earned for each Ancient, Medieval, or
 
 The equipment table has repeated positions for slots that can hold more than one item. Select an item name or any selectable stat cell in a position to open **Choose Item**. The slot column and lock control themselves do not open the picker.
 
-The picker lists candidates eligible for that slot. Search within those candidates with the same expression language used by Items, select headings to sort, and use **Previous**, numbered pages, and **Next** when needed. The most recently selected heading is the primary sort; earlier heading selections remain as tie-breakers. Select the primary heading again to reverse its direction. Closing and reopening **Choose Item** clears this layered sort. The main Items page continues to use one sort heading at a time.
+The picker lists candidates eligible for that slot. Each time you open **Choose Item**, it starts on the first page with search and sorting cleared. Select the first **-** choice to remove the equipped item. Search within the candidates with the same expression language used by Items, select headings to sort, and use **Previous**, numbered pages, and **Next** when needed. The most recently selected heading is the primary sort; earlier heading selections remain as tie-breakers. Select the primary heading again to reverse its direction. The main Items page continues to use one sort heading at a time.
 
 Select a candidate row or name to equip it. Select the `-` choice to remove the current item. Item names also provide a new-tab details action and, when enabled, the two-second stat preview.
 

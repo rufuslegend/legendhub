@@ -556,6 +556,7 @@ export function builderReducer(state, action) {
             return {
                 ...state,
                 loadingModal: false,
+                currentPage: 1,
                 searchString: "",
                 sortStat: "",
                 sortDir: "",

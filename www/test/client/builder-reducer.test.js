@@ -791,10 +791,11 @@ test("builder reducer and selectors own item search transitions", async function
     ];
     let state = {
         ...createInitialBuilderState(), itemsBySlot: Array.from({length: 22}, () => []),
-        statInfo: [{short: "Str", var: "strength"}], itemsPerPage: 1
+        statInfo: [{short: "Str", var: "strength"}], itemsPerPage: 1, currentPage: 2
     };
     state.itemsBySlot[15] = items;
     state = builderReducer(state, {type: "search/open", item: items[0], index: 0});
+    assert.equal(state.currentPage, 1);
     state = builderReducer(state, {type: "search/text", value: "str>3"});
     state = {...state, filteredItems: items};
     state = builderReducer(state, {type: "search/sort", stat: "strength"});

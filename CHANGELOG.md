@@ -7,6 +7,7 @@ with version 2.6.0.
 
 ### Fixed
 
+- Reopening the Builder's item picker now starts on the first page, restoring the empty choice used to remove equipment after browsing later pages.
 - Tabbing through the Builder's six base stats now moves directly between inputs, skipping the stat quest information icons.
 - Fixed occasional Builder sync failures when character changes and account preferences were saved at the same time.
 
