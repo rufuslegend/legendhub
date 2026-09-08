@@ -425,12 +425,15 @@ export function builderReducer(state, action) {
             const listIndex = Math.min(state.selectedListIndex, allLists.length - 1);
             return selectVariant(state, allLists, listIndex, 0);
         }
-        case "variant/add": {
+        case "variant/clone": {
             const allLists = state.allLists.slice();
-            const character = {...allLists[action.listIndex], variants: allLists[action.listIndex].variants.slice()};
-            character.variants.push(cloneVariant(action.variant));
-            allLists[action.listIndex] = character;
-            return selectVariant(state, allLists, action.listIndex, character.variants.length - 1);
+            const character = {...allLists[state.selectedListIndex], variants: allLists[state.selectedListIndex].variants.slice()};
+            const names = new Set(character.variants.map(variant => variant.name));
+            let number = 1;
+            while (names.has(`Variant ${number}`)) number++;
+            character.variants.push({...cloneVariant(state.selectedList), name: `Variant ${number}`});
+            allLists[state.selectedListIndex] = character;
+            return selectVariant(state, allLists, state.selectedListIndex, character.variants.length - 1);
         }
         case "variant/rename":
             return cloneSelected(state, selectedList => {

@@ -8,7 +8,7 @@ test("exported characters and variants import into another account and survive a
     await renameCharacter(page, "Portable Hero");
     await saveAction(page, () => page.locator("#strInput").fill("40"));
     await equipLight(page, "Test brass lantern");
-    await namedDialog(page, "Add Variant", "Travel");
+    await saveAction(page, () => button(page, "Add Variant").click());
     await saveAction(page, () => page.locator("#strInput").fill("45"));
     await equipLight(page, "Test silver lantern");
     const payload = await exportLists(page);
@@ -19,9 +19,9 @@ test("exported characters and variants import into another account and survive a
     await importLists(destination.page, payload);
     const fresh = await freshLogin(newDevice, recipient);
     await fresh.page.getByLabel("Character", {exact: true}).selectOption({label: "Portable Hero"});
-    await fresh.page.getByLabel("Variant", {exact: true}).selectOption({label: "Original Variant"});
+    await fresh.page.getByLabel("Variant", {exact: true}).selectOption({label: "Original"});
     await expectCharacter(fresh.page, {name: "Portable Hero", strength: "40", item: "Test brass lantern"});
-    await fresh.page.getByLabel("Variant", {exact: true}).selectOption({label: "Travel Variant"});
+    await fresh.page.getByLabel("Variant", {exact: true}).selectOption({label: "Variant 1"});
     await expectCharacter(fresh.page, {name: "Portable Hero", strength: "45", item: "Test silver lantern"});
     expect(await profiles(stack, account.id)).toEqual(source);
     const imported = (await profiles(stack, recipient.id)).filter(row => row.Name === "Portable Hero");

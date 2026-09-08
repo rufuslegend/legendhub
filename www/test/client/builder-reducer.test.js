@@ -223,9 +223,7 @@ test("account character lifecycle retains saved identity and marks new profiles 
         accountState: {storageGeneration: 2, usedBytes: 32, quotaBytes: 10485760}
     });
 
-    state = builderReducer(state, {
-        type: "variant/add", listIndex: 0, variant: createDefaultVariant("Caster")
-    });
+    state = builderReducer(state, {type: "variant/clone"});
     state = builderReducer(state, {type: "variant/rename", name: "Mage"});
     state = builderReducer(state, {type: "variant/make-primary"});
     state = builderReducer(state, {type: "stat/change", section: "baseStats", stat: "strength", value: 44});
@@ -430,9 +428,8 @@ test("account save response merges metadata without reverting newer local edits"
     });
 
     state = builderReducer(state, {type: "character/rename", name: "Newest Name"});
-    state = builderReducer(state, {
-        type: "variant/add", listIndex: 0, variant: createDefaultVariant("Newest Variant")
-    });
+    state = builderReducer(state, {type: "variant/clone"});
+    state = builderReducer(state, {type: "variant/rename", name: "Newest Variant"});
     state = builderReducer(state, {
         type: "stat/change", section: "baseStats", stat: "strength", value: 44
     });
@@ -663,12 +660,11 @@ test("builder reducer owns character and variant lifecycle transitions", async f
     assert.deepEqual(state.allLists.map(list => list.name), ["Alpha", "Zulu"]);
     assert.deepEqual([state.selectedListIndex, state.selectedListVariantIndex], [0, 0]);
 
-    const copied = {...state.selectedList, name: "Original Copy"};
-    state = builderReducer(state, {type: "variant/add", listIndex: 0, variant: copied});
-    assert.equal(state.selectedList.name, "Original Copy");
+    state = builderReducer(state, {type: "variant/clone"});
+    assert.equal(state.selectedList.name, "Variant 1");
     assert.equal(state.selectedListVariantIndex, 1);
     state = builderReducer(state, {type: "variant/make-primary"});
-    assert.equal(state.allLists[0].variants[0].name, "Original Copy");
+    assert.equal(state.allLists[0].variants[0].name, "Variant 1");
     assert.equal(state.selectedListVariantIndex, 0);
 
     state = builderReducer(state, {type: "character/rename", name: "Beta"});
@@ -681,6 +677,53 @@ test("builder reducer owns character and variant lifecycle transitions", async f
     state = builderReducer(state, {type: "character/delete", fallbackVariant: createDefaultVariant("Original")});
     assert.equal(state.allLists[0].name, "Zulu");
     assert.equal(state.selectedList, state.allLists[0].variants[0]);
+});
+
+test("cloning repeatedly selects numbered variants with independent build data", async function() {
+    const {builderReducer, createDefaultVariant, createInitialBuilderState} = await loadReducer();
+    const original = createDefaultVariant("Original");
+    original.baseStats.strength = 40;
+    original.items[0] = {...original.items[0], id: 99, locked: true};
+    const before = {
+        ...createInitialBuilderState(),
+        allLists: [{name: "Hero", variants: [original]}],
+        selectedList: original
+    };
+    let state = before;
+    for (let number = 1; number <= 3; number++) {
+        const source = state.selectedList;
+        state = builderReducer(state, {type: "variant/clone"});
+        assert.equal(state.selectedListVariantIndex, number);
+        assert.equal(state.selectedList, state.allLists[0].variants[number]);
+        assert.deepEqual(state.selectedList, {...source, name: `Variant ${number}`});
+        for (const field of ["baseStats", "ksmStats", "eraAbilities", "runeCharms", "items"])
+            assert.notEqual(state.selectedList[field], source[field]);
+        assert.notEqual(state.selectedList.items[0], source.items[0]);
+        state = builderReducer(state, {type: "stat/change", section: "baseStats", stat: "strength", value: 40 + number});
+    }
+    assert.deepEqual(state.allLists[0].variants.map(variant => variant.name), ["Original", "Variant 1", "Variant 2", "Variant 3"]);
+    assert.deepEqual(state.allLists[0].variants.map(variant => variant.baseStats.strength), [40, 41, 42, 43]);
+    assert.deepEqual(before.allLists[0].variants, [original]);
+});
+
+test("numbered copies skip occupied names within the selected character", async function() {
+    const {builderReducer, createDefaultVariant, createInitialBuilderState} = await loadReducer();
+    const source = createDefaultVariant("Custom Build");
+    let state = {
+        ...createInitialBuilderState(),
+        allLists: [
+            {name: "Other", variants: [createDefaultVariant("Variant 2")]},
+            {name: "Hero", variants: [source, createDefaultVariant("Variant 1"), createDefaultVariant("Variant 3")]}
+        ],
+        selectedListIndex: 1,
+        selectedList: source
+    };
+    state = builderReducer(state, {type: "variant/clone"});
+    assert.equal(state.selectedList.name, "Variant 2");
+    state = builderReducer(state, {type: "variant/clone"});
+    assert.equal(state.selectedList.name, "Variant 4");
+    assert.equal(state.selectedListIndex, 1);
+    assert.deepEqual(state.allLists[0].variants.map(variant => variant.name), ["Variant 2"]);
 });
 
 // Catches imports that overwrite the wrong variant, duplicate an existing variant, or mutate the prior collection.

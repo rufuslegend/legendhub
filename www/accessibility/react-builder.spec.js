@@ -1785,7 +1785,7 @@ test("Builder preserves persisted characters, variants, totals, panels, and expo
     await expect(page.getByText("Saved in this browser", {exact: true})).toBeVisible();
     await expect(page.getByLabel("Character", {exact: true})).toHaveValue("0");
     await expect(page.getByLabel("Variant", {exact: true})).toHaveValue("0");
-    await expect(page.getByLabel("Variant", {exact: true})).toContainText("Tank Variant");
+    await expect(page.getByLabel("Variant", {exact: true})).toContainText("Tank");
     await page.getByLabel("Variant", {exact: true}).selectOption("1");
     await expect(page.locator("#strInput")).toHaveValue("30");
 
@@ -1840,8 +1840,8 @@ test("Builder character and variant actions use their legacy icons", async funct
 });
 
 // Catches the below-244 stat-quest bonus and its original per-stat help text
-// disappearing from the React Stats card.
-test("Builder shows stat-quest bonuses with hover and focus help", async function({page}) {
+// disappearing, or help text interrupting keyboard entry across the six stats.
+test("Builder keeps stat-quest hover help without interrupting stat input tab order", async function({page}) {
     await page.goto(`${baseUrl}/builder/`);
     const stats = page.locator('[aria-labelledby="builder-stats-heading"]');
     const bonuses = stats.locator(".builder-stat-quest-bonus");
@@ -1857,12 +1857,27 @@ test("Builder shows stat-quest bonuses with hover and focus help", async functio
         "...drank the nectar of the Black Lotus and lived to tell the tale!",
         "...has learned of the art and spirit of music."
     ]);
-    expect(await help.evaluateAll(elements => elements.map(element => element.tabIndex))).toEqual([0, 0, 0, 0, 0, 0]);
+    const inputs = ["str", "min", "dex", "con", "per", "spi"].map(stat => page.locator(`#${stat}Input`));
+    await inputs[0].focus();
+    await expect(page.locator(".tooltip.show")).toHaveText(await help.first().getAttribute("aria-label"));
+    for (const input of inputs.slice(1)) {
+        await page.keyboard.press("Tab");
+        await expect(input).toBeFocused();
+    }
+    for (const input of inputs.slice(0, -1).reverse()) {
+        await page.keyboard.press("Shift+Tab");
+        await expect(input).toBeFocused();
+    }
+    for (let index = 0; index < inputs.length; index++)
+        await expect(inputs[index]).toHaveAccessibleDescription(await help.nth(index).getAttribute("aria-label"));
+    await page.keyboard.press("Escape");
+    await expect(inputs[0]).toBeFocused();
+    await expect(page.locator(".tooltip.show")).toHaveCount(0);
     await help.first().hover();
     await expect(page.locator(".tooltip.show")).toContainText("...has been rewarded for aiding a goddess!");
     await stats.getByRole("heading", {name: "Stats", exact: true}).hover();
     await expect(page.locator(".tooltip.show")).toHaveCount(0);
-    await help.nth(1).focus();
+    await help.nth(1).hover();
     await expect(page.locator(".tooltip.show")).toContainText("...is smarter than the average Cyclops!");
     await page.locator("#strInput").fill("146");
     await expect(bonuses).toHaveCount(0);
@@ -2282,9 +2297,9 @@ test("Builder hydrates persisted and imported equipment without changing its enc
     await expect(page.getByLabel("Character", {exact: true})).toHaveValue("1");
     await expect.poll(() => page.evaluate(() => localStorage.getItem("cln"))).toBe(encodedLists);
     await page.getByLabel("Character", {exact: true}).selectOption({label: "Hero"});
-    await page.getByLabel("Variant", {exact: true}).selectOption({label: "Caster Variant"});
+    await page.getByLabel("Variant", {exact: true}).selectOption({label: "Caster"});
     await expect(rows.nth(4)).toContainText("Faux moonlight");
-    await page.getByLabel("Variant", {exact: true}).selectOption({label: "Tank Variant"});
+    await page.getByLabel("Variant", {exact: true}).selectOption({label: "Tank"});
     await expect(rows.nth(4)).toContainText("Runecharm (Uruz/Eihwaz/Gebo)");
     await expect(rows.nth(20)).toContainText("DELETED");
 
@@ -2502,8 +2517,8 @@ test("Builder models five hand rows with one three-hand pool", async function({c
 });
 
 // Catches list dialogs that scope duplicate checks to the wrong entity type,
-// lose multi-character typing, or omit add/rename/delete variant behavior.
-test("Builder character and variant dialogs validate, duplicate, rename, and delete", async function({page}) {
+// lose multi-character typing, or omit immediate copy/rename/delete variant behavior.
+test("Builder characters validate names and variants copy immediately, rename, and delete", async function({page}) {
     await page.goto(`${baseUrl}/builder/`);
     await page.getByRole("button", {name: "Add Character", exact: true}).click();
     let dialog = page.getByRole("dialog", {name: "Add Character"});
@@ -2526,14 +2541,20 @@ test("Builder character and variant dialogs validate, duplicate, rename, and del
     await expect(page.getByLabel("Character", {exact: true})).toContainText("Bravo Team");
 
     await page.getByRole("button", {name: "Add Variant", exact: true}).click();
-    dialog = page.getByRole("dialog", {name: "Add Variant"});
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByLabel("Variant", {exact: true}).locator("option:checked")).toHaveText("Variant 1");
+    await page.getByRole("button", {name: "Edit Variant", exact: true}).click();
+    dialog = page.getByRole("dialog", {name: "Edit Variant"});
     await dialog.getByLabel("Name").fill("Bravo Team");
-    await dialog.getByRole("button", {name: "Add", exact: true}).click();
-    await expect(page.getByLabel("Variant", {exact: true})).toContainText("Bravo Team Variant");
-    await page.getByRole("button", {name: "Add Variant", exact: true}).click();
-    dialog = page.getByRole("dialog", {name: "Add Variant"});
-    await dialog.getByLabel("Name").fill("Bravo Team");
-    await dialog.getByRole("button", {name: "Add", exact: true}).click();
+    await dialog.getByRole("button", {name: "Save", exact: true}).click();
+    await expect(page.getByLabel("Variant", {exact: true})).toContainText("Bravo Team");
+    await page.getByRole("button", {name: "Edit Variant", exact: true}).click();
+    dialog = page.getByRole("dialog", {name: "Edit Variant"});
+    await dialog.getByLabel("Name").fill("Bad!");
+    await dialog.getByRole("button", {name: "Save", exact: true}).click();
+    await expect(dialog.getByRole("alert")).toHaveText("Invalid characters.");
+    await dialog.getByLabel("Name").fill("Original");
+    await dialog.getByRole("button", {name: "Save", exact: true}).click();
     const variantError = dialog.getByRole("alert");
     await expect(variantError).toHaveText("Duplicate entry.");
     await expect(dialog.getByLabel("Name")).toHaveAttribute("aria-invalid", "true");
@@ -2543,10 +2564,10 @@ test("Builder character and variant dialogs validate, duplicate, rename, and del
     dialog = page.getByRole("dialog", {name: "Edit Variant"});
     await dialog.getByLabel("Name").fill("Field Build");
     await dialog.getByRole("button", {name: "Save", exact: true}).click();
-    await expect(page.getByLabel("Variant", {exact: true})).toContainText("Field Build Variant");
+    await expect(page.getByLabel("Variant", {exact: true})).toContainText("Field Build");
     await page.getByRole("button", {name: "Delete Variant", exact: true}).click();
     await page.getByRole("dialog", {name: "Are you sure?"}).getByRole("button", {name: "Yes", exact: true}).click();
-    await expect(page.getByLabel("Variant", {exact: true})).toContainText("Original Variant");
+    await expect(page.getByLabel("Variant", {exact: true})).toContainText("Original");
     await page.getByRole("button", {name: "Delete Character", exact: true}).click();
     await page.getByRole("dialog", {name: "Are you sure?"}).getByRole("button", {name: "Yes", exact: true}).click();
     await expect(page.getByLabel("Character", {exact: true})).not.toContainText("Bravo Team");
@@ -2579,7 +2600,7 @@ test("Builder import handles empty, invalid, duplicate, overwrite, and success p
     dialog = page.getByRole("dialog", {name: "Import Lists"});
     await dialog.getByLabel("Builder list import string").fill(newHeroVariantImport);
     await dialog.getByRole("button", {name: "Import", exact: true}).click();
-    await page.getByLabel("Variant", {exact: true}).selectOption({label: "Newcomer Variant"});
+    await page.getByLabel("Variant", {exact: true}).selectOption({label: "Newcomer"});
     await expect(equipmentTable(page).locator("tbody tr").nth(1)).toContainText("Faux moonlight");
     await page.getByRole("button", {name: "Import", exact: true}).click();
     dialog = page.getByRole("dialog", {name: "Import Lists"});

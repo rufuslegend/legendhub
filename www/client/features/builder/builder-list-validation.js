@@ -12,7 +12,7 @@ export function validateBuilderListName({
         return {name, error: "Limit reached."};
 
     const characterDialog = mode === "add-character" || mode === "edit-character";
-    const variantDialog = mode === "add-variant" || mode === "edit-variant";
+    const variantDialog = mode === "edit-variant";
     const duplicateCharacter = characterDialog && allLists.some((list, index) =>
         list.name === name && (mode !== "edit-character" || index !== selectedListIndex));
     const variants = allLists[selectedListIndex]?.variants || [];

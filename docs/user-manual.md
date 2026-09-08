@@ -63,13 +63,13 @@ Signing in does not silently merge browser-local profiles into the account. When
 
 ### Manage characters and variants
 
-Use the **Character** selector and its actions to add, select, rename, or delete a character. The **Variant** selector manages alternative builds for that character. **Add Variant** clones the currently selected build, including its choices and equipment; you then name the copy. You can select, rename, or delete variants and use **Set Variant as Primary** to move the selected variant into the primary position.
+Use the **Character** selector and its actions to add, select, rename, or delete a character. The **Variant** selector manages alternative builds for that character and displays each variant's name. **Add Variant** immediately clones and selects the currently selected build, including its choices and equipment. Copies are named **Variant 1**, **Variant 2**, and so on, using the first available number for that character. Use **Edit Variant** whenever you want to give a copy a different name. You can select or delete variants and use **Set Variant as Primary** to move the selected variant into the primary position.
 
 Deletion asks for confirmation. Keep an export before making broad changes you may want to reverse.
 
 ### Enter base stats, quest choices, and era abilities
 
-Enter the six base attributes: Strength, Mind, Dexterity, Constitution, Perception, and Spirit. A valid base total is 198 or 244; the Builder displays a red message for another total.
+Enter the six base attributes: Strength, Mind, Dexterity, Constitution, Perception, and Spirit. Tab and Shift+Tab move directly between these inputs without stopping at the stat quest information icons. Hover over an icon or focus its stat input to read the quest hint; press Escape while in the input to dismiss it. Screen readers can read the hint as part of the input's description. A valid base total is 198 or 244; the Builder displays a red message for another total.
 
 Open **KSM Swap/Quest Mods** for KSM movement and quest choices. KSM changes must be zero-sum across the six attributes. The total absolute movement may be at most six points, which represents no more than three points moved from some attributes into others. Quest modifier choices are available for a base total below 244. Enter permanent resource bonuses in **Quest HP**, **Quest Mana**, and **Quest Mv**.
 

@@ -7,10 +7,12 @@ with version 2.6.0.
 
 ### Fixed
 
+- Tabbing through the Builder's six base stats now moves directly between inputs, skipping the stat quest information icons.
 - Fixed occasional Builder sync failures when character changes and account preferences were saved at the same time.
 
 ### Changed
 
+- **Add Variant** now immediately copies the selected Builder build as **Variant 1**, **Variant 2**, and so on. Rename copies whenever you like with **Edit Variant**.
 - Prepared the site for a newer database engine, including account and Builder storage checks and private backups. This beta is in development; server upgrades are still pending.
 
 ## [3.2.0] - 2026-09-07

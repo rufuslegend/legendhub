@@ -9,10 +9,11 @@ test("Builder list validation scopes duplicates and enforces the character limit
     const input = {allLists, selectedListIndex: 0, selectedVariantIndex: 0};
 
     assert.deepEqual(validateBuilderListName({...input, mode: "add-character", name: "Tank"}), {name: "Tank", error: ""});
-    assert.deepEqual(validateBuilderListName({...input, mode: "add-variant", name: "Hero"}), {name: "Hero", error: ""});
+    assert.deepEqual(validateBuilderListName({...input, mode: "edit-variant", name: "Hero"}), {name: "Hero", error: ""});
     assert.equal(validateBuilderListName({...input, mode: "add-character", name: "Hero"}).error, "Duplicate entry.");
-    assert.equal(validateBuilderListName({...input, mode: "add-variant", name: "Tank"}).error, "Duplicate entry.");
-    assert.equal(validateBuilderListName({...input, mode: "add-variant", name: "Bad!"}).error, "Invalid characters.");
+    assert.deepEqual(validateBuilderListName({...input, mode: "edit-variant", name: "Tank"}), {name: "Tank", error: ""});
+    assert.equal(validateBuilderListName({...input, mode: "edit-variant", name: "Caster"}).error, "Duplicate entry.");
+    assert.equal(validateBuilderListName({...input, mode: "edit-variant", name: "Bad!"}).error, "Invalid characters.");
     assert.equal(validateBuilderListName({
         ...input,
         mode: "add-character",

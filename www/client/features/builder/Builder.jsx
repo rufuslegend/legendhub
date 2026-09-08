@@ -631,13 +631,12 @@ export default function Builder({
             dispatch({type: "character/delete", fallbackVariant: createDefaultVariant("Original")});
         }
         else if (state.currentDialog === "delete-variant") dispatch({type: "variant/delete", fallbackVariant: createDefaultVariant("Original")});
-        else if (["add-character", "edit-character", "add-variant", "edit-variant"].includes(state.currentDialog)) {
+        else if (["add-character", "edit-character", "edit-variant"].includes(state.currentDialog)) {
             const validation = validateBuilderListName({name: value, mode: state.currentDialog, allLists: state.allLists, selectedListIndex: state.selectedListIndex, selectedVariantIndex: state.selectedListVariantIndex});
             const name = validation.name;
             const character = state.allLists[state.selectedListIndex];
             if (validation.error) return dispatch({type: "ui/patch", value: {dialogError: validation.error}});
             if (state.currentDialog === "add-character") dispatch({type: "character/add", name, variant: createDefaultVariant("Original")});
-            if (state.currentDialog === "add-variant") dispatch({type: "variant/add", listIndex: state.selectedListIndex, variant: {...selected, name}});
             if (state.currentDialog === "edit-character") {
                 const oldName = character.name;
                 if (state.storageMode === "anonymous") {

@@ -77,30 +77,45 @@ test("deleting the last character leaves an unsaved placeholder without recreati
     expect(await profiles(stack, account.id)).toEqual([]);
 });
 
-test("cloning and renaming a variant preserves independent stats and equipment", async ({signedIn: {page}, account, newDevice}) => {
+test("numbered variant copies need no dialog and preserve independent builds after renaming", async ({signedIn: {page}, account, newDevice}) => {
     await renameCharacter(page, "Variant Hero");
     await saveAction(page, () => page.locator("#strInput").fill("40"));
     await equipLight(page, "Test brass lantern");
-    await namedDialog(page, "Add Variant", "Combat");
+    await saveAction(page, () => button(page, "Add Variant").click());
+    const variants = page.getByLabel("Variant", {exact: true});
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(variants.locator("option:checked")).toHaveText("Variant 1");
     await expect(page.locator("#strInput")).toHaveValue("40");
     await saveAction(page, () => page.locator("#strInput").fill("50"));
     await equipLight(page, "Test silver lantern");
+    for (const name of ["Variant 2", "Variant 3"]) {
+        await saveAction(page, () => button(page, "Add Variant").click());
+        await expect(page.getByRole("dialog")).toHaveCount(0);
+        await expect(variants.locator("option:checked")).toHaveText(name);
+        await expectCharacter(page, {name: "Variant Hero", strength: "50", item: "Test silver lantern"});
+    }
     await namedDialog(page, "Edit Variant", "Raiding");
+    await saveAction(page, () => page.locator("#strInput").fill("55"));
 
     const fresh = await freshLogin(newDevice, account);
-    await fresh.page.getByLabel("Variant", {exact: true}).selectOption({label: "Original Variant"});
+    await expect(fresh.page.getByLabel("Variant", {exact: true}).locator("option")).toHaveText(["Original", "Variant 1", "Variant 2", "Raiding"]);
+    await fresh.page.getByLabel("Variant", {exact: true}).selectOption({label: "Original"});
     await expectCharacter(fresh.page, {name: "Variant Hero", strength: "40", item: "Test brass lantern"});
-    await fresh.page.getByLabel("Variant", {exact: true}).selectOption({label: "Raiding Variant"});
-    await expectCharacter(fresh.page, {name: "Variant Hero", strength: "50", item: "Test silver lantern"});
+    for (const name of ["Variant 1", "Variant 2"]) {
+        await fresh.page.getByLabel("Variant", {exact: true}).selectOption({label: name});
+        await expectCharacter(fresh.page, {name: "Variant Hero", strength: "50", item: "Test silver lantern"});
+    }
+    await fresh.page.getByLabel("Variant", {exact: true}).selectOption({label: "Raiding"});
+    await expectCharacter(fresh.page, {name: "Variant Hero", strength: "55", item: "Test silver lantern"});
 });
 
 test("setting a variant as primary persists its order without losing the original", async ({signedIn: {page}, account, newDevice}) => {
     await renameCharacter(page, "Primary Hero");
-    await namedDialog(page, "Add Variant", "Travel");
+    await saveAction(page, () => button(page, "Add Variant").click());
     await saveAction(page, () => page.locator("#strInput").fill("51"));
     await saveAction(page, () => button(page, "Set Variant as Primary").click());
     const fresh = await freshLogin(newDevice, account);
-    await expect(fresh.page.getByLabel("Variant", {exact: true}).locator("option")).toHaveText(["Travel Variant", "Original Variant"]);
+    await expect(fresh.page.getByLabel("Variant", {exact: true}).locator("option")).toHaveText(["Variant 1", "Original"]);
     await fresh.page.getByLabel("Variant", {exact: true}).selectOption("0");
     await expect(fresh.page.locator("#strInput")).toHaveValue("51");
 });
@@ -108,11 +123,11 @@ test("setting a variant as primary persists its order without losing the origina
 test("deleting a variant preserves its character and remaining variant", async ({signedIn: {page}, account, stack, newDevice}) => {
     await renameCharacter(page, "Surviving Hero");
     await saveAction(page, () => page.locator("#strInput").fill("43"));
-    await namedDialog(page, "Add Variant", "Disposable");
+    await saveAction(page, () => button(page, "Add Variant").click());
     await saveAction(page, () => page.locator("#strInput").fill("59"));
     await confirm(page, "Delete Variant");
     const fresh = await freshLogin(newDevice, account);
-    await expect(fresh.page.getByLabel("Variant", {exact: true}).locator("option")).toHaveText(["Original Variant"]);
+    await expect(fresh.page.getByLabel("Variant", {exact: true}).locator("option")).toHaveText(["Original"]);
     await expect(fresh.page.locator("#strInput")).toHaveValue("43");
     expect(await profiles(stack, account.id)).toHaveLength(1);
 });
