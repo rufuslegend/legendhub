@@ -238,10 +238,12 @@ The Builder models a level-50 character. It first caps each final primary attrib
 | HPR, MAR, or MVR normal-equipment allowance | `20 - high-stat contribution` for its governing Constitution, Mind, or Dexterity |
 | High-stat regeneration contribution | `trunc((stat - 75) / 5)` when the governing stat is above 79; otherwise `0` |
 | Mana Reduction overall cap | `50` |
-| Battle Training natural Mitigation | `trunc(max(Constitution - 75, 0) / 5)` |
-| Mitigation overall cap | `trunc(max(min(Constitution, 70) - 30, 0) / 2)`, plus `10` with Battle Training |
+| Battle Training natural Mitigation | The larger of `trunc(max(Strength - 50, 0) / 5)` and `trunc(max(Constitution - 75, 0) / 5)`; `0` without Battle Training |
+| Mitigation equipment-and-training cap | `min(20, trunc((Constitution - 30) / 2))`, plus `10` with Battle Training, then a minimum of `0` |
 
 The Builder warns when AC is below `-250`; it does not currently clamp AC to `-250`. A capped Total such as `78 (44)` shows the final value first and the capped normal-equipment contribution in parentheses.
+
+When the **Mit** column is visible, both Total rows show mitigation with **Cap:** underneath it. Normal equipment and natural Battle Training mitigation share this cap; bonuses from affects are added afterward, so the final value can exceed the displayed cap. For example, `23` from equipment plus `11` from Battle Training is capped at `30`, then `5` from affects gives `35`. The cap warning reports equipment plus training before the cap, excluding affects. The Builder does not currently model Chant/axiom or Rage penalties to this cap.
 
 #### Natural and resource values
 

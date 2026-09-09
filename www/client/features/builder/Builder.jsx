@@ -125,7 +125,10 @@ export default function Builder({
     const selectedAccountPreferenceColumnsChanged = selectedAccountPreferenceStatInfo !== null &&
         selectedAccountPreferenceStatInfo.some((stat, index) =>
             Boolean(stat.showColumn) !== Boolean(state.statInfo[index]?.showColumn));
-    const totals = useMemo(() => Object.fromEntries(state.statInfo.map(stat => [stat.var, selected && (stat.type === "int" || stat.var === "alignRestriction") ? selectStatTotal({selectedList: selected}, stat.var) : ""])), [state.statInfo, selected]);
+    const totals = useMemo(() => ({
+        ...Object.fromEntries(state.statInfo.map(stat => [stat.var, selected && (stat.type === "int" || stat.var === "alignRestriction") ? selectStatTotal({selectedList: selected}, stat.var) : ""])),
+        mitigationCap: selected ? selectStatTotal({selectedList: selected}, "mitigationCap") : ""
+    }), [state.statInfo, selected]);
     const statRestrictions = useMemo(() => Object.fromEntries(state.statInfo.map(stat => [stat.var, selected && (stat.type === "int" || stat.var === "alignRestriction") ? selectStatRestrictions({selectedList: selected}, stat.var) : []])), [state.statInfo, selected]);
     const restrictions = useMemo(() => selected ? deriveItemRestrictions({items: selected.items, strength: totals.strength || 0}) : [], [selected, totals.strength]);
 

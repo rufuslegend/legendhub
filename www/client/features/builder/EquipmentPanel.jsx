@@ -56,6 +56,8 @@ function displayValue(item, stat, hideZeros = false) {
 function statRestrictionText(restrictions = []) {
   return restrictions
     .map((restriction) => {
+      if (restriction.restriction === "fromEquipmentAndNatural")
+        return `The equipment and Battle Training limit for mitigation is ${restriction.limit}. You currently have ${restriction.amount} before the cap. Affect bonuses are added after this cap.`;
       if (
         ["fromItems", "fromTotalMin", "fromTotalMax"].includes(
           restriction.restriction,
@@ -170,6 +172,11 @@ function EquipmentTotalRow({
             warning={warning}
           >
             {equipmentTableValue(totals[stat.var], stat, hideZeros)}
+            {stat.var === "mitigation" && (
+              <small className="d-block" title="Equipment and Battle Training cap; affect bonuses are added afterward.">
+                Cap: {totals.mitigationCap}
+              </small>
+            )}
           </WarningCell>
         );
       })}

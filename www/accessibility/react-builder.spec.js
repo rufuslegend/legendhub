@@ -2666,6 +2666,53 @@ test("Builder renders literal totals, modifiers, abilities, and associated warni
     expect(await totalFor(page, "Dam")).toContain("34 (0)");
 });
 
+test("Builder shows mitigation and its cap separately and recalculates both with Constitution", async function({page}) {
+    const {createDefaultVariant} = require("../client/features/builder/builder-reducer.js");
+    const {encodeBuilderLists} = require("../shared/builder-codec.mjs");
+    const variant = createDefaultVariant("Training");
+    Object.assign(variant.baseStats, {strength: 90, constitution: 73, mind: 81});
+    variant.items[0].id = 41;
+    variant.items[28].id = 1144;
+    variant.items[32].id = 1772;
+    variant.items[34].id = 1675;
+    const payload = encodeBuilderLists([{name: "Mitigation Test", variants: [variant]}]);
+    await page.addInitScript(value => {
+        localStorage.setItem("cln", value);
+        localStorage.setItem("scl", "Mitigation Test!Training");
+    }, payload);
+    const items = [
+        {...hydratedItems[0], strength: 16, strengthCap: 6, mitigation: 23},
+        {id: 1144, name: "Battle Training Lvl. 1", slot: 21, slots: [21]},
+        {id: 1772, name: "Bastion", slot: 21, slots: [21], mitigation: 2},
+        {id: 1675, name: "Convergence", slot: 21, slots: [21], mitigation: 3}
+    ];
+    await page.route(`${baseUrl}/api`, async route => {
+        const {query} = route.request().postDataJSON();
+        if (query.includes("getItemStatInfo"))
+            return route.fulfill({json: {data: {
+                getItemStatInfo: [...itemStatInfo, {display: "Mitigation", short: "Mit", var: "mitigation", type: "int", showColumnDefault: true}],
+                getItemFragment: itemFragment.replace("weaponStat }", "weaponStat mitigation }")
+            }}});
+        if (query.includes("getItemsInIds"))
+            return route.fulfill({json: {data: {getItemsInIds: items}}});
+        return route.fallback();
+    });
+    await page.goto(`${baseUrl}/builder/`);
+    expect(await totalFor(page, "Mit")).toMatch(/^35\s+Cap: 30$/);
+    const mitigationTotals = equipmentTable(page).locator("tr").filter({has: page.getByRole("rowheader", {name: "Total", exact: true})}).locator("td").filter({hasText: "Cap:"});
+    await expect(mitigationTotals).toHaveCount(2);
+    await expect(mitigationTotals).toHaveText(["35Cap: 30", "35Cap: 30"]);
+    await mitigationTotals.first().focus();
+    await expect(page.getByRole("tooltip")).toContainText("equipment and Battle Training");
+    await expect(page.getByRole("tooltip")).toContainText("34");
+    await expect(page.getByRole("tooltip")).toContainText("Affect bonuses are added after this cap.");
+
+    // Raise another base stat first to avoid crossing into the +3 stat-quest build mode.
+    await page.locator("#minInput").fill("94");
+    await page.locator("#conInput").fill("60");
+    await expect(mitigationTotals).toHaveText(["30Cap: 25", "30Cap: 25"]);
+});
+
 // Catches export controls copying the wrong scope or sharing an ambiguous name.
 test("Builder exports and copies all three exact values", async function({page}) {
     await page.goto(`${baseUrl}/builder/`);

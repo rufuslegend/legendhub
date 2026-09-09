@@ -142,7 +142,7 @@
         hit: ["dexterity"],
         dam: ["strength"],
         meleedamcap: ["strength"],
-        mitigation: ["constitution"],
+        mitigation: ["strength", "constitution"],
         ac: ["dexterity"],
         hpr: ["constitution"],
         mar: ["mind"],
@@ -205,6 +205,13 @@
 
     function calculateDamrollEquipmentCap(strength) {
         return 30 + Math.max(strength - 90, 0);
+    }
+
+    function calculateMitigationCap(constitution, items) {
+        // get_melee_mitigation_cap(): floor at zero after adding Battle Training.
+        // Chant/axiom and Rage penalties need character state the Builder does not model.
+        return Math.max(0, Math.min(20, Math.trunc((constitution - 30) / 2)) +
+            (hasBattleTraining(items) ? 10 : 0));
     }
 
     /*
@@ -386,8 +393,10 @@
                 return damageCap;
             }
             case "mitigation":
-                return hasBattleTraining(items) ?
-                    parseInt(Math.max(stats.constitution - 75, 0) / 5) : 0;
+                return hasBattleTraining(items) ? Math.max(
+                    Math.trunc(Math.max((stats.constitution || 0) - 75, 0) / 5),
+                    Math.trunc(Math.max((stats.strength || 0) - 50, 0) / 5)
+                ) : 0;
             case "ac":
                 /*
                  * The Builder models a standing, neutral-wary, non-vehicle character.
@@ -570,6 +579,13 @@
             if (totals.has(name))
                 return totals.get(name);
 
+            if (name === "mitigationCap") {
+                const cap = calculateMitigationCap(calculate("constitution").numericValue, items);
+                const result = {value: cap, numericValue: cap, restrictions: []};
+                totals.set(name, result);
+                return result;
+            }
+
             const restrictions = [];
             let equipment = 0;
             for (let index = 0; index < Math.min(24, items.length); ++index)
@@ -613,12 +629,22 @@
             dependencyStats.quest_mana = baseStats.quest_mana;
             dependencyStats.quest_move = baseStats.quest_move;
 
+            let equipmentAndNatural = equipment + calculateNaturalStatBonus(name, dependencyStats, items);
+            if (name === "mitigation") {
+                // get_melee_mitigation(): equipment and training share the cap;
+                // affects are added afterward and may take the total above it.
+                const cap = calculate("mitigationCap").numericValue;
+                if (equipmentAndNatural > cap) {
+                    restrictions.push({restriction: "fromEquipmentAndNatural", amount: equipmentAndNatural, limit: cap});
+                    equipmentAndNatural = cap;
+                }
+            }
+
             let total = (baseStats[name] || 0) +
                 (ksmStats[name] || 0) +
                 calculateStatQuestBonus(name, baseStats) +
-                equipment +
+                equipmentAndNatural +
                 spells +
-                calculateNaturalStatBonus(name, dependencyStats, items) +
                 calculateEraAbilityBonus(name, list.eraAbilities);
 
             let totalMax = null;
@@ -635,13 +661,6 @@
                     break;
                 case "manaReduction":
                     totalMax = 50;
-                    break;
-                case "mitigation":
-                    totalMax = parseInt(
-                        Math.max(Math.min(calculate("constitution").numericValue, 70) - 30, 0) / 2
-                    );
-                    if (hasBattleTraining(items))
-                        totalMax += 10;
                     break;
             }
             if (totalMax != null && total > totalMax) {
