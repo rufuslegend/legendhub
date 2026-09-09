@@ -86,6 +86,7 @@ CREATE TABLE Items (
     Mv INT DEFAULT 0,
     Mvr INT DEFAULT 0,
     Ac INT DEFAULT 0,
+    Mitigation INT DEFAULT 0,
     Rent INT DEFAULT 0,
     Weight INT DEFAULT 0,
     UniqueWear TINYINT DEFAULT 0,
@@ -97,6 +98,11 @@ CREATE TABLE Items (
     AlignRestriction INT DEFAULT 0,
     WeaponStat INT DEFAULT 0,
     Casts TEXT NULL,
+    Notes TEXT NULL,
+    MobId INT DEFAULT 0,
+    QuestId INT DEFAULT 0,
+    NetStat DECIMAL(10, 2) DEFAULT 0,
+    ModifiedByIP VARCHAR(40) NULL,
     Deleted TINYINT NOT NULL DEFAULT 0,
     ModifiedBy VARCHAR(60) NOT NULL DEFAULT 'Fixture',
     ModifiedOn DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -113,7 +119,7 @@ CREATE TABLE ItemStatInfo (
     FilterString VARCHAR(60), DefaultValue VARCHAR(60), NetStat DECIMAL(10, 2),
     ShowColumnDefault TINYINT, Editable TINYINT, CategoryId INT, SortNumber INT
 ) ENGINE=InnoDB;
-INSERT INTO ItemStatCategories VALUES (1, 'Basic', 1), (2, 'Attributes', 2);
+INSERT INTO ItemStatCategories VALUES (1, 'Basic', 1), (2, 'Attributes', 2), (6, 'Tank', 6);
 INSERT INTO ItemStatInfo
     (Display, Short, Var, Type, FilterString, DefaultValue, NetStat, ShowColumnDefault, Editable, CategoryId, SortNumber)
 VALUES
@@ -122,7 +128,8 @@ VALUES
     ('Rent', 'Rent', 'rent', 'int', '> 0', '0', 0, 1, 1, 1, 3),
     ('Weight', 'Weight', 'weight', 'int', '> 0', '0', 0, 0, 1, 1, 4),
     ('Light', 'Light', 'isLight', 'bool', '= 1', 'false', 0, 0, 1, 1, 5),
-    ('Faux Object', 'Faux', 'fauxObject', 'bool', '= 1', 'false', 0, 0, 1, 1, 6);
+    ('Faux Object', 'Faux', 'fauxObject', 'bool', '= 1', 'false', 0, 0, 1, 1, 6),
+    ('Mitigation', 'Mit', 'mitigation', 'int', '> 0', '0', 2, 0, 1, 6, 700);
 INSERT INTO Items (Id, Name, Slot, Strength, Rent, Weight, IsLight) VALUES
     (101, 'Test brass lantern', 0, 2, 100, 1, 1),
     (102, 'Test silver lantern', 0, 5, 200, 1, 1);

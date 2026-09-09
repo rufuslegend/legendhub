@@ -229,6 +229,7 @@ before(async () => {
     fixturesDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "legendhub-mariadb-fixtures-"));
     migrationFixture(9);
     migrationFixture(11);
+    migrationFixture(12);
 
     const started = docker([
         "run", "--detach", "--rm", "--platform", "linux/amd64",
@@ -541,6 +542,46 @@ test("migration 11 creates, verifies, and repairs its MariaDB schema", async () 
             SELECT MigrationId, Status, Error
             FROM MigrationRuns WHERE MigrationId = 11
         `), [{MigrationId: 11, Status: "completed", Error: null}]);
+    }
+    finally {
+        await end(pool);
+    }
+});
+
+test("mitigation cap migration resumes partial DDL and preserves signed modifiers and audit history", async () => {
+    await recreateDatabase(databases.equipment);
+    const pool = createPool(databases.equipment);
+    try {
+        await setUpEquipmentLegacySchema(pool);
+        await runMigration(pool, 11);
+        // Simulate an interrupted deployment after the first additive schema change.
+        await query(pool, "ALTER TABLE Items ADD COLUMN MitigationCap INT NOT NULL DEFAULT 0");
+        await query(pool, "UPDATE Items SET MitigationCap = 5 WHERE Id = 101");
+        await query(pool, "DELETE FROM Items_AuditTrail; DELETE FROM NotificationQueue");
+        await runMigration(pool, 12);
+        assert.deepEqual(await query(pool, "SELECT MitigationCap FROM Items WHERE Id = 101"), [{MitigationCap: 5}]);
+        assert.deepEqual(await query(pool, `
+            SELECT Display, Short, Var, Type, DefaultValue, Editable
+            FROM ItemStatInfo WHERE Var = 'mitigationCap'
+        `), [{Display: "Mitigation Cap", Short: "MitCap", Var: "mitigationCap", Type: "int", DefaultValue: "0", Editable: 1}]);
+
+        await query(pool, "UPDATE Items SET MitigationCap = -3 WHERE Id = 101");
+        assert.deepEqual(await query(pool, "SELECT MitigationCap FROM Items WHERE Id = 101"), [{MitigationCap: -3}]);
+        assert.deepEqual(await query(pool, "SELECT ItemId, MitigationCap, Official FROM Items_AuditTrail"),
+            [{ItemId: 101, MitigationCap: 5, Official: 0}]);
+        assert.equal((await query(pool, "SELECT Id FROM NotificationQueue")).length, 1);
+
+        await query(pool, `
+            DELETE FROM MigrationRuns WHERE MigrationId = 12;
+            DELETE FROM Migrations WHERE Id = 12;
+            DROP TRIGGER Items_BEFORE_UPDATE;
+        `);
+        await runMigration(pool, 12);
+        assert.equal((await query(pool, "SELECT Id FROM ItemStatInfo WHERE Var = 'mitigationCap'")).length, 1);
+        assert.deepEqual(await query(pool, "SELECT MitigationCap FROM Items WHERE Id = 101"), [{MitigationCap: -3}]);
+        await query(pool, "UPDATE Items SET MitigationCap = 0 WHERE Id = 101");
+        assert.deepEqual(await query(pool, "SELECT MitigationCap FROM Items_AuditTrail ORDER BY Id"),
+            [{MitigationCap: 5}, {MitigationCap: -3}]);
     }
     finally {
         await end(pool);

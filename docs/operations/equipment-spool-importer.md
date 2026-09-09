@@ -11,6 +11,13 @@ does not enable or depend on the optional production-content sync.
 
 ## Filesystem contract
 
+Version 1 observations may include optional `item.combat.mitigation_cap`, a
+signed 32-bit integer mapped to the item's **Mitigation Cap** modifier. Older
+observations default to zero. Omitted and explicit zero modifiers retain the
+same item fingerprint, while a nonzero modifier distinguishes an item variant.
+The game exporter must supply the field for items that modify the cap; it is
+not inferred from their mitigation value or description.
+
 The host layout is:
 
 ```text

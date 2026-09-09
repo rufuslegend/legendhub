@@ -133,9 +133,9 @@ function assertBooleanFields(object, keys, path) {
     }
 }
 
-function assertIntegerFields(object, keys, path) {
-    assertClosedObject(object, keys, [], path);
-    for (const key of keys)
+function assertIntegerFields(object, keys, path, optionalKeys = []) {
+    assertClosedObject(object, keys, optionalKeys, path);
+    for (const key of [...keys, ...optionalKeys.filter(key => Object.hasOwn(object, key))])
         assertInt32(object[key], `${path}.${key}`);
 }
 
@@ -212,7 +212,7 @@ function validateDocument(document) {
     assertIntegerFields(document.item.attributes, ATTRIBUTE_KEYS, "item.attributes");
     assertIntegerFields(document.item.attribute_caps, ATTRIBUTE_KEYS, "item.attribute_caps");
     assertIntegerFields(document.item.resources, RESOURCE_KEYS, "item.resources");
-    assertIntegerFields(document.item.combat, COMBAT_KEYS, "item.combat");
+    assertIntegerFields(document.item.combat, COMBAT_KEYS, "item.combat", ["mitigation_cap"]);
     assertClosedObject(document.item.weapon, WEAPON_KEYS, [], "item.weapon");
     normalizeEnum(document.item.weapon.type, WEAPON_TYPES, "item.weapon.type", true);
     normalizeEnum(document.item.weapon.governing_attribute, WEAPON_ATTRIBUTES,
@@ -244,7 +244,11 @@ function normalizeItem(item) {
         attributes: normalizeIntegerObject(item.attributes, ATTRIBUTE_KEYS),
         attribute_caps: normalizeIntegerObject(item.attribute_caps, ATTRIBUTE_KEYS),
         resources: normalizeIntegerObject(item.resources, RESOURCE_KEYS),
-        combat: normalizeIntegerObject(item.combat, COMBAT_KEYS),
+        combat: {
+            ...normalizeIntegerObject(item.combat, COMBAT_KEYS),
+            // A missing or zero cap modifier retains the identity of legacy observations.
+            ...(item.combat.mitigation_cap ? {mitigation_cap: item.combat.mitigation_cap} : {})
+        },
         weapon: {
             type: normalizeEnum(item.weapon.type, WEAPON_TYPES, "item.weapon.type", true),
             governing_attribute: normalizeEnum(item.weapon.governing_attribute,

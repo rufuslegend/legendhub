@@ -43,6 +43,23 @@ test("parses and fingerprints the live-sample-shaped v1 observation", () => {
     assert.equal(parsed.sourceTimestamp.toISOString(), "2026-08-31T22:23:03.000Z");
 });
 
+test("optional mitigation cap modifiers affect item identity while omitted and zero stay compatible", () => {
+    const document = fixtureDocument();
+    const original = parseDocument(document);
+    document.item.combat.mitigation_cap = 0;
+    assert.deepEqual(parseDocument(document).itemFingerprint, original.itemFingerprint);
+    for (const modifier of [5, -10]) {
+        document.item.combat.mitigation_cap = modifier;
+        const parsed = parseDocument(document);
+        assert.equal(parsed.normalizedItem.combat.mitigation_cap, modifier);
+        assert.notDeepEqual(parsed.itemFingerprint, original.itemFingerprint);
+    }
+    for (const invalidValue of [null, "5", 1.5, 2147483648, -2147483649]) {
+        document.item.combat.mitigation_cap = invalidValue;
+        invalid(document);
+    }
+});
+
 test("payload hashing ignores object key order and insignificant whitespace", () => {
     const document = fixtureDocument();
     const reordered = {

@@ -51,6 +51,15 @@ test("maps every sample field to an explicit legacy item column", () => {
     assert.equal(mapping.columns.length, new Set(mapping.columns).size);
 });
 
+test("maps mitigation cap modifiers and defaults older observations to zero", () => {
+    const {normalizedItem} = parsedFixture();
+    assert.equal(valueByColumn(mapOfficialItem(normalizedItem, "testmud")).MitigationCap, 0);
+    normalizedItem.combat.mitigation_cap = -10;
+    const mapped = mapOfficialItem(normalizedItem, "testmud");
+    assert.equal(valueByColumn(mapped).MitigationCap, -10);
+    assert.equal(mapped.valueByVar.mitigationCap, -10);
+});
+
 test("maps all flags, stats, weapon values, and casts without implicit defaults", () => {
     const parsed = parsedFixture();
     const item = parsed.normalizedItem;

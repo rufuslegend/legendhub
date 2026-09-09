@@ -5,6 +5,10 @@ with version 2.6.0.
 
 ## [4.0.0-beta]
 
+### Added
+
+- Items and spell/skill entries can now have positive or negative **Mitigation Cap** modifiers. Select **Mitigation Cap** in the column chooser to compare modifiers and see the Builder's resulting cap.
+
 ### Fixed
 
 - Builder mitigation now uses the better of Strength and Constitution for Battle Training and adds affect bonuses after the equipment-and-training cap. The Mitigation total also shows its cap.

@@ -53,6 +53,7 @@ function mapOfficialItem(item, server) {
         Spellcrit: item.combat.spell_critical,
         ManaReduction: item.combat.mana_reduction,
         Mitigation: item.combat.mitigation,
+        MitigationCap: item.combat.mitigation_cap || 0,
         Accuracy: item.weapon.accuracy,
         Ammo: item.weapon.ammo_limit,
         TwoHanded: flag(item.flags.two_handed),

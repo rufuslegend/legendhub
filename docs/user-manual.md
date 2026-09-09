@@ -101,6 +101,8 @@ The **Runecraft Customizer** is offered in supported Neck and Wrist positions. C
 
 The **Total** rows combine base and quest effects, era abilities, equipment, and modeled natural values. For Hit, Dam, HPR, MAR, MVR, Spell Damage, and Spell Critical, a parenthetical value is the capped contribution from normal equipment. Other additive sources are included in the leading total.
 
+Select **Mitigation Cap** in **Hide/Show Columns** to show **MitCap**. Each item row shows that item's cap modifier; the Total rows show the resulting character cap. Positive modifiers raise the cap and negative modifiers lower it, including modifiers on spell/skill entries in **Other**. Contributors can enter these signed values in the item editor's **MitCap** field under **Tank**. Use `MitCap > 0` or `MitCap < 0` to find matching entries.
+
 Red cells and question-circle help identify restrictions. Common warnings include:
 
 - **Unique:** the same unique-wear item cannot be equipped twice.
@@ -239,11 +241,12 @@ The Builder models a level-50 character. It first caps each final primary attrib
 | High-stat regeneration contribution | `trunc((stat - 75) / 5)` when the governing stat is above 79; otherwise `0` |
 | Mana Reduction overall cap | `50` |
 | Battle Training natural Mitigation | The larger of `trunc(max(Strength - 50, 0) / 5)` and `trunc(max(Constitution - 75, 0) / 5)`; `0` without Battle Training |
-| Mitigation equipment-and-training cap | `min(20, trunc((Constitution - 30) / 2))`, plus `10` with Battle Training, then a minimum of `0` |
+| Mitigation equipment-and-training base cap | `min(20, trunc((Constitution - 30) / 2))`, plus `10` with Battle Training, then a minimum of `0` |
+| Mitigation Cap total | Base cap plus all equipped **MitCap** modifiers, including Other entries, with a minimum of `0` |
 
 The Builder warns when AC is below `-250`; it does not currently clamp AC to `-250`. A capped Total such as `78 (44)` shows the final value first and the capped normal-equipment contribution in parentheses.
 
-When the **Mit** column is visible, both Total rows show mitigation with **Cap:** underneath it. Normal equipment and natural Battle Training mitigation share this cap; bonuses from affects are added afterward, so the final value can exceed the displayed cap. For example, `23` from equipment plus `11` from Battle Training is capped at `30`, then `5` from affects gives `35`. The cap warning reports equipment plus training before the cap, excluding affects. The Builder does not currently model Chant/axiom or Rage penalties to this cap.
+When the **Mit** column is visible, both Total rows show mitigation with **Cap:** underneath it. Normal equipment and natural Battle Training mitigation share this cap; bonuses from affects are added afterward, so the final value can exceed the displayed cap. For example, `23` from equipment plus `11` from Battle Training is capped at `30`, then `5` from affects gives `35`. An additional `+5 MitCap` modifier raises the cap to `35`, allowing all `34` equipment-and-training mitigation plus `5` from affects, for `39`. The cap warning reports equipment plus training before the cap, excluding affects. The Builder does not automatically infer Chant/axiom or Rage penalties; model them with the appropriate negative MitCap on an Other entry. Battle Training's automatic `+10` cap allowance is already included, so do not enter that allowance a second time as an item modifier.
 
 #### Natural and resource values
 

@@ -210,8 +210,10 @@
     function calculateMitigationCap(constitution, items) {
         // get_melee_mitigation_cap(): floor at zero after adding Battle Training.
         // Chant/axiom and Rage penalties need character state the Builder does not model.
-        return Math.max(0, Math.min(20, Math.trunc((constitution - 30) / 2)) +
+        const baseCap = Math.max(0, Math.min(20, Math.trunc((constitution - 30) / 2)) +
             (hasBattleTraining(items) ? 10 : 0));
+        const modifiers = items.reduce((sum, item) => sum + (item && item.mitigationCap || 0), 0);
+        return Math.max(0, baseCap + modifiers);
     }
 
     /*

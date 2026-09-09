@@ -27,7 +27,7 @@ export const ACCOUNT_PREFERENCE_COLUMNS = new Set([
     "Slot", "Name", "Light", "Heroic", "Str", "Min", "Dex", "Con",
     "Per", "Spi", "Ac", "Align", "Hp", "Ma", "Mv", "Hpr", "Mar",
     "Mvr", "Hit", "Dam", "SpDam", "SpCrit", "Ma Redux", "Concen",
-    "Mit", "Parry", "Shot Acc", "Ammo", "Bonus Acc", "2H", "Quality",
+    "Mit", "MitCap", "Parry", "Shot Acc", "Ammo", "Bonus Acc", "2H", "Quality",
     "Speed", "MaxDam", "AvgDam", "MinDam", "Holdable", "Weap Type",
     "Weap Stat", "Weight", "Unique", "Bonded", "Casts", "Level",
     "Net Stat", "Sell", "Rent", "Str Cap", "Min Cap", "Dex Cap",

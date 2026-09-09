@@ -71,3 +71,22 @@ test("natural mitigation uses capped Strength rather than the raw equipment tota
     variant.items[0].strength = 30;
     assert.equal(gameStats.calculateBuilderStatTotal(variant, "mitigation").value, 11);
 });
+
+test("equipment and Other mitigation-cap modifiers change the cap before mitigation affects apply", function() {
+    const variant = build({strength: 100, equipment: 30, affects: 5, training: true});
+    variant.items[0].mitigationCap = 4;
+    variant.items[32].mitigationCap = 3;
+    variant.items[34].mitigationCap = -2;
+    assert.equal(gameStats.calculateBuilderStatTotal(variant, "mitigationCap").value, 35);
+    assert.equal(gameStats.calculateBuilderStatTotal(variant, "mitigation").value, 40);
+    variant.items[0].mitigationCap = 0;
+    assert.equal(gameStats.calculateBuilderStatTotal(variant, "mitigationCap").value, 31);
+    assert.equal(gameStats.calculateBuilderStatTotal(variant, "mitigation").value, 36);
+});
+
+test("negative cap modifiers floor the cap at zero without discarding mitigation affects", function() {
+    const variant = build({equipment: 20, affects: 5});
+    variant.items[34].mitigationCap = -30;
+    assert.equal(gameStats.calculateBuilderStatTotal(variant, "mitigationCap").value, 0);
+    assert.equal(gameStats.calculateBuilderStatTotal(variant, "mitigation").value, 5);
+});
