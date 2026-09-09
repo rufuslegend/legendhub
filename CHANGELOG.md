@@ -18,6 +18,7 @@ with version 2.6.0.
 
 ### Changed
 
+- Importing Builder lists now opens the imported character and variant immediately. Batch imports open the first entry you chose to import.
 - **Add Variant** now immediately copies the selected Builder build as **Variant 1**, **Variant 2**, and so on. Rename copies whenever you like with **Edit Variant**.
 - Prepared the site for a newer database engine, including account and Builder storage checks and private backups. This beta is in development; server upgrades are still pending.
 

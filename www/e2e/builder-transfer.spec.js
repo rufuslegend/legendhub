@@ -17,10 +17,11 @@ test("exported characters and variants import into another account and survive a
     const recipient = await stack.createAccount();
     const destination = await freshLogin(newDevice, recipient);
     await importLists(destination.page, payload);
+    await expectCharacter(destination.page, {name: "Portable Hero", strength: "40", item: "Test brass lantern"});
+    await expect(destination.page.getByLabel("Variant", {exact: true}).locator("option:checked")).toHaveText("Original");
     const fresh = await freshLogin(newDevice, recipient);
-    await fresh.page.getByLabel("Character", {exact: true}).selectOption({label: "Portable Hero"});
-    await fresh.page.getByLabel("Variant", {exact: true}).selectOption({label: "Original"});
     await expectCharacter(fresh.page, {name: "Portable Hero", strength: "40", item: "Test brass lantern"});
+    await expect(fresh.page.getByLabel("Variant", {exact: true}).locator("option:checked")).toHaveText("Original");
     await fresh.page.getByLabel("Variant", {exact: true}).selectOption({label: "Variant 1"});
     await expectCharacter(fresh.page, {name: "Portable Hero", strength: "45", item: "Test silver lantern"});
     expect(await profiles(stack, account.id)).toEqual(source);

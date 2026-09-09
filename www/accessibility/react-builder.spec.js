@@ -2578,7 +2578,8 @@ test("Builder characters validate names and variants copy immediately, rename, a
 
 // Catches import branches that conflate empty, malformed, skip, overwrite, and
 // successful new-list behavior.
-test("Builder import handles empty, invalid, duplicate, overwrite, and success paths", async function({page}) {
+test("Builder import handles empty, invalid, duplicate, overwrite, and success paths", async function({page, context}) {
+    await context.addCookies([{name: "sc-Guest", value: "Name-Rent-", url: baseUrl}]);
     await page.goto(`${baseUrl}/builder/`);
     await page.getByRole("button", {name: "Import", exact: true}).click();
     let dialog = page.getByRole("dialog", {name: "Import Lists"});
@@ -2603,13 +2604,59 @@ test("Builder import handles empty, invalid, duplicate, overwrite, and success p
     dialog = page.getByRole("dialog", {name: "Import Lists"});
     await dialog.getByLabel("Builder list import string").fill(newHeroVariantImport);
     await dialog.getByRole("button", {name: "Import", exact: true}).click();
-    await page.getByLabel("Variant", {exact: true}).selectOption({label: "Newcomer"});
+    await expect(page.getByLabel("Variant", {exact: true}).locator("option:checked")).toHaveText("Newcomer");
     await expect(equipmentTable(page).locator("tbody tr").nth(1)).toContainText("Faux moonlight");
     await page.getByRole("button", {name: "Import", exact: true}).click();
     dialog = page.getByRole("dialog", {name: "Import Lists"});
     await dialog.getByLabel("Builder list import string").fill(guestImport);
     await dialog.getByRole("button", {name: "Import", exact: true}).click();
-    await expect(page.getByLabel("Character", {exact: true})).toContainText("Guest");
+    await expect(page.getByLabel("Character", {exact: true}).locator("option:checked")).toHaveText("Guest");
+    await expect(page.getByLabel("Variant", {exact: true}).locator("option:checked")).toHaveText("Imported");
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("scl"))).toBe("Guest!Imported");
+    await expect(equipmentTable(page).locator("thead").getByRole("columnheader", {name: "Str", exact: true})).toHaveCount(0);
+    expect((await context.cookies()).find(cookie => cookie.name === "sc-Guest")?.value).toBe("Name-Rent-");
+    await page.reload();
+    await expect(page.getByLabel("Character", {exact: true}).locator("option:checked")).toHaveText("Guest");
+    await expect(page.getByLabel("Variant", {exact: true}).locator("option:checked")).toHaveText("Imported");
+});
+
+// Catches delayed imports applying stale selection state and overwriting the
+// destination character's columns with those of a character selected meanwhile.
+test("Builder import restores profile columns after selection changes during item loading", async function({page, context}) {
+    await context.addCookies([
+        {name: "sc-Hero", value: "Name-Str-", url: baseUrl},
+        {name: "sc-Scout", value: "Name-Rent-", url: baseUrl}
+    ]);
+    await page.goto(`${baseUrl}/builder/`);
+    await expect(page.locator("#strInput")).toHaveValue("100");
+    let releaseImport;
+    let importRequested;
+    const pendingImport = new Promise(resolve => { releaseImport = resolve; });
+    const requested = new Promise(resolve => { importRequested = resolve; });
+    await page.route(`${baseUrl}/api`, async route => {
+        if (route.request().postDataJSON().query.includes("getItemsInIds")) {
+            importRequested();
+            await pendingImport;
+        }
+        await route.fallback();
+    });
+    try {
+        await page.getByRole("button", {name: "Import", exact: true}).click();
+        const dialog = page.getByRole("dialog", {name: "Import Lists"});
+        await dialog.getByLabel("Builder list import string").fill(currentTankExport);
+        await dialog.getByRole("button", {name: "Import", exact: true}).click();
+        await requested;
+        await page.keyboard.press("Escape");
+        await page.getByLabel("Character", {exact: true}).selectOption({label: "Scout"});
+        const strengthColumn = equipmentTable(page).locator("thead").getByRole("columnheader", {name: "Str", exact: true});
+        await expect(strengthColumn).toHaveCount(0);
+        releaseImport();
+        await expect(page.getByLabel("Character", {exact: true}).locator("option:checked")).toHaveText("Hero");
+        await expect(strengthColumn).toHaveCount(1);
+        expect((await context.cookies()).find(cookie => cookie.name === "sc-Hero")?.value).toBe("Name-Str-");
+    } finally {
+        releaseImport();
+    }
 });
 
 // Catches calculated resource/ability totals or warning text that is visible

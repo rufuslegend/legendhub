@@ -460,26 +460,30 @@ export function builderReducer(state, action) {
         }
         case "lists/import": {
             const allLists = state.allLists.map(list => ({...list, variants: list.variants.map(cloneVariant)}));
+            let importedSelection = null;
             for (const imported of action.lists) {
                 if (imported.exists && !imported.overwrite)
                     continue;
                 const variant = cloneVariant(imported.variants[0]);
-                const character = allLists.find(list => list.name === imported.name);
+                let character = allLists.find(list => list.name === imported.name);
                 if (!character) {
-                    allLists.push({
+                    character = {
                         name: imported.name,
-                        variants: [variant],
+                        variants: [],
                         ...(state.storageMode === "account" ? {account: {id: null, revision: 0}} : {})
-                    });
-                    continue;
+                    };
+                    allLists.push(character);
                 }
-                const variantIndex = character.variants.findIndex(entry => entry.name === variant.name);
+                let variantIndex = character.variants.findIndex(entry => entry.name === variant.name);
                 if (variantIndex >= 0)
                     character.variants[variantIndex] = variant;
                 else
-                    character.variants.push(variant);
+                    variantIndex = character.variants.push(variant) - 1;
+                importedSelection ??= {listIndex: allLists.indexOf(character), variantIndex};
             }
-            return selectVariant(state, allLists, state.selectedListIndex, state.selectedListVariantIndex);
+            return selectVariant(state, allLists,
+                importedSelection?.listIndex ?? state.selectedListIndex,
+                importedSelection?.variantIndex ?? state.selectedListVariantIndex);
         }
         case "stat/change":
             return cloneSelected(state, function(selectedList) {

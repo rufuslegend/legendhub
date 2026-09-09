@@ -483,10 +483,15 @@ export default function Builder({
     }, [state.allLists, state.accountState?.storageGeneration, state.storageMode, state.syncSourceVersion, state.initialized]);
 
     function action(value) {
-        if (state.storageMode === "anonymous" && value.type === "variant/select" && value.listIndex !== state.selectedListIndex) {
-            const characterName = state.allLists[value.listIndex].name;
+        const currentState = latestStateRef.current;
+        const characterName = value.type === "variant/select"
+            ? currentState.allLists[value.listIndex].name
+            : value.type === "lists/import"
+                ? value.lists.find(list => !list.exists || list.overwrite)?.name
+                : null;
+        if (currentState.storageMode === "anonymous" && characterName && characterName !== currentState.allLists[currentState.selectedListIndex].name) {
             const cookieValues = cookies();
-            dispatch({type: "ui/patch", value: {statInfo: applySelectedColumns(cookieValues[`sc-${characterName}`] || cookieValues.sc2, state.defaultStatInfo)}});
+            dispatch({type: "ui/patch", value: {statInfo: applySelectedColumns(cookieValues[`sc-${characterName}`] || cookieValues.sc2, currentState.defaultStatInfo)}});
         }
         dispatch(value);
     }
@@ -672,7 +677,7 @@ export default function Builder({
         dispatch({type: "request/pending"});
         try {
             const lists = await hydrateLists(state.importModel.lists, state.itemFragment);
-            dispatch({type: "lists/import", lists});
+            action({type: "lists/import", lists});
             dispatch({type: "request/succeeded"});
             close();
         }

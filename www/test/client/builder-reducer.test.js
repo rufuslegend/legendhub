@@ -752,6 +752,54 @@ test("builder reducer merges submitted import entries by character and variant n
     assert.equal(state.allLists[0].variants[0].baseStats.strength, 0);
 });
 
+// Catches imports retaining the previous selection, selecting a skipped entry,
+// or selecting the last entry rather than the first accepted character/variant.
+test("builder imports open the first accepted character and variant in either storage mode", async function() {
+    const {builderReducer, createDefaultVariant, createInitialBuilderState} = await loadReducer();
+    for (const storageMode of ["anonymous", "account"]) {
+        for (const [name, variantName, expectedListIndex, expectedVariantIndex] of [
+            ["Guest", "Imported", 2, 0],
+            ["Hero", "Caster", 0, 1],
+            ["Hero", "Original", 0, 0]
+        ]) {
+            const original = createDefaultVariant("Original");
+            const current = createDefaultVariant("Current");
+            const imported = createDefaultVariant(variantName);
+            imported.baseStats.strength = 44;
+            const state = {...createInitialBuilderState(), storageMode,
+                allLists: [{name: "Hero", variants: [original]}, {name: "Keeper", variants: [current]}],
+                selectedListIndex: 1, selectedList: current};
+            const next = builderReducer(state, {type: "lists/import", lists: [
+                {name: "Keeper", exists: true, overwrite: false, variants: [current]},
+                {name, exists: variantName === "Original", overwrite: true, variants: [imported]},
+                {name: "Last", variants: [createDefaultVariant("Last variant")]}
+            ]});
+            assert.equal(next.selectedListIndex, expectedListIndex);
+            assert.equal(next.selectedListVariantIndex, expectedVariantIndex);
+            assert.equal(next.selectedList, next.allLists[expectedListIndex].variants[expectedVariantIndex]);
+            assert.equal(next.selectedList.name, variantName);
+            assert.equal(next.selectedList.baseStats.strength, 44);
+            assert.equal(state.selectedList, current);
+        }
+    }
+});
+
+// Catches skipped or empty imports unexpectedly navigating away from the current build.
+test("builder imports keep the current character and variant when nothing is accepted", async function() {
+    const {builderReducer, createDefaultVariant, createInitialBuilderState} = await loadReducer();
+    const original = createDefaultVariant("Original");
+    const current = createDefaultVariant("Current");
+    const state = {...createInitialBuilderState(),
+        allLists: [{name: "Hero", variants: [original, current]}],
+        selectedListVariantIndex: 1, selectedList: current};
+    for (const lists of [[], [{name: "Hero", exists: true, overwrite: false, variants: [original]}]]) {
+        const next = builderReducer(state, {type: "lists/import", lists});
+        assert.equal(next.selectedListIndex, 0);
+        assert.equal(next.selectedListVariantIndex, 1);
+        assert.deepEqual(next.selectedList, current);
+    }
+});
+
 // Catches item selection retaining stale rune text or mutating the canonical prior variant.
 test("builder reducer selects equipment and clears a replaced runecharm encoding", async function() {
     const {builderReducer, createDefaultVariant, createInitialBuilderState} = await loadReducer();
