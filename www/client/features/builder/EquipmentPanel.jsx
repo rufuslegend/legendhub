@@ -173,7 +173,7 @@ function EquipmentTotalRow({
           >
             {equipmentTableValue(totals[stat.var], stat, hideZeros)}
             {stat.var === "mitigation" && (
-              <small className="d-block" title="Equipment and Battle Training cap; affect bonuses are added afterward.">
+              <small className="d-block" title="Mitigation cap, including matching skill cap bonuses. Skill mitigation is counted once, after the equipment and Battle Training limit.">
                 Cap: {totals.mitigationCap}
               </small>
             )}

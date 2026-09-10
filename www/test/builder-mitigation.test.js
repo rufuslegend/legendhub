@@ -56,6 +56,31 @@ test("mitigation cap rounds like the game and floors only after the Battle Train
     }
 });
 
+// Adding a cap allowance for an existing post-cap skill bonus must not also
+// release the same amount of equipment mitigation: the reported build is 35/32.
+test("adding Bastion's matching cap bonus keeps mitigation 35 and raises the cap to 32", function() {
+    const variant = build({strength: 90, constitution: 73, equipment: 23, training: true});
+    Object.assign(variant.items[0], {strength: 16, strengthCap: 6});
+    Object.assign(variant.items[32], {id: 1772, mitigation: 2});
+    variant.items[34].mitigation = 3;
+    assert.equal(gameStats.calculateBuilderStatTotal(variant, "mitigation").value, 35);
+    assert.equal(gameStats.calculateBuilderStatTotal(variant, "mitigationCap").value, 30);
+
+    variant.items[32].mitigationCap = 2;
+    assert.deepEqual(gameStats.calculateBuilderStatTotal(variant, "mitigation"), {
+        value: 35,
+        restrictions: [{restriction: "fromEquipmentAndNatural", amount: 34, limit: 30}]
+    });
+    assert.equal(gameStats.calculateBuilderStatTotal(variant, "mitigationCap").value, 32);
+    assert.equal(variant.items[32].mitigation, 2);
+
+    // The same fields on another skill follow the same rule; no Bastion ID special case.
+    variant.items[32].id = 9001;
+    variant.items[0].mitigation = 10;
+    assert.equal(gameStats.calculateBuilderStatTotal(variant, "mitigation").value, 26);
+    assert.equal(gameStats.calculateBuilderStatTotal(variant, "mitigationCap").value, 32);
+});
+
 test("affects above the mitigation cap do not cause a false cap warning", function() {
     assert.deepEqual(gameStats.calculateBuilderStatTotal(build({equipment: 20, affects: 5}), "mitigation"), {
         value: 25, restrictions: []

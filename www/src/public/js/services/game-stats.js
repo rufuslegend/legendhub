@@ -633,9 +633,16 @@
 
             let equipmentAndNatural = equipment + calculateNaturalStatBonus(name, dependencyStats, items);
             if (name === "mitigation") {
-                // get_melee_mitigation(): equipment and training share the cap;
-                // affects are added afterward and may take the total above it.
-                const cap = calculate("mitigationCap").numericValue;
+                // An affect's matching positive cap modifier provides allowance
+                // for its mitigation, which is already added after this limit.
+                // It must not also release the same amount of capped equipment.
+                // Cap-only bonuses, excess allowance, and penalties still alter
+                // the equipment-and-training limit normally.
+                const affectAllowance = items.slice(24).reduce((sum, item) => sum + Math.min(
+                    Math.max(0, item && item.mitigation || 0),
+                    Math.max(0, item && item.mitigationCap || 0)
+                ), 0);
+                const cap = Math.max(0, calculate("mitigationCap").numericValue - affectAllowance);
                 if (equipmentAndNatural > cap) {
                     restrictions.push({restriction: "fromEquipmentAndNatural", amount: equipmentAndNatural, limit: cap});
                     equipmentAndNatural = cap;
