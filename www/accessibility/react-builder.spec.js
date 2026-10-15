@@ -1808,11 +1808,11 @@ test("Builder preserves persisted characters, variants, totals, panels, and expo
 
     await page.getByRole("button", {name: "Export", exact: true}).click();
     await expect(page.getByRole("dialog", {name: "Export Lists"})).toBeVisible();
-    await expect(page.locator("#allListsExport")).toHaveValue(/^7\*/);
+    await expect(page.locator("#allListsExport")).toHaveValue(/^8\*/);
     await expect(page.getByRole("button", {name: /^Copy /})).toHaveCount(3);
     await page.getByRole("button", {name: "Copy All Lists", exact: true}).click();
     await expect(page.getByRole("status")).toHaveText("All Lists copied.");
-    await expect(page.evaluate(() => navigator.clipboard.readText())).resolves.toMatch(/^7\*Hero~Tank~/);
+    await expect(page.evaluate(() => navigator.clipboard.readText())).resolves.toMatch(/^8\*Hero~Tank~/);
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.getByRole("button", {name: "Export", exact: true})).toBeFocused();
@@ -2765,10 +2765,16 @@ test("Builder exports and copies all three exact values", async function({page})
     await page.goto(`${baseUrl}/builder/`);
     await page.getByRole("button", {name: "Export", exact: true}).click();
     const dialog = page.getByRole("dialog", {name: "Export Lists"});
+    // Exports are version 8: the stored version 7 strings with a trailing
+    // "~<Character>~<Short>-<Short>-...*" segment listing the selected
+    // character's visible columns (the default-visible stats, in stat-info
+    // order). Scout has no sc-Scout cookie here, so it gets no segment.
+    const columnSegment = `~Hero~${itemStatInfo.filter((stat) => stat.showColumnDefault).map((stat) => stat.short).join("-")}*`;
+    const toVersion8 = (value) => `8*${value.slice(2)}${columnSegment}`;
     const cases = [
-        ["Copy All Lists", "#allListsExport", encodedLists],
-        ["Copy Current List (w/ all variants): Hero", "#curListExport", currentHeroExport],
-        ["Copy Current List Variant: Tank", "#curVariantExport", currentTankExport]
+        ["Copy All Lists", "#allListsExport", toVersion8(encodedLists)],
+        ["Copy Current List (w/ all variants): Hero", "#curListExport", toVersion8(currentHeroExport)],
+        ["Copy Current List Variant: Tank", "#curVariantExport", toVersion8(currentTankExport)]
     ];
     for (const [buttonName, input, expected] of cases) {
         await expect(dialog.locator(input)).toHaveValue(expected);
