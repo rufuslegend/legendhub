@@ -33,15 +33,39 @@ export function applySelectedColumns(cookie, statInfo) {
     });
 }
 
-export function accountPreferenceColumns(document, character, statInfo) {
+export function accountPreferenceColumns(document, character, statInfo, sharedColumns = null) {
     const profileId = typeof character?.account?.id === "string" && character.account.id
         ? character.account.id
         : null;
     const hasProfileColumns = profileId && hasOwn(document?.builderColumns, profileId);
     const columns = hasProfileColumns
         ? document.builderColumns[profileId]
-        : (document?.itemColumns?.length ? document.itemColumns : null);
+        : Array.isArray(sharedColumns) && sharedColumns.length
+            ? sharedColumns
+            : (document?.itemColumns?.length ? document.itemColumns : null);
     return applySelectedColumns(columns, statInfo);
+}
+
+export function exportColumnsByCharacter({mode, characters, selectedCharacterName, selectedColumns, cookies = {}, document = null}) {
+    const result = {};
+    for (const character of characters) {
+        let columns = null;
+        if (character.name === selectedCharacterName)
+            columns = selectedColumns;
+        else if (mode === "account") {
+            const profileId = typeof character.account?.id === "string" && character.account.id
+                ? character.account.id
+                : null;
+            if (profileId && hasOwn(document?.builderColumns, profileId))
+                columns = document.builderColumns[profileId];
+        }
+        else if (typeof cookies[`sc-${character.name}`] === "string")
+            columns = cookies[`sc-${character.name}`].split("-");
+        columns = (columns || []).filter(Boolean);
+        if (columns.length)
+            result[character.name] = columns;
+    }
+    return result;
 }
 
 export function readBuilderPersistence({cookies = {}, storage = {}} = {}) {

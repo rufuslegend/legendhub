@@ -291,3 +291,50 @@ test("builder persistence calculates and formats client storage size", async fun
     assert.equal(formatStorageSize(2048), "Storage Size: 2.00KB/10MB 0.00%");
     assert.equal(formatStorageSize(0), "");
 });
+
+// Catches shared import columns being ignored for an unsaved profile, or
+// overriding a profile whose columns the account already saved.
+test("account preference columns fall back to shared columns only until the profile saves its own", async function() {
+    const {accountPreferenceColumns} = await loadPersistence();
+    const statInfo = [
+        {short: "Name", var: "name", showColumnDefault: true},
+        {short: "Rent", showColumnDefault: true},
+        {short: "Hp", showColumnDefault: false}
+    ];
+    const visible = (document, character, shared) => accountPreferenceColumns(document, character, statInfo, shared)
+        .filter(stat => stat.showColumn)
+        .map(stat => stat.short);
+    const unsaved = {name: "Hero", account: {id: null, revision: 0}};
+    const saved = {name: "Hero", account: {id: "profile-a", revision: 1}};
+
+    assert.deepEqual(visible({itemColumns: [], builderColumns: {}}, unsaved, ["Name", "Hp"]), ["Name", "Hp"]);
+    assert.deepEqual(visible({itemColumns: [], builderColumns: {}}, saved, ["Name", "Hp"]), ["Name", "Hp"]);
+    assert.deepEqual(visible({itemColumns: [], builderColumns: {"profile-a": ["Rent"]}}, saved, ["Name", "Hp"]), ["Name", "Rent"]);
+    assert.deepEqual(visible({itemColumns: ["Rent"], builderColumns: {}}, unsaved, []), ["Name", "Rent"]);
+    assert.deepEqual(visible({itemColumns: [], builderColumns: {}}, unsaved, ["Name", "Unknown"]), ["Name"]);
+});
+
+// Catches exports that read the wrong storage for the current mode, leak the
+// Items-search fallback as a per-character layout, or drop the on-screen columns.
+test("export columns come from the screen for the selected character and saved layouts for the rest", async function() {
+    const {exportColumnsByCharacter} = await loadPersistence();
+    const characters = [
+        {name: "Hero", account: {id: "profile-a"}},
+        {name: "Scout", account: {id: "profile-b"}},
+        {name: "Blank", account: {id: null}}
+    ];
+    const cookies = {"sc-Scout": "Name-Rent-", "sc-Blank": "", sc2: "Name-Hp-", "sc-Hero": "Name-"};
+    const document = {itemColumns: ["Hp"], builderColumns: {"profile-b": ["Name", "Ac"]}};
+
+    assert.deepEqual(exportColumnsByCharacter({
+        mode: "anonymous", characters, selectedCharacterName: "Hero",
+        selectedColumns: ["Name", "Str"], cookies, document
+    }), {Hero: ["Name", "Str"], Scout: ["Name", "Rent"]});
+    assert.deepEqual(exportColumnsByCharacter({
+        mode: "account", characters, selectedCharacterName: "Hero",
+        selectedColumns: ["Name", "Str"], cookies, document
+    }), {Hero: ["Name", "Str"], Scout: ["Name", "Ac"]});
+    assert.deepEqual(exportColumnsByCharacter({
+        mode: "account", characters: [], selectedCharacterName: "Hero", selectedColumns: ["Name"]
+    }), {});
+});
