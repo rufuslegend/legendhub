@@ -288,3 +288,57 @@ test("builder rejects malformed fixed-width compact lists", async function() {
         /Invalid list/
     );
 });
+
+const buildSegment = (name, variant = "Original") =>
+    `${name}~${variant}~${baseStats}000000___00000000000000000${blanks37}`;
+
+// Catches share strings that drop, reorder, or misattribute a character's
+// column layout, or that leak column segments into saved-payload decoding.
+test("share strings append one column segment per character and decode back to the same builds", async function() {
+    const {decodeBuilderLists, decodeBuilderShare, encodeBuilderLists, encodeBuilderShare, readBuilderFormatVersion} = await loadEncoding();
+    const lists = decodeBuilderLists(`7*${buildSegment("Hero")}*${buildSegment("Hero", "Caster")}*${buildSegment("Scout")}*`);
+    const columns = {Hero: ["Name", "Ac", "Ma Redux"], Scout: [], Stranger: ["Rent"]};
+
+    const encoded = encodeBuilderShare(lists, columns);
+
+    assert.equal(encoded,
+        `8*${buildSegment("Hero")}*${buildSegment("Hero", "Caster")}*${buildSegment("Scout")}*~Hero~Name-Ac-Ma Redux*`);
+    assert.equal(readBuilderFormatVersion(encoded), 8);
+    const share = decodeBuilderShare(encoded);
+    assert.equal(share.entries.length, 3);
+    assert.deepEqual(share.entries.map(entry => [entry.name, entry.variants[0].name]),
+        [["Hero", "Original"], ["Hero", "Caster"], ["Scout", "Original"]]);
+    assert.deepEqual(share.columns, {Hero: ["Name", "Ac", "Ma Redux"]});
+    assert.deepEqual(decodeBuilderLists(encoded), lists);
+    assert.match(encodeBuilderLists(decodeBuilderLists(encoded)), /^7\*/);
+});
+
+// Catches the share decoder rejecting plain version 7 strings or accepting
+// column segments on versions that never defined them.
+test("share decoding tolerates older strings and rejects malformed column segments", async function() {
+    const {decodeBuilderShare, encodeBuilderShare} = await loadEncoding();
+    const seven = `7*${buildSegment("Hero")}*`;
+
+    assert.deepEqual(decodeBuilderShare(seven).columns, {});
+    assert.equal(decodeBuilderShare(seven).entries.length, 1);
+    assert.equal(decodeBuilderShare(`8*${buildSegment("Hero")}*`).entries.length, 1);
+    assert.deepEqual(decodeBuilderShare(`8*${buildSegment("Hero")}*`).columns, {});
+    assert.equal(encodeBuilderShare([]), "8*");
+    assert.throws(() => decodeBuilderShare(`7*${buildSegment("Hero")}*~Hero~Name*`), /Invalid list/);
+    assert.throws(() => decodeBuilderShare(`8*${buildSegment("Hero")}*~Hero~*`), /Invalid list/);
+    assert.throws(() => decodeBuilderShare(`8*${buildSegment("Hero")}*~Hero*`), /Invalid list/);
+    assert.throws(() => decodeBuilderShare(`8*${buildSegment("Hero")}*~Hero~Na~me*`), /Invalid list/);
+    assert.throws(() => decodeBuilderShare(`9*${buildSegment("Hero")}*`), /Invalid list/);
+});
+
+// Catches the client compatibility module exporting a different share codec than the server.
+test("client share codec matches the shared module", async function() {
+    const compatibility = await loadEncoding();
+    const shared = await loadSharedCodec();
+    const lists = shared.decodeBuilderLists(`7*${buildSegment("Hero")}*`);
+    const encoded = shared.encodeBuilderShare(lists, {Hero: ["Name", "Rent"]});
+
+    assert.equal(compatibility.encodeBuilderShare(lists, {Hero: ["Name", "Rent"]}), encoded);
+    assert.deepEqual(compatibility.decodeBuilderShare(encoded), shared.decodeBuilderShare(encoded));
+    assert.equal(compatibility.BUILDER_SHARE_VERSION, 8);
+});

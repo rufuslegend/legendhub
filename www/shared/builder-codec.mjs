@@ -2,6 +2,7 @@ import gameStats from "../src/public/js/services/game-stats.js";
 
 const BASE_62_DIGITS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 export const BUILDER_LIST_VERSION = 7;
+export const BUILDER_SHARE_VERSION = 8;
 const RUNE_CHARM_ID = -5;
 const ATTRIBUTE_NAMES = [
     "strength", "mind", "dexterity", "constitution", "perception", "spirit"
@@ -133,6 +134,14 @@ function takeSelection(encoded) {
     return [value === "_" ? -1 : toBase62(value), encoded.slice(1)];
 }
 
+function decodeColumnSegment(segment) {
+    const [name, encoded] = takeName(segment.slice(1));
+    const columns = encoded.split("-").filter(Boolean);
+    if (!columns.length || !columns.every(column => /^[A-Za-z\d ]+$/.test(column)))
+        invalidList();
+    return [name, columns];
+}
+
 function decodeCompact(encoded, version) {
     const slotOrder = version >= 7 ? SLOT_ORDER : LEGACY_SLOT_ORDER;
     const runeCharmItemIndex = version >= 7
@@ -251,18 +260,26 @@ export function readBuilderFormatVersion(value) {
     return match ? Number(match[1]) : null;
 }
 
-function decodeEntries(value) {
+function decodeShare(value) {
     if (!value)
-        return [];
+        return {entries: [], columns: {}};
     let encoded = value;
     const version = readBuilderFormatVersion(encoded);
     if (version !== null)
         encoded = encoded.slice(encoded.indexOf("*") + 1);
-    if (version !== null && (version < 1 || version > BUILDER_LIST_VERSION))
+    if (version !== null && (version < 1 || version > BUILDER_SHARE_VERSION))
         invalidList();
 
     const entries = [];
+    const columns = {};
     for (const listString of encoded.split("*").filter(Boolean)) {
+        if (listString[0] === "~") {
+            if (version === null || version < BUILDER_SHARE_VERSION)
+                invalidList();
+            const [name, selected] = decodeColumnSegment(listString);
+            columns[name] = selected;
+            continue;
+        }
         let decoded;
         if (version === 1)
             decoded = decodeLegacy(listString);
@@ -279,7 +296,15 @@ function decodeEntries(value) {
             decoded.variants[0].items = upgradeLegacyItems(decoded.variants[0].items);
         entries.push(decoded);
     }
-    return entries;
+    return {entries, columns};
+}
+
+function decodeEntries(value) {
+    return decodeShare(value).entries;
+}
+
+export function decodeBuilderShare(value) {
+    return decodeShare(value);
 }
 
 export function decodeBuilderEntries(value) {
@@ -326,6 +351,21 @@ export function encodeBuilderLists(lists) {
     for (const list of lists) {
         for (const variant of list.variants)
             encoded += `${encodeBuilderVariant(list.name, variant)}*`;
+    }
+    return encoded;
+}
+
+export function encodeBuilderShare(lists, columnsByCharacter = {}) {
+    const prefix = `${BUILDER_LIST_VERSION}*`;
+    let encoded = `${BUILDER_SHARE_VERSION}*${encodeBuilderLists(lists).slice(prefix.length)}`;
+    const seen = new Set();
+    for (const list of lists) {
+        if (seen.has(list.name))
+            continue;
+        seen.add(list.name);
+        const columns = (columnsByCharacter[list.name] || []).filter(Boolean);
+        if (columns.length)
+            encoded += `~${list.name}~${columns.join("-")}*`;
     }
     return encoded;
 }

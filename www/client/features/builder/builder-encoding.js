@@ -1,7 +1,10 @@
 export {
+    BUILDER_SHARE_VERSION,
     decodeBuilderEntries,
     decodeBuilderLists,
+    decodeBuilderShare,
     encodeBuilderLists,
+    encodeBuilderShare,
     encodeBuilderVariant,
     fromBase62,
     readBuilderFormatVersion,

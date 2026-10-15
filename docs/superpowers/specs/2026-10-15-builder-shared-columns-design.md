@@ -23,7 +23,7 @@ A build shared from one player to another opens with the column layout the share
 
 ## Export format
 
-`BUILDER_LIST_VERSION` moves from 7 to 8. A version 8 string is:
+`BUILDER_LIST_VERSION` stays 7. A new `BUILDER_SHARE_VERSION = 8` is used only by the Export fields. A version 8 string is:
 
 ```
 8*<build segment>*<build segment>*...*<column segment>*<column segment>*
@@ -34,7 +34,7 @@ A build shared from one player to another opens with the column layout the share
 - Column segments follow all build segments. At most one segment per character name. A character with no known columns has no segment.
 - Column segments are optional. `8*<build>*` with no column segments is valid.
 
-Only the three Export fields (All Lists, Current List, Current Variant) emit version 8 strings with column segments. Saved payloads (cookie `cln`, account profile payloads, sync baselines) continue to be written by `encodeBuilderLists` with no column segments. Because the server and client share `builder-codec.mjs`, the version constant is shared too; saved payloads will therefore carry the `8*` prefix once this ships, which the decoder accepts and treats exactly like version 7 (no slot-order change). Stored version 7 payloads remain valid.
+Only the three Export fields (All Lists, Current List, Current Variant) emit version 8 strings with column segments. Saved payloads (cookie `cln`, account profile payloads, sync baselines) continue to be written by `encodeBuilderLists` at version 7 with no column segments, so stored `payloadVersion` values and the server's canonical form are unchanged. The decoder accepts version 8 and parses its build segments with the version 7 layout.
 
 ### Column sources at export time
 
@@ -47,8 +47,8 @@ Characters with no entry get no column segment. The `sc2` / `itemColumns` fallba
 
 ## Codec changes (`www/shared/builder-codec.mjs`)
 
-- `BUILDER_LIST_VERSION = 8`.
-- `decodeEntries` accepts versions 1 through 8. Segments beginning with `~` are parsed as column segments when `version >= 8` and rejected (`Invalid list.`) for older versions, where they could only be corrupt input. A column segment with a malformed name or an empty column list is rejected. Column shorts are not validated against the stat list in the codec; the client drops unknown shorts when applying them so a string from a newer site still imports.
+- `BUILDER_SHARE_VERSION = 8`; `BUILDER_LIST_VERSION` remains 7.
+- `decodeEntries` accepts versions 1 through `BUILDER_SHARE_VERSION`. Segments beginning with `~` are parsed as column segments when `version >= 8` and rejected (`Invalid list.`) for older versions, where they could only be corrupt input. A column segment with a malformed name or an empty column list is rejected. Column shorts are not validated against the stat list in the codec; the client drops unknown shorts when applying them so a string from a newer site still imports.
 - New export `decodeBuilderShare(value)` returns `{entries, columns}` where `entries` is the result of `decodeBuilderEntries` and `columns` is a plain object mapping character name to an array of shorts. `decodeBuilderEntries` and `decodeBuilderLists` keep their current return shapes and ignore column segments, so the server-side payload decoder and existing callers are unaffected.
 - New export `encodeBuilderShare(lists, columnsByCharacter)` returns the version 8 string with column segments appended for each character in `columnsByCharacter` that has at least one column. `encodeBuilderLists` is unchanged apart from the version constant.
 - The client wrapper `www/client/features/builder/builder-encoding.js` re-exports the new functions.
@@ -84,7 +84,7 @@ Each of the three export fields is produced with `encodeBuilderShare`, passing o
 - `www/test/client/builder-encoding.test.js` (or a new codec test file): version 8 round trip with and without column segments; version 7 strings still decode with no columns; `~` segment in a version 7 string is rejected; multiple characters each get their own segment; shorts with spaces survive; `decodeBuilderLists` ignores column segments.
 - `www/test/client/builder-reducer.test.js` or a Builder-level test: new character import applies shared columns; overwrite of an existing character keeps destination columns; unknown shorts are dropped.
 - `www/e2e/builder-transfer.spec.js`: export a build with a non-default column set, clear local data (or use a second context), import it, and assert the sharer's columns are visible and the destination fallback columns are not.
-- Server: `validateBuilderProfile` canonicalizes payloads through `encodeBuilderLists`, so new saves record `payloadVersion` 8 and any column segments a client sends in a profile payload are stripped. Update `scripts/test/mariadb-integration.test.js` (expects 7) and confirm a stored `7*` payload still loads and re-canonicalizes.
+- Server: no change. `validateBuilderProfile` canonicalizes through `encodeBuilderLists`, so a client that pastes a share string as a profile payload gets its column segments stripped and `payloadVersion` stays 7.
 
 ## Risks
 
