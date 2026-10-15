@@ -331,6 +331,20 @@ test("share decoding tolerates older strings and rejects malformed column segmen
     assert.throws(() => decodeBuilderShare(`9*${buildSegment("Hero")}*`), /Invalid list/);
 });
 
+// Catches export crashing on characters named after Object.prototype members
+// and share strings that the decoder would then refuse to import.
+test("share encoding ignores inherited column entries and unsafe shorts", async function() {
+    const {decodeBuilderLists, decodeBuilderShare, encodeBuilderShare} = await loadEncoding();
+    const lists = decodeBuilderLists(`7*${buildSegment("toString")}*${buildSegment("constructor")}*${buildSegment("Hero")}*`);
+
+    const encoded = encodeBuilderShare(lists, {Hero: ["Name", "Str-Dex", "Ma~Redux", "*", "Ac", 7, ""], valueOf: ["Name"]});
+
+    assert.equal(encoded, `8*${buildSegment("toString")}*${buildSegment("constructor")}*${buildSegment("Hero")}*~Hero~Name-Ac*`);
+    assert.deepEqual(decodeBuilderShare(encoded).columns, {Hero: ["Name", "Ac"]});
+    assert.equal(encodeBuilderShare(lists, {Hero: ["Str-Dex"]}), `8*${buildSegment("toString")}*${buildSegment("constructor")}*${buildSegment("Hero")}*`);
+    assert.equal(encodeBuilderShare(lists, {toString: ["Name"]}), `8*${buildSegment("toString")}*${buildSegment("constructor")}*${buildSegment("Hero")}*~toString~Name*`);
+});
+
 // Catches the client compatibility module exporting a different share codec than the server.
 test("client share codec matches the shared module", async function() {
     const compatibility = await loadEncoding();

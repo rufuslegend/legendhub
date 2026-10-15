@@ -134,10 +134,12 @@ function takeSelection(encoded) {
     return [value === "_" ? -1 : toBase62(value), encoded.slice(1)];
 }
 
+const COLUMN_SHORT = /^[A-Za-z\d ]+$/;
+
 function decodeColumnSegment(segment) {
     const [name, encoded] = takeName(segment.slice(1));
     const columns = encoded.split("-").filter(Boolean);
-    if (!columns.length || !columns.every(column => /^[A-Za-z\d ]+$/.test(column)))
+    if (!columns.length || !columns.every(column => COLUMN_SHORT.test(column)))
         invalidList();
     return [name, columns];
 }
@@ -363,7 +365,9 @@ export function encodeBuilderShare(lists, columnsByCharacter = {}) {
         if (seen.has(list.name))
             continue;
         seen.add(list.name);
-        const columns = (columnsByCharacter[list.name] || []).filter(Boolean);
+        const requested = Object.hasOwn(columnsByCharacter, list.name) && Array.isArray(columnsByCharacter[list.name])
+            ? columnsByCharacter[list.name] : [];
+        const columns = requested.filter(short => typeof short === "string" && COLUMN_SHORT.test(short));
         if (columns.length)
             encoded += `~${list.name}~${columns.join("-")}*`;
     }
