@@ -50,7 +50,7 @@ Characters with no entry get no column segment. The `sc2` / `itemColumns` fallba
 - `BUILDER_SHARE_VERSION = 8`; `BUILDER_LIST_VERSION` remains 7.
 - `decodeEntries` accepts versions 1 through `BUILDER_SHARE_VERSION`. Segments beginning with `~` are parsed as column segments when `version >= 8` and rejected (`Invalid list.`) for older versions, where they could only be corrupt input. A column segment with a malformed name or an empty column list is rejected. Column shorts are not validated against the stat list in the codec; the client drops unknown shorts when applying them so a string from a newer site still imports.
 - New export `decodeBuilderShare(value)` returns `{entries, columns}` where `entries` is the result of `decodeBuilderEntries` and `columns` is a plain object mapping character name to an array of shorts. `decodeBuilderEntries` and `decodeBuilderLists` keep their current return shapes and ignore column segments, so the server-side payload decoder and existing callers are unaffected.
-- New export `encodeBuilderShare(lists, columnsByCharacter)` returns the version 8 string with column segments appended for each character in `columnsByCharacter` that has at least one column. `encodeBuilderLists` is unchanged apart from the version constant.
+- New export `encodeBuilderShare(lists, columnsByCharacter)` returns the version 8 string with column segments appended for each character in `columnsByCharacter` that has at least one column. `encodeBuilderLists` is unchanged.
 - The client wrapper `www/client/features/builder/builder-encoding.js` re-exports the new functions.
 
 ## Builder changes (`www/client/features/builder`)
