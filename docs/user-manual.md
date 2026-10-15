@@ -122,9 +122,9 @@ Select **Export** and copy the scope you need:
 - **Current List (w/ all variants): &lt;character&gt;**
 - **Current List Variant: &lt;variant&gt;**
 
-These values are encoded text. To back up or share a build, copy the chosen string and store or send it yourself; there is no Share button.
+These values are encoded text. Each export also includes the column layout shown for every character it contains, so a shared build opens with the same columns you were viewing. To back up or share a build, copy the chosen string and store or send it yourself; there is no Share button.
 
-Select **Import**, paste a **Builder list import string**, and review any name collisions. Existing character-and-variant collisions are listed with selectable **Overwrite?** choices, so you control which existing variants may be replaced. After importing, the Builder opens the imported character and variant. If you import several entries, it opens the first one you chose to import; if you skip them all, your current selection stays unchanged. An invalid string is rejected. If imported item details cannot load, keep the encoded string and use the offered retry path rather than repeatedly changing the source text.
+Select **Import**, paste a **Builder list import string**, and review any name collisions. Existing character-and-variant collisions are listed with selectable **Overwrite?** choices, so you control which existing variants may be replaced. When an import adds a character you do not already have, the Builder shows the column layout from the string and saves it as that character's columns. When one string adds several new characters at once, only the first opened character receives its shared layout. Importing into a character you already have keeps your current columns. An invalid string is rejected. If imported item details cannot load, keep the encoded string and use the offered retry path rather than repeatedly changing the source text.
 
 Synchronized Builder storage is limited to 10 MB. Network failures are retried for a short period. If a sync conflict occurs, the newer account copy is kept and your edits are saved as a conflict copy. For a quota, revision, generation, or persistent sync error, changes remain in memory: select **Export Builder data** before **Reload account data** or before closing the page.
 
