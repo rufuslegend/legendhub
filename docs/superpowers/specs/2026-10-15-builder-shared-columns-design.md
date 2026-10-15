@@ -84,7 +84,7 @@ Each of the three export fields is produced with `encodeBuilderShare`, passing o
 - `www/test/client/builder-encoding.test.js` (or a new codec test file): version 8 round trip with and without column segments; version 7 strings still decode with no columns; `~` segment in a version 7 string is rejected; multiple characters each get their own segment; shorts with spaces survive; `decodeBuilderLists` ignores column segments.
 - `www/test/client/builder-reducer.test.js` or a Builder-level test: new character import applies shared columns; overwrite of an existing character keeps destination columns; unknown shorts are dropped.
 - `www/e2e/builder-transfer.spec.js`: export a build with a non-default column set, clear local data (or use a second context), import it, and assert the sharer's columns are visible and the destination fallback columns are not.
-- Server: existing `builder-storage` and payload tests must still pass with the version constant at 8. Confirm a stored `7*` payload still loads.
+- Server: `validateBuilderProfile` canonicalizes payloads through `encodeBuilderLists`, so new saves record `payloadVersion` 8 and any column segments a client sends in a profile payload are stripped. Update `scripts/test/mariadb-integration.test.js` (expects 7) and confirm a stored `7*` payload still loads and re-canonicalizes.
 
 ## Risks
 
