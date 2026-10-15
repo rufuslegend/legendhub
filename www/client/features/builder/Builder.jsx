@@ -15,9 +15,9 @@ import {
 } from "../../lib/account-preferences-store.js";
 import {equipmentDisplayPreferences} from "../../lib/equipment-display-preferences.js";
 import {deriveItemRestrictions, deriveRuneCharmStats} from "./builder-derivations.js";
-import {decodeBuilderEntries, decodeBuilderLists, encodeBuilderLists, encodeBuilderVariant} from "./builder-encoding.js";
+import {decodeBuilderLists, decodeBuilderShare, encodeBuilderLists, encodeBuilderShare} from "./builder-encoding.js";
 import {buildImportRequest, classifyAnonymousData, defaultMigrationPreferencesChoice, fingerprintAnonymousData, normalizeMigrationResult, readMigrationAcknowledgement, shouldOfferMigration, writeMigrationAcknowledgement} from "./builder-migration.js";
-import {accountPreferenceColumns, applyBuilderPersistencePlan, applySelectedColumns, calculateStorageSize, createBuilderAccountPreferencePatch, createBuilderPersistencePlan, formatStorageSize, readBuilderPersistence} from "./builder-persistence.js";
+import {accountPreferenceColumns, applyBuilderPersistencePlan, applySelectedColumns, calculateStorageSize, createBuilderAccountPreferencePatch, createBuilderPersistencePlan, exportColumnsByCharacter, formatStorageSize, readBuilderPersistence} from "./builder-persistence.js";
 import {builderReducer, createDefaultVariant, createInitialBuilderState, selectStatRestrictions, selectStatTotal} from "./builder-reducer.js";
 import {BUILDER_LIST_VERSION, RUNE_CHARM_ID} from "./item-constants.js";
 import {createItemsBySlotQuery, createItemsInIdsQuery, hydrateBuilderVariant} from "./builder-api.js";
@@ -106,6 +106,7 @@ export default function Builder({
     const syncLocalKeysRef = useRef(new WeakMap());
     const nextSyncLocalKeyRef = useRef(1);
     const latestStateRef = useRef(state);
+    const sharedColumnsRef = useRef(new Map());
     latestStateRef.current = state;
     const selected = state.selectedList;
     const selectedCharacter = state.allLists[state.selectedListIndex] || null;
@@ -119,7 +120,8 @@ export default function Builder({
         ? accountPreferenceColumns(
             preferenceStoreRef.current?.get?.().document,
             selectedCharacter,
-            state.defaultStatInfo
+            state.defaultStatInfo,
+            sharedColumnsRef.current.get(selectedCharacter?.name) || null
         )
         : null;
     const selectedAccountPreferenceColumnsChanged = selectedAccountPreferenceStatInfo !== null &&
@@ -280,6 +282,8 @@ export default function Builder({
             itemsPerPage: state.itemsPerPage,
             selectedColumns: state.statInfo.filter(stat => stat.showColumn).map(stat => stat.short)
         }));
+        if (typeof character.account?.id === "string" && character.account.id)
+            sharedColumnsRef.current.delete(character.name);
     }, [state.allLists, state.selectedListIndex, state.selectedListVariantIndex, selected, state.statInfo, state.itemsPerPage, state.storageMode, state.initialized, state.accountState, selectedAccountPreferenceIdentityChanged, selectedAccountPreferenceColumnsChanged]);
 
     function accountSnapshot(character, storageGeneration) {
@@ -484,12 +488,20 @@ export default function Builder({
 
     function action(value) {
         const currentState = latestStateRef.current;
+        const imported = value.type === "lists/import"
+            ? value.lists.find(list => !list.exists || list.overwrite)
+            : null;
         const characterName = value.type === "variant/select"
             ? currentState.allLists[value.listIndex].name
-            : value.type === "lists/import"
-                ? value.lists.find(list => !list.exists || list.overwrite)?.name
-                : null;
-        if (currentState.storageMode === "anonymous" && characterName && characterName !== currentState.allLists[currentState.selectedListIndex].name) {
+            : imported?.name ?? null;
+        const isNewCharacter = Boolean(imported) && !currentState.allLists.some(list => list.name === imported.name);
+        const sharedColumns = isNewCharacter ? value.columns?.[imported.name] : null;
+        if (Array.isArray(sharedColumns) && sharedColumns.length) {
+            if (currentState.storageMode === "account")
+                sharedColumnsRef.current.set(imported.name, sharedColumns);
+            dispatch({type: "ui/patch", value: {statInfo: applySelectedColumns(sharedColumns, currentState.defaultStatInfo)}});
+        }
+        else if (currentState.storageMode === "anonymous" && characterName && characterName !== currentState.allLists[currentState.selectedListIndex].name) {
             const cookieValues = cookies();
             dispatch({type: "ui/patch", value: {statInfo: applySelectedColumns(cookieValues[`sc-${characterName}`] || cookieValues.sc2, currentState.defaultStatInfo)}});
         }
@@ -657,16 +669,38 @@ export default function Builder({
         }
         close();
     }
-    function exportValue() { const character = state.allLists[state.selectedListIndex]; const exportLists = state.allLists.map(({account: _account, ...list}) => list); return {allLists: encodeBuilderLists(exportLists), curList: `${BUILDER_LIST_VERSION}*${character.variants.map(variant => encodeBuilderVariant(character.name, variant)).join("*")}*`, curVariant: `${BUILDER_LIST_VERSION}*${encodeBuilderVariant(character.name, selected)}*`, characterName: character.name, variantName: selected.name}; }
+    function exportValue() {
+        const character = state.allLists[state.selectedListIndex];
+        const exportLists = state.allLists.map(({account: _account, ...list}) => list);
+        const columns = exportColumnsByCharacter({
+            mode: state.storageMode,
+            characters: state.allLists,
+            selectedCharacterName: character.name,
+            selectedColumns: state.statInfo.filter(stat => stat.showColumn).map(stat => stat.short),
+            cookies: cookies(),
+            document: preferenceStoreRef.current?.get?.().document
+        });
+        return {
+            allLists: encodeBuilderShare(exportLists, columns),
+            curList: encodeBuilderShare([{name: character.name, variants: character.variants}], columns),
+            curVariant: encodeBuilderShare([{name: character.name, variants: [selected]}], columns),
+            characterName: character.name,
+            variantName: selected.name
+        };
+    }
     function importChange(input, overwriteIndex, overwrite) {
         let lists = [];
+        let columns = {};
         let message = "";
-        try { lists = input ? decodeBuilderEntries(input) : []; }
+        try {
+            if (input)
+                ({entries: lists, columns} = decodeBuilderShare(input));
+        }
         catch (_error) { message = "Invalid list import string."; }
         lists = lists.map(entry => { const existing = state.allLists.find(list => list.name === entry.name)?.variants.some(variant => variant.name === entry.variants[0].name); return {...entry, exists: Boolean(existing), overwrite: existing}; });
         if (overwriteIndex !== undefined) { const existingRows = lists.filter(list => list.exists); if (existingRows[overwriteIndex]) existingRows[overwriteIndex].overwrite = overwrite; }
         if (!message && lists.some(list => list.exists)) message = "The following lists already exist and will be overwritten unless otherwise specified:";
-        dispatch({type: "ui/patch", value: {importModel: {input, lists, message, loading: false}}});
+        dispatch({type: "ui/patch", value: {importModel: {input, lists, columns, message, loading: false}}});
     }
     async function submitImport() {
         if (!state.importModel?.lists?.length) {
@@ -677,7 +711,7 @@ export default function Builder({
         dispatch({type: "request/pending"});
         try {
             const lists = await hydrateLists(state.importModel.lists, state.itemFragment);
-            action({type: "lists/import", lists});
+            action({type: "lists/import", lists, columns: state.importModel.columns || {}});
             dispatch({type: "request/succeeded"});
             close();
         }
